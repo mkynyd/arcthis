@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 use tempfile::Builder;
@@ -133,6 +133,104 @@ pub(crate) fn delete_source(path: &Path) -> Result<()> {
     remove_path(path).map_err(|error| ArcthisError::io("deleting source after success", error))
 }
 
+pub(crate) fn ensure_distinct_source_and_destination(
+    source: &Path,
+    destination: &Path,
+) -> Result<()> {
+    let source = comparable_path(source)?;
+    let destination = comparable_path(destination)?;
+    if source == destination {
+        return Err(ArcthisError::Collision {
+            message: "source and destination must be different paths".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn ensure_destination_outside_source(source: &Path, destination: &Path) -> Result<()> {
+    let source = comparable_path(source)?;
+    let destination = comparable_path(destination)?;
+    if destination == source || destination.starts_with(&source) {
+        return Err(ArcthisError::Collision {
+            message: "archive destination must be outside the pack source".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn ensure_destination_survives_source_deletion(
+    source: &Path,
+    destination: &Path,
+) -> Result<()> {
+    let source = comparable_path(source)?;
+    let destination = comparable_path(destination)?;
+    if destination == source || destination.starts_with(&source) || source.starts_with(&destination)
+    {
+        return Err(ArcthisError::Collision {
+            message: "source deletion would remove or replace the destination".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn comparable_path(path: &Path) -> Result<PathBuf> {
+    if path
+        .try_exists()
+        .map_err(|error| ArcthisError::io("checking lifecycle path", error))?
+    {
+        return fs::canonicalize(path)
+            .map_err(|error| ArcthisError::io("resolving lifecycle path", error));
+    }
+
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| ArcthisError::io("reading current directory", error))?
+            .join(path)
+    };
+    let mut missing = Vec::new();
+    let mut existing = absolute.as_path();
+    while !existing
+        .try_exists()
+        .map_err(|error| ArcthisError::io("checking lifecycle path ancestor", error))?
+    {
+        let name = existing
+            .file_name()
+            .ok_or_else(|| ArcthisError::UnsupportedOperation {
+                message: format!("cannot resolve lifecycle path {}", path.display()),
+            })?;
+        missing.push(name.to_os_string());
+        existing = existing
+            .parent()
+            .ok_or_else(|| ArcthisError::UnsupportedOperation {
+                message: format!("cannot resolve lifecycle path {}", path.display()),
+            })?;
+    }
+    let mut resolved = fs::canonicalize(existing)
+        .map_err(|error| ArcthisError::io("resolving lifecycle path ancestor", error))?;
+    for component in missing.into_iter().rev() {
+        resolved.push(component);
+    }
+    Ok(normalize_lexically(&resolved))
+}
+
+fn normalize_lexically(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = normalized.pop();
+            }
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                normalized.push(component.as_os_str());
+            }
+        }
+    }
+    normalized
+}
+
 fn remove_path(path: &Path) -> std::io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.is_dir() {
@@ -191,7 +289,11 @@ fn split_archive_suffix(file_name: &str) -> (&str, &str) {
 mod tests {
     use tempfile::TempDir;
 
-    use super::{CollisionPolicy, resolve_destination};
+    use super::{
+        CollisionPolicy, ensure_destination_outside_source,
+        ensure_destination_survives_source_deletion, ensure_distinct_source_and_destination,
+        resolve_destination,
+    };
 
     #[test]
     fn rename_policy_preserves_extension() {
@@ -204,5 +306,26 @@ mod tests {
             resolution.path.file_name().and_then(|name| name.to_str()),
             Some("archive.1.tar.zst")
         );
+    }
+
+    #[test]
+    fn rejects_source_destination_aliases_and_destructive_overlap() {
+        let directory = TempDir::new().expect("create temp directory");
+        let source = directory.path().join("source");
+        std::fs::create_dir(&source).expect("create source directory");
+        let nested = source.join("backup.zip");
+        let lexical_nested = directory
+            .path()
+            .join("missing")
+            .join("..")
+            .join("source/backup.zip");
+        let sibling = directory.path().join("backup.zip");
+
+        assert!(ensure_distinct_source_and_destination(&source, &source).is_err());
+        assert!(ensure_destination_outside_source(&source, &nested).is_err());
+        assert!(ensure_destination_outside_source(&source, &lexical_nested).is_err());
+        assert!(ensure_destination_outside_source(&source, &sibling).is_ok());
+        assert!(ensure_destination_survives_source_deletion(&source, &nested).is_err());
+        assert!(ensure_destination_survives_source_deletion(&source, &sibling).is_ok());
     }
 }

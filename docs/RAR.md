@@ -19,7 +19,7 @@ Both map to the single `rar` archive format and the same backend.
 
 ## Backend
 
-The RAR backend (`src/archive/backend/rar.rs`) is a thin adapter over **libarchive** through the `compress-tools` crate. `Cargo.toml` enables the `static` feature, so release builds statically link libarchive and its bundled codecs (bzip2, lz4, zstd, xz/liblzma, zlib, libxml2). This is the only backend that depends on native C code; every other format uses pure-Rust codecs.
+The RAR backend (`src/archive/backend/rar.rs`) is a thin adapter over **libarchive** through the `compress-tools` crate. `Cargo.toml` enables its `static` build feature, which builds and embeds the libarchive integration instead of requiring a separately installed dynamic libarchive at runtime. This does **not** make the complete executable fully static: the current macOS release still dynamically links platform libraries such as libxml2, zlib, bzip2, libiconv, ICU, and Expat. The exact linked set is platform- and toolchain-dependent and must be audited on each release target.
 
 The adapter exposes the unified `ArchiveBackend` seam: `entries`, `copy_entry_to`, `extract_plan`, and `verify` all stream through libarchive's iterator. Because libarchive does not expose every RAR property, the backend reports:
 
@@ -46,7 +46,7 @@ The v0.4 `--volume` option concatenates arbitrary **byte-stream** segments befor
 
 `arcthis` does not implement RAR algorithms and does not link UnRAR or the RARLAB SDK. Decompression is delegated to libarchive's independently developed, BSD-licensed read-only implementation.
 
-- **libarchive** is distributed under a BSD-style license (2-clause BSD for the bulk of the sources, with a few 3-clause UC Regents files). Static linking requires redistributors to retain libarchive's copyright notice; see [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md).
+- **libarchive** is distributed under a BSD-style license (2-clause BSD for the bulk of the sources, with a few 3-clause UC Regents files). Redistributors must retain the applicable copyright notices for embedded native code; see [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md).
 - **compress-tools** is dual-licensed MIT OR Apache-2.0.
 - The **RAR format** itself is proprietary to RARLAB. Because `arcthis` only reads through libarchive and never writes RAR, it does not impose the redistribution obligations of a RAR encoder.
 

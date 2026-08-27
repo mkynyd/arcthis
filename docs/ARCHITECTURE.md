@@ -109,6 +109,8 @@ Full extraction is plan-driven:
 
 An existing destination is refused by default. Explicit overwrite moves the prior destination to a sibling backup, commits the staged replacement, restores on commit failure, and removes the backup only after success. Skip never deletes the source; rename resolves a new numbered destination before writing.
 
+Lifecycle planning canonicalizes existing paths and resolves missing destinations through their nearest existing ancestor. Source and destination aliases are rejected. A pack destination cannot be inside a directory source, and source deletion is rejected whenever either path contains the other. Selected-entry extraction verifies the complete archive before commit when source deletion is requested. The accepted invariants and tradeoffs are recorded in [ADR 0001](./ADR-0001-TRANSACTIONAL-LIFECYCLE.md).
+
 Single-entry extraction writes a temporary sibling file and commits it only after the stream completes. Directory entries are not accepted as single-file output targets.
 
 Cross-filesystem rename fallback is deliberately not needed when staging is created beside the destination. Future remote or user-selected staging locations must define a verified copy fallback before use.
@@ -147,3 +149,5 @@ The library returns typed errors with stable public categories. Backend errors a
 - Remote locators can reuse the source seam once range and retry semantics are specified.
 - MCP, HTTP, FFI, and language bindings can reuse the library interface.
 - Async I/O is added only if a server/remote-source performance model demonstrates value.
+
+The staged integration plan is documented in [the v0.5+ integrations plan](./V0.5-INTEGRATIONS-PLAN.md).

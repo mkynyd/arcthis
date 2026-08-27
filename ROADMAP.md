@@ -35,7 +35,7 @@ The roadmap is capability-driven. Dates are intentionally omitted; a milestone s
 
 - [x] RAR read/extract evaluation with explicit licensing and redistribution analysis.
 - [x] Encrypted archive/password interface.
-- [x] Multipart archives.
+- [x] Explicit byte-stream multipart sources through ordered `--volume` segments.
 - [x] Persistent indexes and cache lifecycle.
 - [x] `convert` with verification and shared `--delete-source` semantics.
 
@@ -43,9 +43,13 @@ RAR creation is not assumed. Capabilities distinguish read, extract, create, and
 
 ## v0.5+ — Integrations
 
-- MCP server and other agent-runtime frontends.
-- Optional mount/TUI and human preview integrations.
-- Remote HTTP/S3/SSH archive locators.
-- HTTP interface, FFI, and language bindings if real consumers justify them.
+The integration program is split into six capability-gated stages. The detailed scope, dependencies, non-goals, and exit gates are in [docs/V0.5-INTEGRATIONS-PLAN.md](./docs/V0.5-INTEGRATIONS-PLAN.md).
 
-FUSE is not an early milestone: direct `tree`, `stat`, `read`, and `find` operations are more controllable for agents.
+1. **v0.5:** frontend-neutral application service, read-only local MCP, then controlled mutation tools.
+2. **v0.6:** bounded HTTP remote archive locator with validated range/cache semantics.
+3. **v0.7:** authenticated S3 and SSH locators over the remote-source contract.
+4. **v0.8:** versioned HTTP service with auth, quotas, cancellation, and streaming.
+5. **v0.9:** small C ABI and demand-driven language bindings.
+6. **post-v0.9:** optional preview/TUI and read-only mount evaluation.
+
+All six stages are planned. Stage 1 is the next implementation target. FUSE remains late because direct `tree`, `stat`, `read`, and `find` operations are more controllable for agents.

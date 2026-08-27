@@ -49,6 +49,8 @@ Full extraction creates a temporary sibling directory on the destination filesys
 
 Single-entry extraction and packing use temporary sibling files and commit only after streaming/finalization succeeds. Packing additionally syncs, reopens, and verifies the temporary archive before commit.
 
+Existing paths are canonicalized for lifecycle comparison, and missing destinations are resolved through their nearest existing ancestor. Source and destination aliases are rejected. A pack destination must be outside a directory source. When source deletion is requested, neither source nor destination may contain the other, so post-commit deletion cannot remove the result. These invariants are recorded in [ADR 0001](./ADR-0001-TRANSACTIONAL-LIFECYCLE.md).
+
 Destination collisions are refused by default. `--skip-existing` performs no write and never deletes the source. `--rename` selects the first available numbered sibling. `--overwrite` first moves the old destination to a unique sibling backup, commits the staged replacement, restores the backup if commit fails, and removes the backup after success. Concurrent external filesystem mutation remains a race boundary.
 
 ## Intelligent destination safety
@@ -74,6 +76,8 @@ perform -> close/finalize -> verify -> commit destination -> delete source
 ```
 
 Any error, interruption, partial failure, verification failure, or commit failure must preserve the source. Deletion must target only the resolved source from the execution plan.
+
+Selected-entry extraction verifies the complete source archive before commit when `--delete-source` is active. This deliberately trades additional decoding for confidence that an unselected corrupt entry is not discarded with the source.
 
 Dry-run computes and serializes the destination, collision action, estimated sizes, warnings, and deletion intent but performs no writes, renames, or deletions. A skipped operation never deletes its source.
 

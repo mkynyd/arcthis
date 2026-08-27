@@ -139,7 +139,7 @@ arcthis convert project.zip --output project.tar.zst --dry-run --json
 
 完整提取会先完成 metadata 预检和路径校验，拒绝 link/special file，执行声明大小、真实写入、时间和压缩比限制，然后只向同文件系统 staging 目录写入；所有 entry 成功后才提交。已有目标默认拒绝，`--overwrite`、`--skip-existing` 与 `--rename` 是互斥的显式策略。
 
-压缩创建会先写入同目录临时 archive，完成 encoder finalize，重新通过统一 archive interface 打开并逐 entry 验证，最后才提交到目标路径。`--delete-source` 只在提交后执行；dry-run 永远不会写入或删除。
+压缩创建会先写入同目录临时 archive，完成 encoder finalize，重新通过统一 archive interface 打开并逐 entry 验证，最后才提交到目标路径。目录 source 内部的 pack destination 和任何 source/destination alias 都会被拒绝；`--delete-source` 只在提交后且确认删除 source 不会移除 destination 时执行。dry-run 永远不会写入或删除。
 
 Nested access 会把选中的 inner entry 解码到受资源上限约束的 immutable memory source，不会创建具名临时 inner archive。转换会先把通过安全预检的 entry 物化到系统临时 staging 目录，再执行 pack、重新打开验证和 commit。持久化 metadata index 被视为不可信 cache，并通过源文件大小与修改时间失效。精确定义和已知限制见 [docs/SECURITY.md](./docs/SECURITY.md)。
 
@@ -181,7 +181,7 @@ cargo build --release --locked
 
 ## Roadmap、贡献与许可证
 
-分阶段格式与能力计划见 [ROADMAP.md](./ROADMAP.md)。贡献必须保持统一命令语义、流式 I/O、schema 兼容性和保守的 extraction 默认值，修改公共行为前请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+分阶段格式与能力计划见 [ROADMAP.md](./ROADMAP.md)，六阶段 MCP/remote/service/binding 计划详见 [docs/V0.5-INTEGRATIONS-PLAN.md](./docs/V0.5-INTEGRATIONS-PLAN.md)。贡献必须保持统一命令语义、流式 I/O、schema 兼容性和保守的 extraction 默认值，修改公共行为前请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 `arcthis` 使用 [MIT License](./LICENSE)。
 发布时需要关注的 native 与 Rust dependency 许可摘要见 [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md)。

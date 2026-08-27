@@ -40,12 +40,12 @@ This map lists important maintained files and their current responsibilities. Ge
 - `src/archive/backend/seven_zip.rs` — Pure-Rust 7z metadata, streaming access, extraction, and verification adapter.
 - `src/archive/backend/tar.rs` — TAR and compressed-TAR sequential metadata, streaming access, extraction, and verification adapter.
 - `src/archive/backend/stream.rs` — Single-codec-stream virtual-entry access and verification adapter.
-- `src/archive/backend/rar.rs` — Read/extract/verify RAR and RAR5 adapter over statically linked libarchive.
+- `src/archive/backend/rar.rs` — Read/extract/verify RAR and RAR5 adapter over the native libarchive integration.
 
 ## Materialization and lifecycle
 
 - `src/security.rs` — Extraction path sanitizer and default resource-limit policy.
-- `src/lifecycle.rs` — Shared collision resolution, staged commit, rollback, and post-commit source deletion.
+- `src/lifecycle.rs` — Shared path-overlap checks, collision resolution, staged commit, rollback, and post-commit source deletion.
 - `src/extract.rs` — Extraction planning, intelligent destinations, staging writers, enforced limits, and commit.
 - `src/batch.rs` — Content-based archive discovery and bounded deterministic `extract-all` execution.
 - `src/pack.rs` — Multi-format source scan, staged creation, reopen verification, commit, and lifecycle planning.
@@ -55,9 +55,9 @@ This map lists important maintained files and their current responsibilities. Ge
 - `tests/cli_access.rs` — Detection, list/tree/stat/inspect/read, JSON errors, and BrokenPipe integration tests.
 - `tests/cli_extract.rs` — Destination rules, single/full extraction, collision, traversal, link, duplicate, warning, and resource-limit regressions.
 - `tests/cli_pack_verify.rs` — Container and single-stream pack/verify/extract round trips plus corruption regressions.
-- `tests/cli_lifecycle.rs` — Dry-run, collision policy, delete-source, recursive batch, and worker regressions.
+- `tests/cli_lifecycle.rs` — Dry-run, collision policy, path-alias rejection, verified delete-source, recursive batch, and worker regressions.
 - `tests/cli_query.rs` — Find/grep/hash schemas, scan limits, binary detection, and in-memory nested traversal tests.
-- `tests/cli_v04.rs` — Encrypted ZIP/7z, multipart byte-stream volumes, persistent index lifecycle, and convert regressions.
+- `tests/cli_v04.rs` — RAR access, encrypted ZIP/7z, multipart byte streams, persistent indexes, and convert regressions.
 
 ## Design documents
 
@@ -65,6 +65,8 @@ This map lists important maintained files and their current responsibilities. Ge
 - `docs/ARCHITECTURE.md` — Module interfaces, backend seam, capabilities, streaming, extraction, and future locators.
 - `docs/CLI.md` — Public command, JSON schema, stdout/stderr, and machine error contract.
 - `docs/SECURITY.md` — Trust model, path rules, resource limits, staging, verification, and known limits.
+- `docs/ADR-0001-TRANSACTIONAL-LIFECYCLE.md` — Accepted source/destination separation and verified delete-source invariants.
 - `docs/RFC-0001-NESTED-ARCHIVES.md` — Accepted explicit `--within` syntax, source model, and nested resource limits.
 - `docs/RFC-0002-MULTIPART-SOURCES.md` — Accepted `--volume` byte-stream segment model and its format-native volume boundaries.
 - `docs/RAR.md` — RAR backend, capabilities, encryption, licensing/redistribution, and native multipart limits.
+- `docs/V0.5-INTEGRATIONS-PLAN.md` — Six-stage MCP, remote-source, service, binding, and human-integration plan.

@@ -8,8 +8,8 @@ use crate::archive::{Archive, ArchiveOpenOptions};
 use crate::error::{ArcthisError, Result};
 use crate::extract::{ExtractOptions, enforce_entry_count, validate_entries};
 use crate::lifecycle::{
-    CollisionPolicy, OperationStatus, delete_source, ensure_executable_resolution,
-    resolve_destination,
+    CollisionPolicy, OperationStatus, delete_source, ensure_destination_survives_source_deletion,
+    ensure_distinct_source_and_destination, ensure_executable_resolution, resolve_destination,
 };
 use crate::model::{ArchiveFormat, VerificationResult};
 use crate::pack::{PackOptions, output_format, pack_source_with_options};
@@ -68,7 +68,10 @@ pub struct ConvertResult {
 pub fn plan_convert(source: &Path, output: &Path, options: &ConvertOptions) -> Result<ConvertPlan> {
     let source = fs::canonicalize(source)
         .map_err(|error| ArcthisError::io("resolving conversion source", error))?;
-    reject_same_source_and_destination(&source, output)?;
+    ensure_distinct_source_and_destination(&source, output)?;
+    if options.delete_source {
+        ensure_destination_survives_source_deletion(&source, output)?;
+    }
     let target_format = output_format(output)?;
     let archive = Archive::open_with_options(source.as_path(), &options.open)?;
     let entries = archive.entries()?;
@@ -205,24 +208,4 @@ pub fn convert_archive(
         status: packed.status,
         source_deleted,
     })
-}
-
-fn reject_same_source_and_destination(source: &Path, output: &Path) -> Result<()> {
-    let output_absolute = if output.is_absolute() {
-        output.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|error| ArcthisError::io("reading current directory", error))?
-            .join(output)
-    };
-    if output_absolute == source
-        || output_absolute
-            .canonicalize()
-            .is_ok_and(|canonical| canonical == source)
-    {
-        return Err(ArcthisError::Collision {
-            message: "conversion source and destination must be different paths".to_owned(),
-        });
-    }
-    Ok(())
 }

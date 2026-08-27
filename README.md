@@ -139,7 +139,7 @@ See [START.md](./START.md) for destination rules, resource limits, JSON schemas,
 
 Extraction performs a complete metadata preflight, validates paths, rejects links and special files, enforces declared and actual byte/time/ratio limits, writes into a sibling staging location, and commits only after all entries succeed. Existing destinations are refused by default; `--overwrite`, `--skip-existing`, and `--rename` are mutually exclusive explicit policies.
 
-Packing writes a temporary sibling archive, finalizes it, reopens it through the normal archive interface, verifies every entry, and only then commits the requested output. `--delete-source` runs only after that commit; dry-runs never write or delete.
+Packing writes a temporary sibling archive, finalizes it, reopens it through the normal archive interface, verifies every entry, and only then commits the requested output. Pack destinations inside a directory source and any source/destination alias are rejected. `--delete-source` runs only after that commit and only when deleting the source cannot remove the destination; dry-runs never write or delete.
 
 Nested access decodes the selected inner entry into a resource-bounded immutable memory source; it does not create a named temporary inner archive. Conversion deliberately materializes validated entries inside a system temporary staging directory before verified packing. Persistent metadata indexes are treated as untrusted cache input and invalidated by source size and modification time. Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limits.
 
@@ -181,7 +181,7 @@ Important entry points:
 
 ## Roadmap and contributing
 
-The staged format and feature plan is in [ROADMAP.md](./ROADMAP.md). Contributions should preserve unified command semantics, streaming I/O, schema compatibility, and conservative extraction defaults. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before changing public behavior.
+The staged format and feature plan is in [ROADMAP.md](./ROADMAP.md); the six-stage MCP/remote/service/binding program is detailed in [docs/V0.5-INTEGRATIONS-PLAN.md](./docs/V0.5-INTEGRATIONS-PLAN.md). Contributions should preserve unified command semantics, streaming I/O, schema compatibility, and conservative extraction defaults. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before changing public behavior.
 
 ## License
 

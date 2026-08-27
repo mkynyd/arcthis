@@ -1,6 +1,11 @@
+use std::fs::File;
+use std::io::Write;
+
 use assert_cmd::cargo::cargo_bin_cmd;
 use serde_json::Value;
 use tempfile::TempDir;
+use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 fn create_zip(workspace: &TempDir, source_name: &str, archive_name: &str) {
     let source = workspace.path().join(source_name);
@@ -17,6 +22,33 @@ fn create_zip(workspace: &TempDir, source_name: &str, archive_name: &str) {
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn create_zip_with_corrupted_unselected_entry(path: &std::path::Path) {
+    let file = File::create(path).expect("create ZIP fixture");
+    let mut archive = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    archive
+        .start_file("selected.txt", options)
+        .expect("start selected entry");
+    archive
+        .write_all(b"selected payload")
+        .expect("write selected entry");
+    archive
+        .start_file("corrupted.txt", options)
+        .expect("start corrupted entry");
+    archive
+        .write_all(b"corrupt me")
+        .expect("write corrupted entry");
+    archive.finish().expect("finish ZIP fixture");
+
+    let mut bytes = std::fs::read(path).expect("read ZIP fixture");
+    let offset = bytes
+        .windows(b"corrupt me".len())
+        .position(|window| window == b"corrupt me")
+        .expect("find corruptible payload");
+    bytes[offset] ^= 0xff;
+    std::fs::write(path, bytes).expect("write corrupted ZIP fixture");
 }
 
 #[test]
@@ -148,6 +180,94 @@ fn pack_delete_source_happens_only_after_verified_commit() {
     assert!(success.status.success());
     assert!(!source.exists());
     assert!(workspace.path().join("project.7z").is_file());
+}
+
+#[test]
+fn destructive_lifecycle_rejects_source_destination_overlap() {
+    let workspace = TempDir::new().expect("create test directory");
+    let source = workspace.path().join("project");
+    std::fs::create_dir(&source).expect("create source directory");
+    std::fs::write(source.join("data.txt"), b"payload").expect("write source");
+
+    let nested_pack = cargo_bin_cmd!("arcthis")
+        .current_dir(workspace.path())
+        .args([
+            "pack",
+            "project",
+            "--output",
+            "project/backup.zip",
+            "--delete-source",
+            "--json",
+        ])
+        .output()
+        .expect("run nested pack");
+    assert_eq!(nested_pack.status.code(), Some(9));
+    assert!(source.join("data.txt").is_file());
+    assert!(!source.join("backup.zip").exists());
+
+    let archive = workspace.path().join("self.zip");
+    create_zip(&workspace, "archive-source", "self.zip");
+    let self_pack = cargo_bin_cmd!("arcthis")
+        .current_dir(workspace.path())
+        .args([
+            "pack",
+            "self.zip",
+            "--output",
+            "self.zip",
+            "--overwrite",
+            "--delete-source",
+            "--json",
+        ])
+        .output()
+        .expect("run aliased pack");
+    assert_eq!(self_pack.status.code(), Some(9));
+    assert!(archive.is_file());
+
+    let self_extract = cargo_bin_cmd!("arcthis")
+        .current_dir(workspace.path())
+        .args([
+            "extract",
+            "self.zip",
+            "archive-source/data.txt",
+            "--output",
+            "self.zip",
+            "--overwrite",
+            "--delete-source",
+            "--json",
+        ])
+        .output()
+        .expect("run aliased extraction");
+    assert_eq!(self_extract.status.code(), Some(9));
+    assert!(archive.is_file());
+    let error: Value = serde_json::from_slice(&self_extract.stderr).expect("parse collision error");
+    assert_eq!(error["error"]["code"], "collision");
+}
+
+#[test]
+fn selected_extract_verifies_entire_archive_before_deleting_source() {
+    let workspace = TempDir::new().expect("create test directory");
+    let archive = workspace.path().join("corrupted.zip");
+    let destination = workspace.path().join("selected.txt");
+    create_zip_with_corrupted_unselected_entry(&archive);
+
+    let output = cargo_bin_cmd!("arcthis")
+        .args([
+            "extract",
+            archive.to_str().expect("archive path"),
+            "selected.txt",
+            "--output",
+            destination.to_str().expect("destination path"),
+            "--delete-source",
+            "--json",
+        ])
+        .output()
+        .expect("run selected extraction");
+
+    assert_eq!(output.status.code(), Some(11));
+    assert!(archive.is_file());
+    assert!(!destination.exists());
+    let error: Value = serde_json::from_slice(&output.stderr).expect("parse verification error");
+    assert_eq!(error["error"]["code"], "verification_failed");
 }
 
 #[test]

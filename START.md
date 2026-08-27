@@ -286,7 +286,7 @@ The default collision policy refuses an existing destination. Select exactly one
 - `--skip-existing` reports a successful skipped operation and never deletes the source;
 - `--rename` chooses the first available numbered sibling such as `bundle.1`.
 
-`--delete-source` runs only after extraction has fully staged and committed. Any planning, decoding, verification, write, or commit failure preserves the source archive.
+`--delete-source` runs only after extraction has fully staged, verified the complete source archive, and committed. This complete verification also applies when extracting one selected entry, so deleting the source can require decoding unselected entries. Any planning, decoding, verification, write, or commit failure preserves the source archive. Source/destination aliases and ancestor/descendant overlaps that could remove the destination are rejected as `collision` before writing.
 
 ### Extraction safety
 
@@ -324,6 +324,8 @@ scan source -> write temporary sibling -> finalize -> sync -> reopen -> verify -
 ```
 
 With `--delete-source`, the source is removed only after the committed archive reopens and verifies successfully. Every earlier failure preserves it.
+
+The output must be outside a directory source, and it may not resolve to the same path as a file source. This prevents an archive from including, replacing, or later deleting its own destination.
 
 ## `convert` — change archive format with verified lifecycle
 

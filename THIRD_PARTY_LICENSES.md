@@ -33,11 +33,11 @@ Dev dependency: `assert_cmd` (MIT OR Apache-2.0) for CLI integration tests.
 
 ## Native libraries
 
-Release builds statically link native code only through the RAR backend and the Zstandard codec.
+Release builds embed native code through the RAR backend and the Zstandard codec. The final executable is not necessarily fully static and can dynamically link platform libraries; inspect each release artifact (`otool -L` on macOS or `ldd`/`readelf` on Linux) before redistribution.
 
 | Library | License | Route |
 | --- | --- | --- |
-| libarchive (3.2.0+) | BSD-style: 2-clause BSD for most sources, plus a few 3-clause UC Regents files | `compress-tools` `static` feature; bundles bzip2, lz4, zstd, xz/liblzma, zlib, and libxml2 |
+| libarchive (3.2.0+) | BSD-style: 2-clause BSD for most sources, plus a few 3-clause UC Regents files | `compress-tools` `static` build feature; the final binary can still use dynamic platform codec/XML libraries |
 | zstd | BSD-3-Clause (also dual-licensed GPLv2) | `zstd-sys` |
 | libbz2 (Rust port) | `bzip2-1.0.6` license | `libbz2-rs-sys`, a pure-Rust reimplementation used by the `bzip2` crate |
 
@@ -47,6 +47,6 @@ Other codecs — Gzip/Deflate, XZ/LZMA, 7z, TAR, and Bzip2 as used directly — 
 
 - libarchive's BSD-style license requires retaining its copyright notice when distributing statically linked binaries. The RAR backend is the sole consumer; see [docs/RAR.md](./docs/RAR.md).
 - The RAR format is proprietary to RARLAB. `arcthis` reads RAR through libarchive and never writes RAR, so no UnRAR or RARLAB SDK redistribution obligation is introduced.
-- Static linking means release binaries may embed zstd's BSD-3-Clause and libarchive's bundled codec notices; keep this file current if the dependency set changes.
+- Release binaries may embed zstd's BSD-3-Clause and libarchive code while dynamically using additional platform libraries; keep this file and per-platform artifact audits current if the linked set changes.
 
 Build prerequisites for the native path are documented in [README.md](./README.md) and [START.md](./START.md).

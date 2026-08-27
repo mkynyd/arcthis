@@ -277,7 +277,7 @@ arcthis extract archive.tar.zst --dry-run --delete-source --json
 - `--skip-existing`：报告成功跳过，且绝不删除 source；
 - `--rename`：选择第一个可用的编号 sibling，例如 `bundle.1`。
 
-`--delete-source` 只会在 extraction 完整 staging 并成功 commit 后执行。计划、解码、验证、写入或提交中的任何失败都会保留 source archive。
+`--delete-source` 只会在 extraction 完整 staging、验证整个 source archive 并成功 commit 后执行。即使只提取一个 entry，删除 source 前也会验证未选中的 entry，因此可能需要额外解码。计划、解码、验证、写入或提交中的任何失败都会保留 source archive。可能导致 destination 被删除的 source/destination alias 或祖先/后代重叠会在写入前以 `collision` 拒绝。
 
 ### 提取安全
 
@@ -315,6 +315,8 @@ Symlink/special file 会被拒绝。默认拒绝目标冲突；`--overwrite`、`
 ```
 
 启用 `--delete-source` 后，也只有已提交 archive 能够重新打开并验证成功时才删除 source；此前任何失败都会保留它。
+
+输出路径必须位于目录 source 之外，也不能与文件 source 解析为同一路径，防止 archive 把自身输出打包进去、替换掉或在后续删除 source 时一并删除。
 
 ## `convert`：按验证生命周期转换 archive
 

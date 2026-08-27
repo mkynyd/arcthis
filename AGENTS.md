@@ -52,6 +52,7 @@
 - 默认不恢复 archive symlink/hardlink/special file。任何放宽都必须显式选项、安全设计和回归测试。
 - 写入优先 staging + commit；失败不得留下伪装成成功的最终产物。
 - `--delete-source` 只能在 perform → finalize → verify → commit 完成后执行；任何错误、中断或验证失败都必须保留 source。
+- 所有 destructive lifecycle 必须在写入前检查 source/destination filesystem alias 与祖先/后代重叠；pack output 不得位于目录 source 内，source deletion 不得删除已提交 destination。
 - 资源限制必须在真正写入/解码路径执行，不能只依赖 `inspect` 警告。
 
 ## 文档同步规则

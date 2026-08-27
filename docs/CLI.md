@@ -44,6 +44,8 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 `extract`, `pack`, and `convert` accept `--dry-run`, `--delete-source`, and one of `--overwrite`, `--skip-existing`, or `--rename`. `extract-all` accepts the same lifecycle flags plus bounded workers and optional filesystem recursion. `index` has its own create/refresh/delete dry-run lifecycle.
 
+Lifecycle planning rejects source/destination aliases. `pack` also rejects an output inside a directory source. With `--delete-source`, any source/destination ancestor overlap that could remove the committed destination is a `collision`.
+
 ## Human and machine output
 
 - Result data goes to stdout.
@@ -164,6 +166,8 @@ Adds a `verification` object with `verified`, `entries_checked`, and `bytes_chec
 ### `extract`
 
 Adds an `extraction` object with `destination`, `entries_extracted`, `bytes_written`, `status`, and `source_deleted`. Full extraction accepts entry/size limits plus optional `--max-compression-ratio` and `--max-entry-duration-seconds`. A selected entry requires `--output <file>`.
+
+When selected-entry extraction uses `--delete-source`, the complete archive is verified before commit and deletion; a corrupt unselected entry therefore fails with `verification_failed` and preserves both source and final destination state.
 
 With `--dry-run`, `extract` returns `operation: "extract"` and a typed `plan` containing the resolved destination, estimated size, collision facts, warnings, and delete-source intent.
 

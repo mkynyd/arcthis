@@ -42,6 +42,65 @@ fn parse_stdout(output: &std::process::Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("parse JSON stdout")
 }
 
+fn create_rar_fixture(path: &Path) {
+    // Minimal RAR 4 archive containing `RAR.txt` with `RAR 验证成功。`.
+    const BYTES: &[u8] = &[
+        0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00, 0xcf, 0x90, 0x73, 0x00, 0x00, 0x0d, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0xfb, 0xc2, 0x74, 0x00, 0x82, 0x27, 0x00, 0x13, 0x00, 0x00,
+        0x00, 0x13, 0x00, 0x00, 0x00, 0x03, 0xaf, 0x34, 0x8a, 0x38, 0x00, 0x00, 0x00, 0x00, 0x14,
+        0x30, 0x07, 0x00, 0xa4, 0x81, 0x00, 0x00, 0x52, 0x41, 0x52, 0x2e, 0x74, 0x78, 0x74, 0x52,
+        0x41, 0x52, 0x20, 0xe9, 0xaa, 0x8c, 0xe8, 0xaf, 0x81, 0xe6, 0x88, 0x90, 0xe5, 0x8a, 0x9f,
+        0xe3, 0x80, 0x82, 0x04, 0xb0, 0x7b, 0x00, 0x00, 0x07, 0x00,
+    ];
+    std::fs::write(path, BYTES).expect("write RAR fixture");
+}
+
+#[test]
+fn rar_backend_lists_reads_extracts_and_verifies() {
+    let workspace = TempDir::new().expect("create test directory");
+    let archive = workspace.path().join("fixture.bin");
+    let extracted = workspace.path().join("extracted");
+    create_rar_fixture(&archive);
+
+    let list = cargo_bin_cmd!("arcthis")
+        .args(["list", archive.to_str().expect("archive path"), "--json"])
+        .output()
+        .expect("list RAR");
+    let value = parse_stdout(&list);
+    assert_eq!(value["archive"]["format"], "rar");
+    assert_eq!(value["entries"][0]["path"], "RAR.txt");
+
+    let read = cargo_bin_cmd!("arcthis")
+        .args(["read", archive.to_str().expect("archive path"), "RAR.txt"])
+        .output()
+        .expect("read RAR");
+    assert!(read.status.success());
+    assert_eq!(read.stdout, "RAR 验证成功。".as_bytes());
+
+    let verify = cargo_bin_cmd!("arcthis")
+        .args(["verify", archive.to_str().expect("archive path"), "--json"])
+        .output()
+        .expect("verify RAR");
+    let value = parse_stdout(&verify);
+    assert_eq!(value["verification"]["verified"], true);
+
+    let extract = cargo_bin_cmd!("arcthis")
+        .args([
+            "extract",
+            archive.to_str().expect("archive path"),
+            "--output",
+            extracted.to_str().expect("extracted path"),
+            "--json",
+        ])
+        .output()
+        .expect("extract RAR");
+    parse_stdout(&extract);
+    assert_eq!(
+        std::fs::read(extracted.join("RAR.txt")).expect("read extracted RAR entry"),
+        "RAR 验证成功。".as_bytes()
+    );
+}
+
 #[test]
 fn encrypted_seven_zip_requires_and_accepts_password_file() {
     let workspace = TempDir::new().expect("create test directory");

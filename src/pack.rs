@@ -17,7 +17,7 @@ use crate::archive::Archive;
 use crate::error::{ArcthisError, Result};
 use crate::lifecycle::{
     CollisionPolicy, OperationStatus, commit_staged_path, delete_source,
-    ensure_executable_resolution, resolve_destination,
+    ensure_destination_outside_source, ensure_executable_resolution, resolve_destination,
 };
 use crate::model::{ArchiveFormat, VerificationResult};
 
@@ -87,10 +87,11 @@ pub fn pack_source(source: &Path, output: &Path) -> Result<PackResult> {
 
 pub fn plan_pack_source(source: &Path, output: &Path, options: &PackOptions) -> Result<PackPlan> {
     let format = output_format(output)?;
-    let source_entries = collect_source_entries(source, options.include_source_root)?;
     let source = fs::canonicalize(source)
         .map_err(|error| ArcthisError::io("resolving pack source", error))?;
     let resolution = resolve_destination(output, options.collision_policy)?;
+    ensure_destination_outside_source(&source, &resolution.path)?;
+    let source_entries = collect_source_entries(&source, options.include_source_root)?;
     let estimated_input_size = source_entries.iter().try_fold(0_u64, |total, entry| {
         let size = if entry.kind == SourceKind::File {
             fs::metadata(&entry.source_path)
@@ -127,10 +128,11 @@ pub fn pack_source_with_options(
     options: &PackOptions,
 ) -> Result<PackResult> {
     let format = output_format(output)?;
-    let source_entries = collect_source_entries(source, options.include_source_root)?;
     let source = fs::canonicalize(source)
         .map_err(|error| ArcthisError::io("resolving pack source", error))?;
     let resolution = resolve_destination(output, options.collision_policy)?;
+    ensure_destination_outside_source(&source, &resolution.path)?;
+    let source_entries = collect_source_entries(&source, options.include_source_root)?;
     ensure_executable_resolution(&resolution, options.collision_policy)?;
     if resolution.skip {
         let existing = Archive::open(resolution.path.as_path())?;
