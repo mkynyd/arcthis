@@ -23,6 +23,7 @@
 - `src/security.rs` 是 entry path 和 extraction 安全规则的单一真相源。
 - `tests/` 使用动态 fixture 和 CLI 集成测试验证公开行为。
 - `docs/` 保存产品、架构、CLI 契约与安全设计；未实现能力必须标记为 planned。
+- 根目录 `HANDOFF.md` 保存最近一次任务的可交接状态，供下一位 Agent 继续工作；该文件是本地协作产物，不进入 Git。
 
 ## 工程质量
 
@@ -57,6 +58,7 @@
 2. 更新受影响的 `AGENTS.md`、`README.md`/`README.zh-CN.md`、`INDEX.md`、`START.md`/`START.zh-CN.md`、`docs/` 和 `ROADMAP.md`。
 3. 规划中的功能明确标记 planned/roadmap，不得写成已实现。
 4. 向根目录 `log.md` 追加简体中文记录，不覆盖历史；`log.md` 必须保持在 `.gitignore` 中。
+5. 每次任务完成前创建或更新根目录 `HANDOFF.md`，记录任务目标、实际修改、验证结果、当前工作树状态、未完成事项和建议下一步。内容必须以当前仓库事实为准，不保留已经失效的旧状态；`HANDOFF.md` 必须保持在 `.gitignore` 中。
 
 ## 禁止事项
 
@@ -64,4 +66,4 @@
 - 不得为 ZIP、TAR 等复制上层 command 逻辑。
 - 不得在没有安全契约和测试的情况下引入 overwrite、source deletion、symlink restoration 或 nested recursion。
 - 不得把终端文本包装为 JSON；必须输出真实结构化 schema。
-- 不得将 target、cache、临时产物或 `log.md` 加入版本库。
+- 不得将 target、cache、临时产物、`log.md` 或 `HANDOFF.md` 加入版本库。
