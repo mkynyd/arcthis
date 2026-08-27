@@ -4,10 +4,14 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::SCHEMA_VERSION;
+use crate::batch::{ExtractAllPlan, ExtractAllResult};
+use crate::convert::{ConvertPlan, ConvertResult};
 use crate::error::{ArcthisError, Result};
-use crate::extract::ExtractResult;
+use crate::extract::{ExtractPlan, ExtractResult};
+use crate::index::IndexResult;
 use crate::model::{ArchiveEntry, ArchiveFormat, ArchiveInspection, EntryKind, VerificationResult};
-use crate::pack::PackResult;
+use crate::pack::{PackPlan, PackResult};
+use crate::query::{FindResult, GrepResult, HashResult};
 
 #[derive(Debug, Serialize)]
 struct ArchiveReference {
@@ -72,6 +76,27 @@ struct ExtractResponse<'a> {
 }
 
 #[derive(Debug, Serialize)]
+struct ExtractPlanResponse<'a> {
+    schema_version: &'static str,
+    operation: &'static str,
+    plan: &'a ExtractPlan,
+}
+
+#[derive(Debug, Serialize)]
+struct ExtractAllPlanResponse<'a> {
+    schema_version: &'static str,
+    operation: &'static str,
+    plan: &'a ExtractAllPlan,
+}
+
+#[derive(Debug, Serialize)]
+struct ExtractAllResponse<'a> {
+    schema_version: &'static str,
+    operation: &'static str,
+    result: &'a ExtractAllResult,
+}
+
+#[derive(Debug, Serialize)]
 struct VerifyResponse<'a> {
     schema_version: &'static str,
     archive: ArchiveReference,
@@ -82,6 +107,127 @@ struct VerifyResponse<'a> {
 struct PackResponse<'a> {
     schema_version: &'static str,
     pack: &'a PackResult,
+}
+
+#[derive(Debug, Serialize)]
+struct PackPlanResponse<'a> {
+    schema_version: &'static str,
+    operation: &'static str,
+    plan: &'a PackPlan,
+}
+
+#[derive(Debug, Serialize)]
+struct FindResponse<'a> {
+    schema_version: &'static str,
+    archive: ArchiveReference,
+    find: &'a FindResult,
+}
+
+#[derive(Debug, Serialize)]
+struct GrepResponse<'a> {
+    schema_version: &'static str,
+    archive: ArchiveReference,
+    grep: &'a GrepResult,
+}
+
+#[derive(Debug, Serialize)]
+struct HashResponse<'a> {
+    schema_version: &'static str,
+    archive: ArchiveReference,
+    hash: &'a HashResult,
+}
+
+#[derive(Debug, Serialize)]
+struct IndexResponse<'a> {
+    schema_version: &'static str,
+    operation: &'static str,
+    index: &'a IndexResult,
+}
+
+#[derive(Debug, Serialize)]
+struct ConvertResponse<'a> {
+    schema_version: &'static str,
+    convert: &'a ConvertResult,
+}
+
+#[derive(Debug, Serialize)]
+struct ConvertPlanResponse<'a> {
+    schema_version: &'static str,
+    operation: &'static str,
+    plan: &'a ConvertPlan,
+}
+
+pub(crate) fn write_find(
+    writer: &mut impl Write,
+    path: &Path,
+    format: ArchiveFormat,
+    result: &FindResult,
+    json: bool,
+) -> Result<()> {
+    if json {
+        return write_json(
+            writer,
+            &FindResponse {
+                schema_version: SCHEMA_VERSION,
+                archive: ArchiveReference::new(path, format),
+                find: result,
+            },
+        );
+    }
+    for entry in &result.entries {
+        writeln!(writer, "{}", entry.path)
+            .map_err(|error| ArcthisError::io("writing find output", error))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn write_grep(
+    writer: &mut impl Write,
+    path: &Path,
+    format: ArchiveFormat,
+    result: &GrepResult,
+    json: bool,
+) -> Result<()> {
+    if json {
+        return write_json(
+            writer,
+            &GrepResponse {
+                schema_version: SCHEMA_VERSION,
+                archive: ArchiveReference::new(path, format),
+                grep: result,
+            },
+        );
+    }
+    for matched in &result.matches {
+        writeln!(
+            writer,
+            "{}:{}:{}",
+            matched.path, matched.line_number, matched.text
+        )
+        .map_err(|error| ArcthisError::io("writing grep output", error))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn write_hash(
+    writer: &mut impl Write,
+    path: &Path,
+    format: ArchiveFormat,
+    result: &HashResult,
+    json: bool,
+) -> Result<()> {
+    if json {
+        return write_json(
+            writer,
+            &HashResponse {
+                schema_version: SCHEMA_VERSION,
+                archive: ArchiveReference::new(path, format),
+                hash: result,
+            },
+        );
+    }
+    writeln!(writer, "{}  {}", result.digest, result.entry)
+        .map_err(|error| ArcthisError::io("writing hash output", error))
 }
 
 pub(crate) fn write_list(
@@ -205,6 +351,8 @@ pub(crate) fn write_inspect(
                 )
             })
             .and_then(|()| writeln!(writer, "random access: {}", inspection.random_access))
+            .and_then(|()| writeln!(writer, "multipart: {}", inspection.multipart))
+            .and_then(|()| writeln!(writer, "volumes: {}", inspection.volume_count))
             .map_err(|error| ArcthisError::io("writing inspect output", error))?;
         for warning in &inspection.warnings {
             writeln!(writer, "warning [{}]: {}", warning.code, warning.message)
@@ -239,6 +387,129 @@ pub(crate) fn write_extract(
             extraction.destination.display()
         )
         .map_err(|error| ArcthisError::io("writing extraction result", error))
+    }
+}
+
+pub(crate) fn write_extract_plan(
+    writer: &mut impl Write,
+    plan: &ExtractPlan,
+    json: bool,
+) -> Result<()> {
+    if json {
+        write_json(
+            writer,
+            &ExtractPlanResponse {
+                schema_version: SCHEMA_VERSION,
+                operation: "extract",
+                plan,
+            },
+        )
+    } else {
+        writeln!(writer, "dry-run extraction plan")
+            .and_then(|()| writeln!(writer, "source: {}", plan.source.display()))
+            .and_then(|()| writeln!(writer, "destination: {}", plan.destination.display()))
+            .and_then(|()| writeln!(writer, "entries: {}", plan.entries_to_extract))
+            .and_then(|()| {
+                writeln!(
+                    writer,
+                    "estimated bytes: {}",
+                    plan.estimated_uncompressed_size
+                )
+            })
+            .and_then(|()| writeln!(writer, "collision: {}", plan.collision))
+            .and_then(|()| writeln!(writer, "will skip: {}", plan.will_skip))
+            .and_then(|()| {
+                writeln!(
+                    writer,
+                    "delete source after success: {}",
+                    plan.will_delete_source_after_success
+                )
+            })
+            .map_err(|error| ArcthisError::io("writing extraction plan", error))?;
+        for warning in &plan.warnings {
+            writeln!(writer, "warning: {warning}")
+                .map_err(|error| ArcthisError::io("writing extraction plan", error))?;
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn write_extract_all_plan(
+    writer: &mut impl Write,
+    plan: &ExtractAllPlan,
+    json: bool,
+) -> Result<()> {
+    if json {
+        write_json(
+            writer,
+            &ExtractAllPlanResponse {
+                schema_version: SCHEMA_VERSION,
+                operation: "extract_all",
+                plan,
+            },
+        )
+    } else {
+        writeln!(writer, "dry-run extract-all plan")
+            .and_then(|()| writeln!(writer, "root: {}", plan.root.display()))
+            .and_then(|()| writeln!(writer, "archives: {}", plan.archives.len()))
+            .and_then(|()| writeln!(writer, "workers: {}", plan.workers))
+            .map_err(|error| ArcthisError::io("writing extract-all plan", error))?;
+        for archive in &plan.archives {
+            writeln!(
+                writer,
+                "{} -> {}{}",
+                archive.source.display(),
+                archive.destination.display(),
+                if archive.will_skip { " (skip)" } else { "" }
+            )
+            .map_err(|error| ArcthisError::io("writing extract-all plan", error))?;
+        }
+        for conflict in &plan.destination_conflicts {
+            writeln!(writer, "conflict: {conflict}")
+                .map_err(|error| ArcthisError::io("writing extract-all plan", error))?;
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn write_extract_all(
+    writer: &mut impl Write,
+    result: &ExtractAllResult,
+    json: bool,
+) -> Result<()> {
+    if json {
+        write_json(
+            writer,
+            &ExtractAllResponse {
+                schema_version: SCHEMA_VERSION,
+                operation: "extract_all",
+                result,
+            },
+        )
+    } else {
+        writeln!(
+            writer,
+            "processed {} archives: {} completed, {} skipped, {} failed",
+            result.discovered, result.succeeded, result.skipped, result.failed
+        )
+        .map_err(|error| ArcthisError::io("writing extract-all result", error))?;
+        for item in &result.items {
+            if let Some(error) = &item.error_message {
+                writeln!(writer, "failed {}: {error}", item.archive.display())
+            } else {
+                writeln!(
+                    writer,
+                    "{:?} {} -> {}",
+                    item.status,
+                    item.archive.display(),
+                    item.destination
+                        .as_deref()
+                        .map_or_else(|| "-".to_owned(), |path| path.display().to_string())
+                )
+            }
+            .map_err(|error| ArcthisError::io("writing extract-all result", error))?;
+        }
+        Ok(())
     }
 }
 
@@ -286,6 +557,118 @@ pub(crate) fn write_pack(writer: &mut impl Write, result: &PackResult, json: boo
             result.archive_size
         )
         .map_err(|error| ArcthisError::io("writing pack result", error))
+    }
+}
+
+pub(crate) fn write_pack_plan(writer: &mut impl Write, plan: &PackPlan, json: bool) -> Result<()> {
+    if json {
+        write_json(
+            writer,
+            &PackPlanResponse {
+                schema_version: SCHEMA_VERSION,
+                operation: "pack",
+                plan,
+            },
+        )
+    } else {
+        writeln!(writer, "dry-run pack plan")
+            .and_then(|()| writeln!(writer, "source: {}", plan.source.display()))
+            .and_then(|()| writeln!(writer, "destination: {}", plan.destination.display()))
+            .and_then(|()| writeln!(writer, "format: {}", plan.format))
+            .and_then(|()| writeln!(writer, "entries: {}", plan.entries_to_pack))
+            .and_then(|()| writeln!(writer, "estimated bytes: {}", plan.estimated_input_size))
+            .and_then(|()| writeln!(writer, "collision: {}", plan.collision))
+            .and_then(|()| writeln!(writer, "will skip: {}", plan.will_skip))
+            .and_then(|()| {
+                writeln!(
+                    writer,
+                    "delete source after success: {}",
+                    plan.will_delete_source_after_success
+                )
+            })
+            .map_err(|error| ArcthisError::io("writing pack plan", error))
+    }
+}
+
+pub(crate) fn write_index(writer: &mut impl Write, result: &IndexResult, json: bool) -> Result<()> {
+    if json {
+        write_json(
+            writer,
+            &IndexResponse {
+                schema_version: SCHEMA_VERSION,
+                operation: "index",
+                index: result,
+            },
+        )
+    } else {
+        writeln!(
+            writer,
+            "{:?} index {} ({} entries) at {}",
+            result.action,
+            result.archive.display(),
+            result.entries_indexed,
+            result.index_path.display()
+        )
+        .map_err(|error| ArcthisError::io("writing index result", error))
+    }
+}
+
+pub(crate) fn write_convert(
+    writer: &mut impl Write,
+    result: &ConvertResult,
+    json: bool,
+) -> Result<()> {
+    if json {
+        write_json(
+            writer,
+            &ConvertResponse {
+                schema_version: SCHEMA_VERSION,
+                convert: result,
+            },
+        )
+    } else {
+        writeln!(
+            writer,
+            "converted {} entries to {} ({} bytes, verified)",
+            result.entries_converted,
+            result.destination.display(),
+            result.archive_size
+        )
+        .map_err(|error| ArcthisError::io("writing conversion result", error))
+    }
+}
+
+pub(crate) fn write_convert_plan(
+    writer: &mut impl Write,
+    plan: &ConvertPlan,
+    json: bool,
+) -> Result<()> {
+    if json {
+        write_json(
+            writer,
+            &ConvertPlanResponse {
+                schema_version: SCHEMA_VERSION,
+                operation: "convert",
+                plan,
+            },
+        )
+    } else {
+        writeln!(writer, "dry-run conversion plan")
+            .and_then(|()| writeln!(writer, "source: {}", plan.source.display()))
+            .and_then(|()| writeln!(writer, "source format: {}", plan.source_format))
+            .and_then(|()| writeln!(writer, "destination: {}", plan.destination.display()))
+            .and_then(|()| writeln!(writer, "target format: {}", plan.target_format))
+            .and_then(|()| writeln!(writer, "entries: {}", plan.entries_to_convert))
+            .and_then(|()| writeln!(writer, "collision: {}", plan.collision))
+            .and_then(|()| writeln!(writer, "will skip: {}", plan.will_skip))
+            .and_then(|()| {
+                writeln!(
+                    writer,
+                    "delete source after success: {}",
+                    plan.will_delete_source_after_success
+                )
+            })
+            .map_err(|error| ArcthisError::io("writing conversion plan", error))
     }
 }
 
@@ -395,6 +778,7 @@ mod tests {
 
     fn entry(path: &str, kind: EntryKind) -> ArchiveEntry {
         ArchiveEntry {
+            archive_index: 0,
             path: path.to_owned(),
             path_encoding: crate::EntryPathEncoding::Utf8,
             kind,
@@ -405,6 +789,7 @@ mod tests {
             executable: false,
             symlink_target: None,
             crc32: None,
+            mime_guess: None,
         }
     }
 

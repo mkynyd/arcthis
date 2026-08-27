@@ -1,10 +1,8 @@
-use std::fs::File;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use flate2::read::GzDecoder;
-
-use super::{ArchiveBackend, display_entry_path, format_unix_time};
+use super::{ArchiveBackend, ArchiveSource, display_entry_path, format_unix_time};
+use crate::archive::codec::{StreamCompression, decoder};
 use crate::error::{ArcthisError, Result};
 use crate::extract::{ExtractionStats, ExtractionWriter, PlannedEntry};
 use crate::model::{
@@ -14,23 +12,30 @@ use crate::model::{
 use crate::security::ExtractionLimits;
 
 pub(crate) struct TarBackend {
-    path: PathBuf,
+    source: ArchiveSource,
     format: ArchiveFormat,
 }
 
 impl TarBackend {
-    pub(crate) const fn new(path: PathBuf, format: ArchiveFormat) -> Self {
-        Self { path, format }
+    pub(crate) const fn new(source: ArchiveSource, format: ArchiveFormat) -> Self {
+        Self { source, format }
     }
 
     fn reader(&self) -> Result<Box<dyn Read>> {
-        let file = File::open(&self.path)
-            .map_err(|error| ArcthisError::io("opening TAR archive", error))?;
         match self.format {
-            ArchiveFormat::Tar => Ok(Box::new(file)),
-            ArchiveFormat::TarGzip => Ok(Box::new(GzDecoder::new(file))),
-            ArchiveFormat::Zip => Err(ArcthisError::UnsupportedOperation {
-                message: "ZIP cannot be opened by the TAR backend".to_owned(),
+            ArchiveFormat::Tar => self.source.reader().map(|reader| reader as Box<dyn Read>),
+            ArchiveFormat::TarGzip => decoder(self.source.reader()?, StreamCompression::Gzip),
+            ArchiveFormat::TarBzip2 => decoder(self.source.reader()?, StreamCompression::Bzip2),
+            ArchiveFormat::TarXz => decoder(self.source.reader()?, StreamCompression::Xz),
+            ArchiveFormat::TarZstd => decoder(self.source.reader()?, StreamCompression::Zstd),
+            ArchiveFormat::Zip
+            | ArchiveFormat::SevenZip
+            | ArchiveFormat::Rar
+            | ArchiveFormat::Gzip
+            | ArchiveFormat::Bzip2
+            | ArchiveFormat::Xz
+            | ArchiveFormat::Zstd => Err(ArcthisError::UnsupportedOperation {
+                message: format!("{} cannot be opened by the TAR backend", self.format),
             }),
         }
     }
@@ -67,6 +72,7 @@ impl TarBackend {
             let mode = header.mode().ok();
             let (path, path_encoding) = display_entry_path(entry.path_bytes().as_ref());
             result.push(ArchiveEntry {
+                archive_index: u64::try_from(result.len()).unwrap_or(u64::MAX),
                 path,
                 path_encoding,
                 kind,
@@ -81,6 +87,7 @@ impl TarBackend {
                 executable: mode.is_some_and(|value| value & 0o111 != 0),
                 symlink_target: link_target,
                 crc32: None,
+                mime_guess: None,
             });
         }
         Ok(result)

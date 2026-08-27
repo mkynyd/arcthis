@@ -1,6 +1,6 @@
 [package]
 name = "arcthis"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.98"
 description = "An agent-native CLI for accessing and manipulating compressed files"
@@ -12,16 +12,25 @@ keywords = ["archive", "cli", "agent", "zip", "tar"]
 categories = ["command-line-utilities", "compression"]
 
 [dependencies]
+bzip2 = "0.6"
 clap = { version = "4.6", features = ["derive"] }
+compress-tools = { version = "0.16", default-features = false, features = ["static"] }
+directories = "6.0"
 flate2 = "1.1"
+globset = "0.4"
+lzma-rust2 = "0.20"
+mime_guess = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.11"
+sevenz-rust2 = { version = "0.22", default-features = false, features = ["aes256", "bzip2", "compress", "deflate", "ppmd", "util", "zstd"] }
 tar = "0.4"
 tempfile = "3.27"
 thiserror = "2.0"
 time = { version = "0.3", features = ["formatting"] }
 walkdir = "2.5"
-zip = { version = "8.2", default-features = false, features = ["deflate-flate2", "time"] }
+zip = { version = "=8.2.0", default-features = false, features = ["aes-crypto", "deflate-flate2", "time"] }
+zstd = { version = "0.13", default-features = false }
 
 [dev-dependencies]
 assert_cmd = "2.2"

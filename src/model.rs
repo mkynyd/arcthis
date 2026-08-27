@@ -1,21 +1,39 @@
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArchiveFormat {
     Zip,
+    SevenZip,
+    Rar,
     Tar,
     TarGzip,
+    TarBzip2,
+    TarXz,
+    TarZstd,
+    Gzip,
+    Bzip2,
+    Xz,
+    Zstd,
 }
 
 impl ArchiveFormat {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Zip => "zip",
+            Self::SevenZip => "seven_zip",
+            Self::Rar => "rar",
             Self::Tar => "tar",
             Self::TarGzip => "tar_gzip",
+            Self::TarBzip2 => "tar_bzip2",
+            Self::TarXz => "tar_xz",
+            Self::TarZstd => "tar_zstd",
+            Self::Gzip => "gzip",
+            Self::Bzip2 => "bzip2",
+            Self::Xz => "xz",
+            Self::Zstd => "zstd",
         }
     }
 }
@@ -26,7 +44,7 @@ impl fmt::Display for ArchiveFormat {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EntryKind {
     File,
@@ -36,7 +54,7 @@ pub enum EntryKind {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EntryPathEncoding {
     Utf8,
@@ -56,8 +74,9 @@ impl fmt::Display for EntryKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchiveEntry {
+    pub archive_index: u64,
     pub path: String,
     pub path_encoding: EntryPathEncoding,
     pub kind: EntryKind,
@@ -68,6 +87,7 @@ pub struct ArchiveEntry {
     pub executable: bool,
     pub symlink_target: Option<String>,
     pub crc32: Option<String>,
+    pub mime_guess: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -90,11 +110,14 @@ pub struct ArchiveWarning {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[allow(clippy::struct_excessive_bools)] // Independent archive facts are stable JSON fields.
 pub struct ArchiveInspection {
     pub compression: String,
     pub encrypted: bool,
     pub solid: bool,
     pub random_access: bool,
+    pub multipart: bool,
+    pub volume_count: u64,
     pub entry_count: u64,
     pub compressed_size: u64,
     pub uncompressed_size: u64,
@@ -120,7 +143,7 @@ impl ArchiveCapabilities {
         Self {
             random_access: true,
             streaming_read: true,
-            encrypted: false,
+            encrypted: true,
             solid: false,
             can_create: true,
             can_extract: true,
@@ -130,6 +153,45 @@ impl ArchiveCapabilities {
     }
 
     pub const fn tar() -> Self {
+        Self {
+            random_access: false,
+            streaming_read: true,
+            encrypted: false,
+            solid: false,
+            can_create: true,
+            can_extract: true,
+            can_verify: true,
+            can_seek: false,
+        }
+    }
+
+    pub const fn seven_zip(solid: bool) -> Self {
+        Self {
+            random_access: !solid,
+            streaming_read: true,
+            encrypted: true,
+            solid,
+            can_create: true,
+            can_extract: true,
+            can_verify: true,
+            can_seek: !solid,
+        }
+    }
+
+    pub const fn rar() -> Self {
+        Self {
+            random_access: false,
+            streaming_read: true,
+            encrypted: true,
+            solid: false,
+            can_create: false,
+            can_extract: true,
+            can_verify: true,
+            can_seek: false,
+        }
+    }
+
+    pub const fn single_stream() -> Self {
         Self {
             random_access: false,
             streaming_read: true,

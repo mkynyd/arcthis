@@ -1,11 +1,11 @@
-use std::fs::File;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use zip::ZipArchive;
 use zip::result::ZipError;
 
-use super::{ArchiveBackend, display_entry_path};
+use super::{ArchiveBackend, ArchiveSource, ReadSeek, display_entry_path};
+use crate::ArchivePassword;
 use crate::error::{ArcthisError, Result};
 use crate::extract::{ExtractionStats, ExtractionWriter, PlannedEntry};
 use crate::model::{
@@ -15,18 +15,17 @@ use crate::model::{
 use crate::security::ExtractionLimits;
 
 pub(crate) struct ZipBackend {
-    path: PathBuf,
+    source: ArchiveSource,
+    password: Option<ArchivePassword>,
 }
 
 impl ZipBackend {
-    pub(crate) const fn new(path: PathBuf) -> Self {
-        Self { path }
+    pub(crate) const fn new(source: ArchiveSource, password: Option<ArchivePassword>) -> Self {
+        Self { source, password }
     }
 
-    fn open(&self) -> Result<ZipArchive<File>> {
-        let file = File::open(&self.path)
-            .map_err(|error| ArcthisError::io("opening ZIP archive", error))?;
-        ZipArchive::new(file).map_err(map_zip_error)
+    fn open(&self) -> Result<ZipArchive<Box<dyn ReadSeek>>> {
+        ZipArchive::new(self.source.reader()?).map_err(map_zip_error)
     }
 }
 
@@ -57,6 +56,7 @@ impl ArchiveBackend for ZipBackend {
                 _ => EntryKind::File,
             };
             entries.push(ArchiveEntry {
+                archive_index: u64::try_from(index).unwrap_or(u64::MAX),
                 path,
                 path_encoding,
                 kind,
@@ -69,6 +69,7 @@ impl ArchiveBackend for ZipBackend {
                 executable: mode.is_some_and(|value| value & 0o111 != 0),
                 symlink_target: None,
                 crc32: Some(format!("{:08x}", file.crc32())),
+                mime_guess: None,
             });
         }
         Ok(entries)
@@ -77,12 +78,15 @@ impl ArchiveBackend for ZipBackend {
     fn copy_entry_to(&self, path: &str, writer: &mut dyn Write) -> Result<EntryCopyResult> {
         let mut archive = self.open()?;
         for index in 0..archive.len() {
-            let mut file = archive.by_index(index).map_err(map_zip_error)?;
+            let mut file = if let Some(password) = &self.password {
+                archive
+                    .by_index_decrypt(index, password.expose())
+                    .map_err(map_zip_error)?
+            } else {
+                archive.by_index(index).map_err(map_zip_error)?
+            };
             if display_entry_path(file.name_raw()).0 != path {
                 continue;
-            }
-            if file.encrypted() {
-                return Err(ArcthisError::PasswordRequired);
             }
             let bytes_written = io::copy(&mut file, writer).map_err(|error| {
                 if error.kind() == io::ErrorKind::InvalidData {
@@ -113,7 +117,13 @@ impl ArchiveBackend for ZipBackend {
         let mut writer = ExtractionWriter::new(staging_root, limits);
         let mut archive = self.open()?;
         for index in 0..archive.len() {
-            let mut file = archive.by_index(index).map_err(map_zip_error)?;
+            let mut file = if let Some(password) = &self.password {
+                archive
+                    .by_index_decrypt(index, password.expose())
+                    .map_err(map_zip_error)?
+            } else {
+                archive.by_index(index).map_err(map_zip_error)?
+            };
             let path = display_entry_path(file.name_raw()).0;
             let Some(target) = targets.get(path.as_str()) else {
                 continue;
@@ -137,14 +147,21 @@ impl ArchiveBackend for ZipBackend {
         let mut entries_checked = 0_u64;
         let mut bytes_checked = 0_u64;
         for index in 0..archive.len() {
-            if archive
-                .by_index_raw(index)
-                .map_err(map_zip_error)?
-                .encrypted()
+            if self.password.is_none()
+                && archive
+                    .by_index_raw(index)
+                    .map_err(map_zip_error)?
+                    .encrypted()
             {
                 return Err(ArcthisError::PasswordRequired);
             }
-            let mut file = archive.by_index(index).map_err(map_zip_error)?;
+            let mut file = if let Some(password) = &self.password {
+                archive
+                    .by_index_decrypt(index, password.expose())
+                    .map_err(map_zip_error)?
+            } else {
+                archive.by_index(index).map_err(map_zip_error)?
+            };
             let bytes = io::copy(&mut file, &mut io::sink()).map_err(|error| {
                 ArcthisError::VerificationFailed {
                     message: error.to_string(),
@@ -171,6 +188,8 @@ pub(crate) fn map_zip_error(error: ZipError) -> ArcthisError {
         ZipError::InvalidArchive(message) => ArcthisError::InvalidArchive {
             message: message.into_owned(),
         },
+        ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED) => ArcthisError::PasswordRequired,
+        ZipError::InvalidPassword => ArcthisError::WrongPassword,
         ZipError::UnsupportedArchive(message) => ArcthisError::UnsupportedOperation {
             message: message.to_owned(),
         },

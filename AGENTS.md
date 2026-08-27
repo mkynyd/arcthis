@@ -21,6 +21,10 @@
 - `src/archive/` 管理 archive 抽象、格式检测与 backend adapter。上层命令不得重复 ZIP/TAR-specific 分支。
 - `src/cli.rs` 和 `src/output.rs` 只负责 CLI 语法、输出和进程退出语义。
 - `src/security.rs` 是 entry path 和 extraction 安全规则的单一真相源。
+- `src/lifecycle.rs` 统一管理 collision policy、staged commit、rollback 与 post-commit source deletion；pack/extract/batch 不得各自发明生命周期语义。
+- `src/batch.rs` 只编排独立 archive，必须复用单 archive 的 planning/extraction 路径，并保持有界 worker 与确定性结果顺序。
+- `src/query.rs` 管理 find/grep/hash 的格式无关 streaming 语义；内容扫描必须具备 entry、line、match 与 binary 限制。
+- Nested archive 必须通过显式 `--within` 与受限 reader/source abstraction 实现，不得使用歧义 path grammar，也不得静默创建具名临时 inner archive。
 - `tests/` 使用动态 fixture 和 CLI 集成测试验证公开行为。
 - `docs/` 保存产品、架构、CLI 契约与安全设计；未实现能力必须标记为 planned。
 - 根目录 `HANDOFF.md` 保存最近一次任务的可交接状态，供下一位 Agent 继续工作；该文件是本地协作产物，不进入 Git。

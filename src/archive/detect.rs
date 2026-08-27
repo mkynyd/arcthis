@@ -1,19 +1,21 @@
-use std::fs::File;
 use std::io::{self, Read};
 
-use flate2::read::GzDecoder;
-
-use super::ArchiveLocator;
+use super::backend::ArchiveSource;
+use super::codec::{StreamCompression, decoder};
 use crate::error::{ArcthisError, Result};
 use crate::model::ArchiveFormat;
 
 const ZIP_LOCAL_FILE: &[u8; 4] = b"PK\x03\x04";
 const ZIP_EMPTY: &[u8; 4] = b"PK\x05\x06";
 const ZIP_SPANNED: &[u8; 4] = b"PK\x07\x08";
+const SEVEN_Z: &[u8; 6] = b"7z\xBC\xAF\x27\x1C";
+const RAR4: &[u8; 7] = b"Rar!\x1A\x07\x00";
+const RAR5: &[u8; 8] = b"Rar!\x1A\x07\x01\x00";
+const XZ: &[u8; 6] = b"\xFD7zXZ\0";
+const ZSTD: &[u8; 4] = b"\x28\xB5\x2F\xFD";
 
-pub fn detect(locator: &ArchiveLocator) -> Result<ArchiveFormat> {
-    let mut file =
-        File::open(locator.path()).map_err(|error| ArcthisError::io("opening archive", error))?;
+pub fn detect(source: &ArchiveSource) -> Result<ArchiveFormat> {
+    let mut file = source.reader()?;
     let mut prefix = [0_u8; 512];
     let read = read_prefix(&mut file, &mut prefix)
         .map_err(|error| ArcthisError::io("reading archive signature", error))?;
@@ -26,22 +28,30 @@ pub fn detect(locator: &ArchiveLocator) -> Result<ArchiveFormat> {
         return Ok(ArchiveFormat::Zip);
     }
 
+    if read >= SEVEN_Z.len() && &prefix[..SEVEN_Z.len()] == SEVEN_Z {
+        return Ok(ArchiveFormat::SevenZip);
+    }
+
+    if (read >= RAR4.len() && &prefix[..RAR4.len()] == RAR4)
+        || (read >= RAR5.len() && &prefix[..RAR5.len()] == RAR5)
+    {
+        return Ok(ArchiveFormat::Rar);
+    }
+
     if read >= 2 && prefix[..2] == [0x1f, 0x8b] {
-        let file = File::open(locator.path())
-            .map_err(|error| ArcthisError::io("reopening gzip archive", error))?;
-        let mut decoder = GzDecoder::new(file);
-        let mut header = [0_u8; 512];
-        let decompressed = read_prefix(&mut decoder, &mut header).map_err(|error| {
-            ArcthisError::InvalidArchive {
-                message: format!("invalid gzip stream: {error}"),
-            }
-        })?;
-        if decompressed == 512 && is_tar_header(&header) {
-            return Ok(ArchiveFormat::TarGzip);
-        }
-        return Err(ArcthisError::UnsupportedFormat {
-            path: locator.path().to_path_buf(),
-        });
+        return detect_compressed(source, StreamCompression::Gzip);
+    }
+
+    if read >= 3 && &prefix[..3] == b"BZh" {
+        return detect_compressed(source, StreamCompression::Bzip2);
+    }
+
+    if read >= XZ.len() && &prefix[..XZ.len()] == XZ {
+        return detect_compressed(source, StreamCompression::Xz);
+    }
+
+    if read >= ZSTD.len() && &prefix[..ZSTD.len()] == ZSTD {
+        return detect_compressed(source, StreamCompression::Zstd);
     }
 
     if read == 512 && is_tar_header(&prefix) {
@@ -49,7 +59,30 @@ pub fn detect(locator: &ArchiveLocator) -> Result<ArchiveFormat> {
     }
 
     Err(ArcthisError::UnsupportedFormat {
-        path: locator.path().to_path_buf(),
+        path: source.name().to_path_buf(),
+    })
+}
+
+fn detect_compressed(
+    source: &ArchiveSource,
+    compression: StreamCompression,
+) -> Result<ArchiveFormat> {
+    let mut reader = decoder(source.reader()?, compression)?;
+    let mut header = [0_u8; 512];
+    let decompressed =
+        read_prefix(&mut reader, &mut header).map_err(|error| ArcthisError::InvalidArchive {
+            message: format!("invalid compressed stream: {error}"),
+        })?;
+    let is_tar = decompressed == header.len() && is_tar_header(&header);
+    Ok(match (compression, is_tar) {
+        (StreamCompression::Gzip, true) => ArchiveFormat::TarGzip,
+        (StreamCompression::Bzip2, true) => ArchiveFormat::TarBzip2,
+        (StreamCompression::Xz, true) => ArchiveFormat::TarXz,
+        (StreamCompression::Zstd, true) => ArchiveFormat::TarZstd,
+        (StreamCompression::Gzip, false) => ArchiveFormat::Gzip,
+        (StreamCompression::Bzip2, false) => ArchiveFormat::Bzip2,
+        (StreamCompression::Xz, false) => ArchiveFormat::Xz,
+        (StreamCompression::Zstd, false) => ArchiveFormat::Zstd,
     })
 }
 

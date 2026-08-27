@@ -6,7 +6,7 @@ Archive bytes, entry names, metadata, checksums, link targets, declared sizes, a
 
 ## Path safety
 
-Before extraction, every entry path is normalized as an archive path and checked component by component. v0.1 rejects:
+Before extraction, every entry path is normalized as an archive path and checked component by component. The current implementation rejects:
 
 - empty file paths;
 - NUL bytes;
@@ -22,7 +22,7 @@ The sanitized relative path is joined to a private staging root. Code must never
 
 ## Links and special files
 
-v0.1 rejects symlinks, hardlinks, block/character devices, FIFOs, sockets, and unknown entry kinds during extraction. This prevents a link created by one entry from redirecting a later write outside the root. Future link restoration requires an explicit option, target validation, order-independent planning, and regression tests.
+The current implementation rejects symlinks, hardlinks, block/character devices, FIFOs, sockets, and unknown entry kinds during extraction. This prevents a link created by one entry from redirecting a later write outside the root. Future link restoration requires an explicit option, target validation, order-independent planning, and regression tests.
 
 ## Resource limits
 
@@ -32,18 +32,24 @@ Extraction uses enforced limits with conservative defaults:
 - maximum total declared and actual output bytes (16 GiB by default);
 - maximum single-entry declared and actual bytes (4 GiB by default);
 - maximum relative path length and component count.
+- optional declared compression ratio per entry;
+- optional wall-clock duration per streamed entry.
 
 Declared metadata is checked during planning. Actual bytes are counted while streaming because metadata can be missing or false. A limit violation aborts staging and leaves no committed destination.
 
-v0.1 does not recurse into nested archives, which bounds nested bomb depth at zero.
+`extract-all --recursive` recurses through filesystem directories, not into archive contents.
+
+Nested query traversal is separately bounded to depth 8 and 256 MiB decoded bytes per inner archive by default. `--max-nested-entry-size` can lower or raise the per-level bound. Allocation uses fallible reservation and actual streamed bytes are checked. Nested extraction and source deletion are not supported.
+
+`grep` defaults to 16 MiB per entry, 10,000 matching lines, an 8 KiB binary probe, and at most 1 MiB retained per line. These are content-discovery bounds, not extraction guarantees; extraction enforces its independent limits.
 
 ## Staging and commit
 
 Full extraction creates a temporary sibling directory on the destination filesystem. Content is written only inside it. After every entry succeeds and streams are closed, the staging directory is renamed to the absent final destination. Failure removes staging on best effort and preserves the source archive.
 
-Single-entry extraction and packing use temporary sibling files and no-clobber commits only after streaming/finalization succeeds. Packing additionally syncs, reopens, and verifies the temporary archive before commit.
+Single-entry extraction and packing use temporary sibling files and commit only after streaming/finalization succeeds. Packing additionally syncs, reopens, and verifies the temporary archive before commit.
 
-v0.1 refuses all destination collisions and does not implement overwrite. This avoids partial replacement and rollback ambiguity.
+Destination collisions are refused by default. `--skip-existing` performs no write and never deletes the source. `--rename` selects the first available numbered sibling. `--overwrite` first moves the old destination to a unique sibling backup, commits the staged replacement, restores the backup if commit fails, and removes the backup after success. Concurrent external filesystem mutation remains a race boundary.
 
 ## Intelligent destination safety
 
@@ -51,15 +57,17 @@ Automatic destination selection occurs only after complete metadata enumeration 
 
 ## Verification
 
-ZIP verification streams every file entry so decoder CRC validation runs. TAR and TAR.GZ verification parses every header and streams every file payload; Gzip checks are validated by reading the stream to completion. Verification does not claim cryptographic authenticity.
+ZIP, 7z, and RAR verification stream every readable entry so backend integrity checks run. TAR-family verification parses every header and streams every payload. Gzip, Bzip2, XZ, and Zstandard single streams are read to completion. Verification does not claim cryptographic authenticity.
 
 ## Encryption and passwords
 
-Encrypted archives are outside v0.1. The project must not accept passwords via ordinary command-line arguments in a future release because process listings and shell history can expose them. A future password interface should prefer prompt, file descriptor, or secret-provider input and must distinguish `password_required` from `wrong_password`.
+Encrypted ZIP, 7z, and RAR archives are read through `--password-file`, which reads secret bytes from a file and strips trailing CR/LF. Passwords are never accepted as ordinary command-line arguments, keeping secrets out of process listings and shell history. Missing credentials map to `password_required`; incorrect credentials map to `wrong_password`. Passwords are redacted from library `Debug` output.
+
+Encrypted archive **creation** is not implemented: `pack` rejects `--password-file` rather than silently ignoring it. RAR decryption support depends on libarchive and the RAR variant; unsupported encryption returns an explicit backend error instead of producing unreadable output.
 
 ## Delete-source lifecycle
 
-`--delete-source` is planned, not implemented. Its required sequence is:
+`--delete-source` implements this sequence:
 
 ```text
 perform -> close/finalize -> verify -> commit destination -> delete source
@@ -67,12 +75,18 @@ perform -> close/finalize -> verify -> commit destination -> delete source
 
 Any error, interruption, partial failure, verification failure, or commit failure must preserve the source. Deletion must target only the resolved source from the execution plan.
 
-## Known limits of v0.1
+Dry-run computes and serializes the destination, collision action, estimated sizes, warnings, and deletion intent but performs no writes, renames, or deletions. A skipped operation never deletes its source.
 
-- No defense against CPU exhaustion beyond byte/entry limits and backend behavior.
+## Known limits of v0.4
+
+- Duration enforcement is checked during output writes; a codec that blocks inside one decoder call cannot be preempted safely.
 - No sandbox around codec crates.
-- Metadata enumeration of a streaming TAR.GZ requires sequential decompression.
-- v0.1 rejects non-UTF-8 entry names instead of preserving raw filesystem bytes, and does not perform full Unicode normalization collision analysis.
+- Metadata enumeration of compressed TAR and single-stream formats requires sequential decompression.
+- Nested traversal currently buffers one selected inner archive in memory so its backend can reopen it; it does not yet provide range-backed nested seeking.
+- Literal `grep` still decodes complete selected entries even after binary classification or match truncation when a backend integrity stream must be consumed.
+- The current implementation rejects non-UTF-8 entry names instead of preserving raw filesystem bytes, and does not perform full Unicode normalization collision analysis.
+- Multipart `--volume` sources cannot participate in `--delete-source`; deleting several volume files atomically is not yet specified.
+- RAR metadata (solid, encryption, compressed-size) is limited by the libarchive adapter, so `inspect` may under-report; read/extract/verify remain authoritative. Format-native RAR multi-volume sets are not supported.
 - Filesystem races by other processes cannot be eliminated completely; staging and collision refusal reduce exposure.
 - Verification checks structural/codec integrity, not provenance or malicious content.
 

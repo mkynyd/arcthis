@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::error::{ArcthisError, Result};
 use crate::model::EntryKind;
@@ -10,6 +11,8 @@ pub struct ExtractionLimits {
     pub max_entry_size: u64,
     pub max_path_bytes: usize,
     pub max_components: usize,
+    pub max_compression_ratio: Option<u64>,
+    pub max_entry_duration: Option<Duration>,
 }
 
 impl Default for ExtractionLimits {
@@ -20,6 +23,8 @@ impl Default for ExtractionLimits {
             max_entry_size: 4 * 1024 * 1024 * 1024,
             max_path_bytes: 4_096,
             max_components: 256,
+            max_compression_ratio: None,
+            max_entry_duration: None,
         }
     }
 }

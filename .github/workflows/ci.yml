@@ -18,6 +18,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Install native archive dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libarchive-dev libb2-dev libbz2-dev liblz4-dev liblzma-dev
+          libxml2-dev libzstd-dev zlib1g-dev
+      - name: Install native archive dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libarchive libb2 bzip2 lz4 xz zstd
       - name: Install Rust toolchain
         run: rustup show
       - name: Check formatting

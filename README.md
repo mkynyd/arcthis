@@ -2,7 +2,7 @@
 
 **An agent-native CLI for accessing and manipulating compressed files.**
 
-`arcthis` is a unified archive access layer that lets humans and AI agents inspect, enumerate, stream, extract, pack, and verify compressed-file contents without materializing the entire archive by default.
+`arcthis` is a unified archive access layer that lets humans and AI agents inspect, enumerate, find, search, hash, stream, extract, pack, and verify compressed-file contents without materializing the entire archive by default.
 
 [简体中文](./README.zh-CN.md)
 
@@ -14,6 +14,7 @@ An agent should not need to fully extract a multi-gigabyte dataset just to disco
 arcthis inspect dataset.tar.gz --json
 arcthis tree dataset.tar.gz --json
 arcthis stat dataset.tar.gz train/data.csv --json
+arcthis find dataset.tar.gz --glob '**/*.csv' --json
 arcthis read dataset.tar.gz train/data.csv | head
 ```
 
@@ -28,14 +29,21 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 ## Project status
 
-The repository contains the implemented and tested v0.1 foundation. It is not yet published as a crates.io package or a prebuilt binary release.
+The repository contains the implemented and tested v0.4 foundation. It is not yet published as a crates.io package or a prebuilt binary release.
 
 Current commands:
 
 - `list`, `tree`, `stat`, `inspect`, and streaming `read`
+- glob-based `find`, bounded streaming literal `grep`, and SHA-256/SHA-512 `hash`
+- explicit, bounded nested archive traversal with repeatable `--within`
+- password-file access for encrypted ZIP and 7z archives
+- explicit ordered byte-stream volumes with repeatable `--volume`
+- persistent entry metadata indexes with an explicit cache lifecycle
 - safe complete or single-entry `extract`
-- transactional `pack`
+- bounded `extract-all` with recursive discovery
+- transactional `pack`, `--dry-run`, collision policies, and `--delete-source`
 - full-stream `verify`
+- verified staged archive `convert`
 - schema-versioned JSON for every structured command
 
 Planned commands and formats are kept in [ROADMAP.md](./ROADMAP.md) and are not presented as currently available.
@@ -44,17 +52,28 @@ Planned commands and formats are kept in [ROADMAP.md](./ROADMAP.md) and are not 
 
 | Format | Detect | Access / extract | Create | Access model |
 | --- | --- | --- | --- | --- |
-| ZIP | Magic bytes | Stored and Deflate entries | Deflate | Random entry access |
+| ZIP | Magic bytes | Stored/Deflate, including ZipCrypto/AES decryption | Deflate, unencrypted | Random entry access |
+| 7z | Magic bytes | Yes, including AES decryption | LZMA2, unencrypted | Block/solid dependent |
+| RAR / RAR5 | Magic bytes | Read/extract through libarchive | No | Sequential; proprietary-format limitations |
 | TAR | Validated TAR header | Yes | Yes | Sequential |
 | TAR.GZ / TGZ | Gzip magic plus TAR validation | Yes | Yes | Sequential decompression |
+| TAR.BZ2 / TBZ2 | Bzip2 magic plus TAR validation | Yes | Yes | Sequential decompression |
+| TAR.XZ / TXZ | XZ magic plus TAR validation | Yes | Yes | Sequential decompression |
+| TAR.ZST / TZST | Zstandard magic plus TAR validation | Yes | Yes | Sequential decompression |
+| GZIP | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
+| BZIP2 | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
+| XZ | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
+| Zstandard | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
 
 Detection is content-first for input archives; misleading input extensions do not override valid signatures. `pack` uses the requested output suffix to choose the new archive format.
 
-The current ZIP build intentionally enables Stored/Deflate support only. Metadata listing can still identify a ZIP that contains another compression method, but content access or verification returns `unsupported_operation` when the codec is unavailable.
+The current ZIP build enables Stored/Deflate and AES decryption. Metadata listing can still identify a ZIP using another compression method, but content access or verification returns `unsupported_operation` when the codec is unavailable. RAR is intentionally read-only; see [docs/RAR.md](./docs/RAR.md) for backend, licensing, encryption, and native multipart limits.
 
 ## Install from source
 
 Rust 1.98.0 is pinned by `rust-toolchain.toml`.
+
+RAR support links libarchive statically into release builds. Source builds need libarchive and its development dependencies. On macOS, install `libarchive libb2 bzip2 lz4 xz zstd` with Homebrew. On Debian/Ubuntu, install `libarchive-dev libb2-dev libbz2-dev liblz4-dev liblzma-dev libxml2-dev libzstd-dev zlib1g-dev`.
 
 ```sh
 cargo build --release --locked
@@ -78,28 +97,51 @@ arcthis tree archive.zip --json
 # Stream one entry
 arcthis read archive.zip README.md
 
+# Discover and search content before extraction
+arcthis find source.tar.zst --glob '**/*.rs' --json
+arcthis grep source.tar.zst TODO --glob '**/*.rs' --json
+arcthis hash archive.zip model.bin --algorithm sha256
+
+# Traverse an inner archive without creating a temporary inner file
+arcthis tree backup.zip --within project.tar.gz --json
+
+# Read an encrypted archive without exposing the secret in process arguments
+arcthis read secret.7z data.txt --password-file ./password.txt
+
+# Access an explicitly ordered byte-split archive
+arcthis inspect dataset.7z.001 --volume dataset.7z.002 --volume dataset.7z.003 --json
+
+# Create or refresh a persistent metadata index
+arcthis index dataset.7z --json
+
 # Extract one regular file through a temporary sibling file and commit
 arcthis extract archive.zip README.md --output ./README.md
 
 # Safely extract all entries
 arcthis extract archive.tar.gz
 
+# Inspect a destructive batch plan before execution
+arcthis extract-all ./downloads --recursive --delete-source --dry-run --json
+
 # Create, reopen, verify, and commit a new archive
 arcthis pack ./project --output project.tar.gz
 
 # Verify every readable entry
 arcthis verify project.tar.gz --json
+
+# Convert through safety-checked staging, then verify before commit
+arcthis convert project.zip --output project.tar.zst --dry-run --json
 ```
 
 See [START.md](./START.md) for destination rules, resource limits, JSON schemas, exit codes, and complete command guidance.
 
 ## Safety model
 
-Extraction performs a complete metadata preflight, validates paths, rejects links and special files, enforces declared and actual byte limits, writes into a sibling staging location, and commits only after all entries succeed. Existing destinations are refused; v0.1 has no overwrite mode.
+Extraction performs a complete metadata preflight, validates paths, rejects links and special files, enforces declared and actual byte/time/ratio limits, writes into a sibling staging location, and commits only after all entries succeed. Existing destinations are refused by default; `--overwrite`, `--skip-existing`, and `--rename` are mutually exclusive explicit policies.
 
-Packing writes a temporary sibling archive, finalizes it, reopens it through the normal archive interface, verifies every entry, and only then commits the requested output. The source is never deleted.
+Packing writes a temporary sibling archive, finalizes it, reopens it through the normal archive interface, verifies every entry, and only then commits the requested output. `--delete-source` runs only after that commit; dry-runs never write or delete.
 
-Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limits. `--dry-run`, `--delete-source`, overwrite policies, nested archives, and encrypted archives are planned rather than partially implemented.
+Nested access decodes the selected inner entry into a resource-bounded immutable memory source; it does not create a named temporary inner archive. Conversion deliberately materializes validated entries inside a system temporary staging directory before verified packing. Persistent metadata indexes are treated as untrusted cache input and invalidated by source size and modification time. Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limits.
 
 ## Agent interface
 
@@ -109,13 +151,14 @@ Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limit
 - `read` always emits raw bytes and rejects `--json`.
 - BrokenPipe is treated as a successful consumer stop.
 - Entry metadata explicitly reports `path_encoding` for non-UTF-8 names.
+- Entry metadata includes stable archive order and lightweight extension-based MIME guesses.
 - Non-TTY and JSON output contain no ANSI decoration.
 
 The public schema and error model are documented in [docs/CLI.md](./docs/CLI.md).
 
 ## Platform support
 
-v0.1 is developed and tested on macOS and Linux through local tests and a two-platform GitHub Actions workflow. The architecture avoids Unix-only public interfaces, but Windows is not yet a supported CI target.
+v0.4 is developed and tested on macOS and Linux through local tests and a two-platform GitHub Actions workflow. The architecture avoids Unix-only public interfaces, but Windows is not yet a supported CI target.
 
 ## Development
 
@@ -143,3 +186,4 @@ The staged format and feature plan is in [ROADMAP.md](./ROADMAP.md). Contributio
 ## License
 
 `arcthis` is available under the [MIT License](./LICENSE).
+Native and Rust dependency notices relevant to distribution are summarized in [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md).

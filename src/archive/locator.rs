@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-/// Explicit source of archive bytes. v0.1 supports local files.
+/// Explicit filesystem source of archive bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveLocator {
     path: PathBuf,

@@ -16,30 +16,30 @@ The roadmap is capability-driven. Dates are intentionally omitted; a milestone s
 
 ## v0.2 — Formats and safe batch lifecycle
 
-- 7z, XZ, Zstandard, TAR.XZ, and TAR.ZST backend evaluation/implementation.
-- `extract-all` with bounded archive-level workers and optional recursive discovery.
-- Machine-readable `--dry-run` execution plans.
-- Transactional `--delete-source` shared by pack and extract.
-- Mutually exclusive `--overwrite`, `--skip-existing`, and `--rename` policies.
-- Richer archive-bomb risk heuristics and optional CPU/time policy.
+- [x] 7z, Bzip2, XZ, Zstandard, TAR.BZ2, TAR.XZ, and TAR.ZST backends, including single-stream payloads.
+- [x] `extract-all` with bounded archive-level workers and optional recursive discovery.
+- [x] Machine-readable `--dry-run` execution plans.
+- [x] Transactional `--delete-source` shared by pack and extract.
+- [x] Mutually exclusive `--overwrite`, `--skip-existing`, and `--rename` policies.
+- [x] Compression-ratio warnings plus optional ratio and per-entry duration enforcement.
 
 ## v0.3 — Agent content discovery
 
-- `find`, streaming `grep`, and streaming `hash`.
-- Binary detection and per-entry scan limits.
-- Partial-extraction performance improvements and richer metadata.
-- Nested archive locator RFC and initial traversal support.
-- Optional non-persistent indexes/seek points where measurements justify them.
+- [x] `find`, streaming literal `grep`, and streaming SHA-256/SHA-512 `hash`.
+- [x] Binary detection plus per-entry size, line-size, and match-count scan limits.
+- [x] Reusable in-process entry metadata index plus archive index and lightweight MIME metadata.
+- [x] Nested archive locator RFC and bounded in-memory `--within` traversal support.
+- [x] Non-persistent metadata indexing; persistent seek-point indexes remain a later measured optimization.
 
 ## v0.4 — Compatibility expansion
 
-- RAR read/extract evaluation with explicit licensing and redistribution analysis.
-- Encrypted archive/password interface.
-- Multipart archives.
-- Persistent indexes and cache lifecycle.
-- `convert` with verification and shared `--delete-source` semantics.
+- [x] RAR read/extract evaluation with explicit licensing and redistribution analysis.
+- [x] Encrypted archive/password interface.
+- [x] Multipart archives.
+- [x] Persistent indexes and cache lifecycle.
+- [x] `convert` with verification and shared `--delete-source` semantics.
 
-RAR creation is not assumed. Capabilities must distinguish read, extract, create, and verify support.
+RAR creation is not assumed. Capabilities distinguish read, extract, create, and verify support; format-native RAR multi-volume traversal and RAR creation remain non-goals documented in `docs/RAR.md`.
 
 ## v0.5+ — Integrations
 

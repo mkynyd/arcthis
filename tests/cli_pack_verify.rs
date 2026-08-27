@@ -37,14 +37,22 @@ fn create_corrupted_zip(path: &Path) {
 }
 
 #[test]
-fn pack_finalize_verify_and_reopen_all_v01_formats() {
+fn pack_finalize_verify_and_reopen_all_container_formats() {
     let workspace = TempDir::new().expect("create test directory");
     let source = workspace.path().join("project");
     create_source(&source);
 
-    for (index, output_name) in ["backup.zip", "backup.tar", "backup.tar.gz"]
-        .into_iter()
-        .enumerate()
+    for (index, output_name) in [
+        "backup.zip",
+        "backup.7z",
+        "backup.tar",
+        "backup.tar.gz",
+        "backup.tar.bz2",
+        "backup.tar.xz",
+        "backup.tar.zst",
+    ]
+    .into_iter()
+    .enumerate()
     {
         let output = cargo_bin_cmd!("arcthis")
             .current_dir(workspace.path())
@@ -111,6 +119,46 @@ fn pack_finalize_verify_and_reopen_all_v01_formats() {
                 .join("project/empty")
                 .is_dir()
         );
+    }
+}
+
+#[test]
+fn pack_finalize_verify_and_read_all_single_stream_formats() {
+    let workspace = TempDir::new().expect("create test directory");
+    std::fs::write(workspace.path().join("payload.txt"), b"single stream\n")
+        .expect("write stream source");
+
+    for output_name in [
+        "payload.txt.gz",
+        "payload.txt.bz2",
+        "payload.txt.xz",
+        "payload.txt.zst",
+    ] {
+        let pack = cargo_bin_cmd!("arcthis")
+            .current_dir(workspace.path())
+            .args(["pack", "payload.txt", "--output", output_name, "--json"])
+            .output()
+            .expect("run pack");
+        assert!(
+            pack.status.success(),
+            "{output_name} stderr: {}",
+            String::from_utf8_lossy(&pack.stderr)
+        );
+
+        let read = cargo_bin_cmd!("arcthis")
+            .current_dir(workspace.path())
+            .args(["read", output_name, "payload.txt"])
+            .output()
+            .expect("run read");
+        assert!(read.status.success());
+        assert_eq!(read.stdout, b"single stream\n");
+
+        let verify = cargo_bin_cmd!("arcthis")
+            .current_dir(workspace.path())
+            .args(["verify", output_name, "--json"])
+            .output()
+            .expect("run verify");
+        assert!(verify.status.success());
     }
 }
 

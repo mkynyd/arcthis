@@ -2,21 +2,30 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use serde::Serialize;
 use tempfile::{Builder, NamedTempFile};
 
 use crate::archive::Archive;
 use crate::error::{ArcthisError, Result};
+use crate::lifecycle::{
+    CollisionPolicy, OperationStatus, commit_staged_path, delete_source,
+    ensure_executable_resolution, resolve_destination,
+};
 use crate::model::{ArchiveEntry, ArchiveFormat, EntryKind, EntryPathEncoding};
 use crate::security::{ExtractionLimits, validate_entry_path};
 
 const LIMIT_IO_MESSAGE: &str = "arcthis extraction resource limit exceeded";
+const TIME_LIMIT_IO_MESSAGE: &str = "arcthis extraction time limit exceeded";
 
 #[derive(Debug, Clone, Default)]
 pub struct ExtractOptions {
     pub output: Option<PathBuf>,
+    pub base_directory: Option<PathBuf>,
     pub limits: ExtractionLimits,
+    pub collision_policy: CollisionPolicy,
+    pub delete_source: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -24,6 +33,25 @@ pub struct ExtractResult {
     pub destination: PathBuf,
     pub entries_extracted: u64,
     pub bytes_written: u64,
+    pub status: OperationStatus,
+    pub source_deleted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[allow(clippy::struct_excessive_bools)] // Independent plan facts are a stable machine contract.
+pub struct ExtractPlan {
+    pub source: PathBuf,
+    pub destination: PathBuf,
+    pub selected_entry: Option<String>,
+    pub entries_to_extract: u64,
+    pub estimated_uncompressed_size: u64,
+    pub collision: bool,
+    pub collision_policy: CollisionPolicy,
+    pub will_skip: bool,
+    pub will_overwrite: bool,
+    pub renamed_destination: bool,
+    pub will_delete_source_after_success: bool,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,12 +80,81 @@ pub(crate) fn extract_archive(
     extract_all(archive, options)
 }
 
+pub(crate) fn plan_extract_archive(
+    archive: &Archive,
+    selected_entry: Option<&str>,
+    options: &ExtractOptions,
+) -> Result<ExtractPlan> {
+    let (requested, entries_to_extract, estimated_uncompressed_size) =
+        if let Some(selected_entry) = selected_entry {
+            let destination =
+                options
+                    .output
+                    .clone()
+                    .ok_or_else(|| ArcthisError::UnsupportedOperation {
+                        message: "single-entry extraction requires `--output <file>`".to_owned(),
+                    })?;
+            let entry = archive.entry(selected_entry)?;
+            if entry.kind != EntryKind::File {
+                return Err(ArcthisError::UnsupportedOperation {
+                    message: "single-entry extraction supports regular files only".to_owned(),
+                });
+            }
+            enforce_declared_size(&entry, &options.limits)?;
+            (destination, 1, entry.size)
+        } else {
+            let entries = archive.entries()?;
+            enforce_entry_count(entries.len(), &options.limits)?;
+            let validated = validate_entries(&entries, &options.limits)?;
+            let (destination, _) = choose_destination(
+                archive.path(),
+                archive.format(),
+                options.output.as_deref(),
+                options.base_directory.as_deref(),
+                &validated,
+            )?;
+            let size = entries
+                .iter()
+                .try_fold(0_u64, |total, entry| total.checked_add(entry.size))
+                .ok_or_else(|| ArcthisError::ResourceLimit {
+                    message: "declared extraction size overflows u64".to_owned(),
+                })?;
+            (
+                destination,
+                u64::try_from(entries.len()).unwrap_or(u64::MAX),
+                size,
+            )
+        };
+    let resolution = resolve_destination(&requested, options.collision_policy)?;
+    let warnings = archive
+        .inspect()?
+        .warnings
+        .into_iter()
+        .map(|warning| format!("{}: {}", warning.code, warning.message))
+        .collect();
+    Ok(ExtractPlan {
+        source: archive.path().to_path_buf(),
+        destination: resolution.path,
+        selected_entry: selected_entry.map(str::to_owned),
+        entries_to_extract,
+        estimated_uncompressed_size,
+        collision: resolution.existed,
+        collision_policy: options.collision_policy,
+        will_skip: resolution.skip,
+        will_overwrite: resolution.existed
+            && options.collision_policy == CollisionPolicy::Overwrite,
+        renamed_destination: resolution.renamed,
+        will_delete_source_after_success: options.delete_source && !resolution.skip,
+        warnings,
+    })
+}
+
 fn extract_single(
     archive: &Archive,
     selected_entry: &str,
     options: &ExtractOptions,
 ) -> Result<ExtractResult> {
-    let destination = options
+    let requested = options
         .output
         .clone()
         .ok_or_else(|| ArcthisError::UnsupportedOperation {
@@ -69,8 +166,19 @@ fn extract_single(
             message: "single-entry extraction supports regular files only".to_owned(),
         });
     }
-    enforce_declared_size(entry.size, &options.limits)?;
-    prepare_absent_destination(&destination)?;
+    enforce_declared_size(&entry, &options.limits)?;
+    let resolution = resolve_destination(&requested, options.collision_policy)?;
+    ensure_executable_resolution(&resolution, options.collision_policy)?;
+    if resolution.skip {
+        return Ok(ExtractResult {
+            destination: resolution.path,
+            entries_extracted: 0,
+            bytes_written: 0,
+            status: OperationStatus::Skipped,
+            source_deleted: false,
+        });
+    }
+    let destination = resolution.path;
     let parent = destination.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)
         .map_err(|error| ArcthisError::io("creating output parent directory", error))?;
@@ -81,6 +189,7 @@ fn extract_single(
             temporary.as_file_mut(),
             options.limits.max_entry_size,
             options.limits.max_total_size,
+            options.limits.max_entry_duration,
         );
         archive
             .copy_entry_to(selected_entry, &mut writer)
@@ -94,19 +203,22 @@ fn extract_single(
         .as_file()
         .sync_all()
         .map_err(|error| ArcthisError::io("syncing extracted entry", error))?;
-    temporary.persist_noclobber(&destination).map_err(|error| {
-        if error.error.kind() == std::io::ErrorKind::AlreadyExists {
-            ArcthisError::Collision {
-                message: format!("destination already exists: {}", destination.display()),
-            }
-        } else {
-            ArcthisError::io("committing extracted entry", error.error)
-        }
-    })?;
+    let (_, staged_path) = temporary
+        .keep()
+        .map_err(|error| ArcthisError::io("preserving staged extracted entry", error.error))?;
+    commit_staged_path(&staged_path, &destination, options.collision_policy)?;
+    let source_deleted = if options.delete_source {
+        delete_source(archive.path())?;
+        true
+    } else {
+        false
+    };
     Ok(ExtractResult {
         destination,
         entries_extracted: 1,
         bytes_written,
+        status: OperationStatus::Completed,
+        source_deleted,
     })
 }
 
@@ -115,13 +227,25 @@ fn extract_all(archive: &Archive, options: &ExtractOptions) -> Result<ExtractRes
     enforce_entry_count(entries.len(), &options.limits)?;
     let validated = validate_entries(&entries, &options.limits)?;
 
-    let (destination, strip_root) = choose_destination(
+    let (requested, strip_root) = choose_destination(
         archive.path(),
         archive.format(),
         options.output.as_deref(),
+        options.base_directory.as_deref(),
         &validated,
     )?;
-    prepare_absent_destination(&destination)?;
+    let resolution = resolve_destination(&requested, options.collision_policy)?;
+    ensure_executable_resolution(&resolution, options.collision_policy)?;
+    if resolution.skip {
+        return Ok(ExtractResult {
+            destination: resolution.path,
+            entries_extracted: 0,
+            bytes_written: 0,
+            status: OperationStatus::Skipped,
+            source_deleted: false,
+        });
+    }
+    let destination = resolution.path;
     let parent = destination.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)
         .map_err(|error| ArcthisError::io("creating output parent directory", error))?;
@@ -164,24 +288,26 @@ fn extract_all(archive: &Archive, options: &ExtractOptions) -> Result<ExtractRes
         });
     }
     let staging_path = staging.keep();
-    if let Err(error) = fs::rename(&staging_path, &destination) {
+    if let Err(error) = commit_staged_path(&staging_path, &destination, options.collision_policy) {
         let _cleanup_result = fs::remove_dir_all(&staging_path);
-        return Err(if error.kind() == std::io::ErrorKind::AlreadyExists {
-            ArcthisError::Collision {
-                message: format!("destination already exists: {}", destination.display()),
-            }
-        } else {
-            ArcthisError::io("committing extraction directory", error)
-        });
+        return Err(error);
     }
+    let source_deleted = if options.delete_source {
+        delete_source(archive.path())?;
+        true
+    } else {
+        false
+    };
     Ok(ExtractResult {
         destination,
         entries_extracted: stats.entries_written,
         bytes_written: stats.bytes_written,
+        status: OperationStatus::Completed,
+        source_deleted,
     })
 }
 
-fn validate_entries<'a>(
+pub(crate) fn validate_entries<'a>(
     entries: &'a [ArchiveEntry],
     limits: &ExtractionLimits,
 ) -> Result<Vec<(&'a ArchiveEntry, PathBuf)>> {
@@ -193,17 +319,14 @@ fn validate_entries<'a>(
         if entry.path_encoding != EntryPathEncoding::Utf8 {
             return Err(ArcthisError::UnsafePath {
                 path: entry.path.clone(),
-                reason: "non-UTF-8 entry paths are not materialized in v0.1".to_owned(),
+                reason: "non-UTF-8 entry paths cannot be materialized safely".to_owned(),
             });
         }
         if !matches!(entry.kind, EntryKind::File | EntryKind::Directory) {
             return Err(ArcthisError::UnsafePath {
                 path: entry.path.clone(),
-                reason: "links and special entries are not restored in v0.1".to_owned(),
+                reason: "links and special entries are not restored".to_owned(),
             });
-        }
-        if entry.encrypted {
-            return Err(ArcthisError::PasswordRequired);
         }
         let relative = validate_entry_path(&entry.path, entry.kind, limits)?;
         if seen.insert(relative.clone(), entry.kind).is_some() {
@@ -218,7 +341,7 @@ fn validate_entries<'a>(
             });
         }
         if entry.kind == EntryKind::File {
-            enforce_declared_size(entry.size, limits)?;
+            enforce_declared_size(entry, limits)?;
             total_size =
                 total_size
                     .checked_add(entry.size)
@@ -241,7 +364,7 @@ fn validate_entries<'a>(
     Ok(validated)
 }
 
-fn enforce_entry_count(count: usize, limits: &ExtractionLimits) -> Result<()> {
+pub(crate) fn enforce_entry_count(count: usize, limits: &ExtractionLimits) -> Result<()> {
     let count = u64::try_from(count).unwrap_or(u64::MAX);
     if count > limits.max_entries {
         return Err(ArcthisError::ResourceLimit {
@@ -254,12 +377,24 @@ fn enforce_entry_count(count: usize, limits: &ExtractionLimits) -> Result<()> {
     Ok(())
 }
 
-fn enforce_declared_size(size: u64, limits: &ExtractionLimits) -> Result<()> {
-    if size > limits.max_entry_size {
+fn enforce_declared_size(entry: &ArchiveEntry, limits: &ExtractionLimits) -> Result<()> {
+    if entry.size > limits.max_entry_size {
         return Err(ArcthisError::ResourceLimit {
             message: format!(
-                "entry declares {size} bytes, above the {} byte limit",
-                limits.max_entry_size
+                "entry declares {} bytes, above the {} byte limit",
+                entry.size, limits.max_entry_size
+            ),
+        });
+    }
+    if let (Some(max_ratio), Some(compressed_size)) =
+        (limits.max_compression_ratio, entry.compressed_size)
+        && entry.size > 0
+        && (compressed_size == 0 || entry.size > compressed_size.saturating_mul(max_ratio))
+    {
+        return Err(ArcthisError::ResourceLimit {
+            message: format!(
+                "entry `{}` exceeds the configured {max_ratio}:1 compression ratio limit",
+                entry.path
             ),
         });
     }
@@ -295,13 +430,18 @@ fn choose_destination(
     archive_path: &Path,
     format: ArchiveFormat,
     explicit: Option<&Path>,
+    base_directory: Option<&Path>,
     entries: &[(&crate::ArchiveEntry, PathBuf)],
 ) -> Result<(PathBuf, bool)> {
     if let Some(output) = explicit {
         return Ok((output.to_path_buf(), false));
     }
-    let current = std::env::current_dir()
-        .map_err(|error| ArcthisError::io("reading current directory", error))?;
+    let current = if let Some(base) = base_directory {
+        base.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| ArcthisError::io("reading current directory", error))?
+    };
     if let Some(root) = unique_top_level_directory(entries) {
         return Ok((current.join(root), true));
     }
@@ -341,8 +481,17 @@ fn archive_stem(path: &Path, format: ArchiveFormat) -> Result<String> {
     let lower = name.to_ascii_lowercase();
     let suffixes: &[&str] = match format {
         ArchiveFormat::Zip => &[".zip"],
+        ArchiveFormat::SevenZip => &[".7z"],
+        ArchiveFormat::Rar => &[".rar"],
         ArchiveFormat::Tar => &[".tar"],
         ArchiveFormat::TarGzip => &[".tar.gz", ".tgz"],
+        ArchiveFormat::TarBzip2 => &[".tar.bz2", ".tbz2"],
+        ArchiveFormat::TarXz => &[".tar.xz", ".txz"],
+        ArchiveFormat::TarZstd => &[".tar.zst", ".tzst"],
+        ArchiveFormat::Gzip => &[".gz"],
+        ArchiveFormat::Bzip2 => &[".bz2"],
+        ArchiveFormat::Xz => &[".xz"],
+        ArchiveFormat::Zstd => &[".zst"],
     };
     for suffix in suffixes {
         if lower.ends_with(suffix) && name.len() > suffix.len() {
@@ -356,18 +505,6 @@ fn archive_stem(path: &Path, format: ArchiveFormat) -> Result<String> {
         .ok_or_else(|| ArcthisError::UnsupportedOperation {
             message: "cannot derive an automatic extraction destination".to_owned(),
         })
-}
-
-fn prepare_absent_destination(destination: &Path) -> Result<()> {
-    if destination
-        .try_exists()
-        .map_err(|error| ArcthisError::io("checking extraction destination", error))?
-    {
-        return Err(ArcthisError::Collision {
-            message: format!("destination already exists: {}", destination.display()),
-        });
-    }
-    Ok(())
 }
 
 pub(crate) struct ExtractionWriter<'a> {
@@ -396,6 +533,16 @@ impl<'a> ExtractionWriter<'a> {
     }
 
     pub(crate) fn write_file(&mut self, entry: &PlannedEntry, reader: &mut dyn Read) -> Result<()> {
+        self.write_file_with(entry, |writer| {
+            std::io::copy(reader, writer).map_err(map_extraction_io_error)
+        })
+    }
+
+    pub(crate) fn write_file_with(
+        &mut self,
+        entry: &PlannedEntry,
+        write_content: impl FnOnce(&mut dyn Write) -> Result<u64>,
+    ) -> Result<()> {
         self.claim_path(&entry.relative_path)?;
         let destination = self.root.join(&entry.relative_path);
         if let Some(parent) = destination.parent() {
@@ -412,9 +559,13 @@ impl<'a> ExtractionWriter<'a> {
             .max_total_size
             .saturating_sub(self.stats.bytes_written);
         let written = {
-            let mut writer =
-                LimitedWriter::new(&mut file, self.limits.max_entry_size, remaining_total);
-            std::io::copy(reader, &mut writer).map_err(map_extraction_io_error)?;
+            let mut writer = LimitedWriter::new(
+                &mut file,
+                self.limits.max_entry_size,
+                remaining_total,
+                self.limits.max_entry_duration,
+            );
+            write_content(&mut writer)?;
             writer
                 .flush()
                 .map_err(|error| ArcthisError::io("flushing extracted file", error))?;
@@ -455,21 +606,36 @@ struct LimitedWriter<W> {
     max_entry: u64,
     max_total: u64,
     bytes_written: u64,
+    started: Instant,
+    max_duration: Option<std::time::Duration>,
 }
 
 impl<W> LimitedWriter<W> {
-    const fn new(inner: W, max_entry: u64, max_total: u64) -> Self {
+    fn new(
+        inner: W,
+        max_entry: u64,
+        max_total: u64,
+        max_duration: Option<std::time::Duration>,
+    ) -> Self {
         Self {
             inner,
             max_entry,
             max_total,
             bytes_written: 0,
+            started: Instant::now(),
+            max_duration,
         }
     }
 }
 
 impl<W: Write> Write for LimitedWriter<W> {
     fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if self
+            .max_duration
+            .is_some_and(|duration| self.started.elapsed() > duration)
+        {
+            return Err(std::io::Error::other(TIME_LIMIT_IO_MESSAGE));
+        }
         let requested = u64::try_from(buffer.len()).unwrap_or(u64::MAX);
         if self.bytes_written.saturating_add(requested) > self.max_entry
             || self.bytes_written.saturating_add(requested) > self.max_total
@@ -487,9 +653,12 @@ impl<W: Write> Write for LimitedWriter<W> {
 }
 
 fn map_extraction_io_error(error: io::Error) -> ArcthisError {
-    if error.to_string() == LIMIT_IO_MESSAGE {
+    if matches!(
+        error.to_string().as_str(),
+        LIMIT_IO_MESSAGE | TIME_LIMIT_IO_MESSAGE
+    ) {
         ArcthisError::ResourceLimit {
-            message: "actual extracted bytes exceeded the configured limit".to_owned(),
+            message: error.to_string(),
         }
     } else {
         ArcthisError::io("streaming extracted file", error)
@@ -500,11 +669,11 @@ fn map_archive_stream_error(error: ArcthisError) -> ArcthisError {
     let limit_reached = matches!(
         &error,
         ArcthisError::Io { source, .. } | ArcthisError::PermissionDenied { source, .. }
-            if source.to_string() == LIMIT_IO_MESSAGE
+            if matches!(source.to_string().as_str(), LIMIT_IO_MESSAGE | TIME_LIMIT_IO_MESSAGE)
     );
     if limit_reached {
         ArcthisError::ResourceLimit {
-            message: "actual extracted bytes exceeded the configured limit".to_owned(),
+            message: "actual extraction exceeded the configured resource limit".to_owned(),
         }
     } else {
         error

@@ -2,11 +2,13 @@
 
 [简体中文](./START.zh-CN.md)
 
-This guide describes the CLI that is implemented in v0.1. For product goals and planned commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
+This guide describes the CLI implemented through v0.4. For product goals and later commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
 
 ## Build and install
 
 The repository pins Rust 1.98.0.
+
+RAR support uses statically linked libarchive. Install native build dependencies first: Homebrew `libarchive libb2 bzip2 lz4 xz zstd` on macOS, or `libarchive-dev libb2-dev libbz2-dev liblz4-dev liblzma-dev libxml2-dev libzstd-dev zlib1g-dev` on Debian/Ubuntu.
 
 ```sh
 cargo build --release --locked
@@ -36,7 +38,7 @@ arcthis stat dataset.tar.gz train/data.csv --json
 arcthis read dataset.tar.gz train/data.csv | head -n 20
 ```
 
-Input formats are detected from content. ZIP supports Stored and Deflate content access in the current build. TAR and TAR.GZ are sequential formats, so reading one late entry may scan earlier archive data. `inspect` reports this as `random_access: false` and emits a `sequential_access` warning.
+Input formats are detected from content. The current build supports ZIP, 7z, RAR/RAR5, TAR, compressed TAR variants using Gzip/Bzip2/XZ/Zstandard, and the same four codecs as one-payload streams. Compressed TAR, single streams, RAR, and solid 7z may scan or decode preceding data; `inspect` reports the implemented access cost.
 
 ## Command shape and global options
 
@@ -47,7 +49,12 @@ arcthis <command> <archive> [entry] [options]
 Global options can appear with a subcommand:
 
 - `--json` emits a schema-versioned machine result where supported.
-- `--no-color` disables terminal color decoration. v0.1 output does not currently require color.
+- `--no-color` disables terminal color decoration. Output does not require color.
+- repeatable `--within <entry>` traverses explicit nested archives for access/query commands.
+- `--max-nested-entry-size <bytes>` bounds each decoded inner archive (256 MiB by default).
+- `--password-file <path>` reads a password without exposing it as a process argument; trailing CR/LF is removed.
+- repeatable `--volume <path>` appends explicitly ordered byte-stream volumes after the primary archive path.
+- `--index-directory <path>` overrides the platform cache root used by persistent metadata indexes.
 - `-h`, `--help` shows command help.
 - `-V`, `--version` shows the version.
 
@@ -65,11 +72,15 @@ arcthis inspect archive.tar.gz --json
 Important warning codes include:
 
 - `sequential_access` — selected reads may scan from the beginning.
-- `encrypted_entries_unsupported` — encrypted content is present but unsupported.
+- `encrypted_entries` — encrypted content is present and content operations need the correct password.
 - `non_regular_entries` — links or special entries will be rejected by extraction.
 - `duplicate_entry_paths` — named access is ambiguous and extraction will refuse the archive.
 - `unsafe_entry_paths` — extraction path validation would reject at least one entry.
-- `default_extraction_limits_exceeded` — declared metadata exceeds v0.1 defaults.
+- `default_extraction_limits_exceeded` — declared metadata exceeds default limits.
+- `high_compression_ratio` — at least one entry declares expansion above 1000:1.
+- `single_stream_metadata_scan` — determining the implicit payload size required sequential decoding.
+- `multipart_byte_stream` — the source combines explicitly ordered byte-stream volumes.
+- `rar_metadata_limited` — the current RAR backend cannot always report solid, encryption, or compressed-size metadata.
 
 Inspection warnings inform planning. The extraction path independently enforces the corresponding checks.
 
@@ -84,13 +95,15 @@ Human output is a tab-separated `KIND`, `SIZE`, and `PATH` table. JSON preserves
 
 An entry object includes:
 
+- `archive_index`, preserving source archive order;
 - `path` and `path_encoding` (`utf8` or `escaped_bytes`);
 - `kind`: `file`, `directory`, `symlink`, `hardlink`, or `other`;
 - `size` and optional `compressed_size`;
 - optional `modified_time`;
 - `encrypted`, `executable`, optional `symlink_target`, and optional `crc32`.
+- optional `mime_guess`, inferred from the path extension without reading content.
 
-Invalid UTF-8 entry bytes are represented with `%XX` escaping and `path_encoding: "escaped_bytes"`. They can be listed and addressed by the displayed value. v0.1 refuses to materialize them during extraction because it cannot preserve the original filesystem name unambiguously.
+Invalid UTF-8 entry bytes are represented with `%XX` escaping and `path_encoding: "escaped_bytes"`. They can be listed and addressed by the displayed value. Extraction refuses to materialize them because it cannot preserve the original filesystem name unambiguously.
 
 ## `tree` — view the logical file tree
 
@@ -122,7 +135,83 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 Regular files are supported. Directories, links, and special entries are rejected for `read`. BrokenPipe exits successfully, so `arcthis read ... | head` is a normal workflow.
 
-For TAR and TAR.GZ, v0.1 first checks that the selected path is unique, then performs a sequential content scan. This may decode the stream more than once; it does not materialize the archive on disk.
+For compressed TAR and solid 7z, the command may decode preceding data. Single-stream formats expose one entry derived from the filename, such as `report.txt.gz` → `report.txt`. None of these operations materialize the full archive on disk.
+
+## `find` — filter entry paths
+
+```sh
+arcthis find dataset.7z --glob '**/*.json'
+arcthis find dataset.7z --glob '**/*.json' --json
+```
+
+`find` matches the full normalized archive path and returns complete entry metadata without decoding entry content.
+
+## `grep` — stream a bounded content search
+
+```sh
+arcthis grep source.tar.gz TODO --glob '**/*.rs'
+arcthis grep papers.zip transformer --glob '**/*.md' --json
+```
+
+The pattern is a literal byte sequence, not a regular expression. Files above `--max-entry-size` are skipped (16 MiB default), collection stops at `--max-matches` (10,000 default), and retained lines are capped at 1 MiB. A NUL in the first 8 KiB classifies a file as binary; binary files are skipped unless `--binary` is set. JSON reports scan, skip, byte, and truncation counters.
+
+## `hash` — digest one streamed entry
+
+```sh
+arcthis hash models.zip model.bin
+arcthis hash models.zip model.bin --algorithm sha512 --json
+```
+
+SHA-256 is the default and SHA-512 is available. The entry is streamed into the digest and never written to disk.
+
+## Encrypted archives with `--password-file`
+
+```sh
+arcthis inspect private.zip --json
+arcthis read private.zip report.txt --password-file ./password.txt
+arcthis verify private.7z --password-file ./password.txt --json
+```
+
+Passwords are never accepted as ordinary CLI values. The password file is read as bytes and final CR/LF bytes are removed, making a one-line secret file convenient. ZIP supports ZipCrypto and AES decryption; 7z supports AES decryption. Archive creation remains unencrypted, so `pack --password-file` returns `unsupported_operation` instead of silently ignoring the option. Missing and incorrect passwords use the stable `password_required` and `wrong_password` categories.
+
+RAR accepts the same interface, but actual encrypted-RAR support depends on libarchive and the RAR variant. Unsupported encryption returns an explicit backend error. See [docs/RAR.md](./docs/RAR.md).
+
+## Multipart byte streams with `--volume`
+
+```sh
+arcthis inspect dataset.7z.001 \
+  --volume dataset.7z.002 \
+  --volume dataset.7z.003 \
+  --json
+arcthis read dataset.7z.001 data.csv \
+  --volume dataset.7z.002 \
+  --volume dataset.7z.003
+```
+
+The positional archive is the first volume. Every `--volume` is appended in the exact order supplied and the combined seekable byte stream is passed to normal content detection. Paths must be unique and all volumes must exist. This supports archives split at byte boundaries, such as a split 7z stream; it does not pretend that format-native RAR volume sets are simple concatenations. `inspect` reports `multipart` and `volume_count`. Source deletion is rejected for multipart extraction/conversion because deleting several source volumes cannot yet provide the single-source lifecycle guarantee. See [RFC 0002](./docs/RFC-0002-MULTIPART-SOURCES.md).
+
+## `index` — manage a persistent metadata cache
+
+```sh
+arcthis index dataset.7z --json
+arcthis index dataset.7z --refresh --json
+arcthis index dataset.7z --delete --dry-run --json
+arcthis index dataset.7z --delete --json
+```
+
+`index` stores enumerated entry metadata in the platform cache directory. Subsequent opens reuse a valid index automatically. The cache key uses the canonical source path; source size and nanosecond modification time invalidate stale entries. `--refresh` forces backend enumeration and transactional replacement. `--delete` removes only this archive's index, and `--dry-run` reports `would_create`, `would_refresh`, `would_reuse`, or `would_delete` without changing cache files. Use `--index-directory` to isolate or relocate the cache.
+
+Cache files are untrusted optimization data: malformed, schema-mismatched, format-mismatched, or stale documents are ignored. Indexes contain metadata, not decoded content or TAR seek points.
+
+## Nested archives with `--within`
+
+```sh
+arcthis tree backup.zip --within project.tar.gz --json
+arcthis read backup.zip README.md --within project.tar.gz
+arcthis grep bundle.zip TODO --within layer.7z --within source.tar.zst
+```
+
+Each `--within` names an archive entry in the current level. The entry is decoded into a bounded immutable memory source and opened through normal content detection; no named temporary inner file is created. Maximum depth is 8 and each level defaults to 256 MiB. Nested extraction and conversion are unsupported in v0.4. See [RFC 0001](./docs/RFC-0001-NESTED-ARCHIVES.md).
 
 ## `extract` — safely materialize content
 
@@ -137,7 +226,7 @@ An explicit `--output` is the complete extraction root. Without it:
 
 - if every entry is under one real top-level directory, that directory is committed directly;
 - otherwise, a directory is derived from the complete archive suffix (`backup.tar.gz` becomes `backup/`);
-- the destination must not already exist.
+- the destination must not already exist unless an explicit collision policy is selected.
 
 Examples:
 
@@ -158,7 +247,7 @@ Single-entry extraction requires an explicit output file:
 arcthis extract archive.zip README.md --output ./README.md
 ```
 
-The command writes a temporary sibling file, flushes and syncs it, and then uses a no-clobber commit. Directory or link entries are unsupported.
+The command writes a temporary sibling file, flushes and syncs it, and then applies the selected commit policy. Directory or link entries are unsupported.
 
 ### Resource limits
 
@@ -166,7 +255,9 @@ The command writes a temporary sibling file, flushes and syncs it, and then uses
 arcthis extract archive.zip \
   --max-entries 50000 \
   --max-total-size 8589934592 \
-  --max-entry-size 2147483648
+  --max-entry-size 2147483648 \
+  --max-compression-ratio 1000 \
+  --max-entry-duration-seconds 300
 ```
 
 Values are raw bytes/counts. Defaults are:
@@ -176,32 +267,81 @@ Values are raw bytes/counts. Defaults are:
 | `--max-entries` | 100,000 |
 | `--max-total-size` | 16 GiB |
 | `--max-entry-size` | 4 GiB |
+| `--max-compression-ratio` | Disabled unless specified |
+| `--max-entry-duration-seconds` | Disabled unless specified |
 
 Declared metadata is checked before staging. Actual bytes are counted while streaming. A violation returns `resource_limit` and does not commit the destination.
 
+### Planning, collisions, and source lifecycle
+
+Use `--dry-run` to emit the same resolved destination, collision state, warnings, estimated size, and delete intent without writing or deleting anything:
+
+```sh
+arcthis extract archive.tar.zst --dry-run --delete-source --json
+```
+
+The default collision policy refuses an existing destination. Select exactly one alternative when needed:
+
+- `--overwrite` transactionally replaces the destination and restores the previous path if commit fails;
+- `--skip-existing` reports a successful skipped operation and never deletes the source;
+- `--rename` chooses the first available numbered sibling such as `bundle.1`.
+
+`--delete-source` runs only after extraction has fully staged and committed. Any planning, decoding, verification, write, or commit failure preserves the source archive.
+
 ### Extraction safety
 
-v0.1 rejects absolute paths, `.`/`..`, backslashes, Windows drive/UNC prefixes, NULs, duplicate paths, case-insensitive collisions, file-as-parent conflicts, overlong paths, invalid UTF-8 names, symlinks, hardlinks, and special files. It stages on the destination filesystem and commits with rename only after every planned entry succeeds.
+Extraction rejects absolute paths, `.`/`..`, backslashes, Windows drive/UNC prefixes, NULs, duplicate paths, case-insensitive collisions, file-as-parent conflicts, overlong paths, invalid UTF-8 names, symlinks, hardlinks, and special files. It stages on the destination filesystem and commits only after every planned entry succeeds. See [docs/SECURITY.md](./docs/SECURITY.md).
 
-There is no `--overwrite`, `--skip-existing`, or `--rename` in v0.1. See [docs/SECURITY.md](./docs/SECURITY.md).
+## `extract-all` — process a directory of archives
+
+```sh
+arcthis extract-all ./downloads --dry-run --json
+arcthis extract-all ./downloads --recursive --workers 4
+arcthis extract-all ./downloads --recursive --delete-source
+```
+
+Discovery identifies supported archives by content rather than suffix. The default scans only the named directory; `--recursive` descends through filesystem directories, not archives nested inside archives. `--workers` bounds concurrent independent archive operations from 1 to 64.
+
+The command plans every archive before execution and rejects destination conflicts across the batch. Each archive receives the same resource limits and collision policy as `extract`. A mixed outcome returns `partial_failure`; JSON reports a deterministic, path-sorted item result for every discovered archive.
 
 ## `pack` — create and verify an archive
 
 ```sh
 arcthis pack ./project --output project.zip
-arcthis pack ./project --output project.tar
-arcthis pack ./project --output project.tar.gz --json
+arcthis pack ./project --output project.7z
+arcthis pack ./project --output project.tar.zst --json
+arcthis pack ./report.txt --output report.txt.xz
 ```
 
-The output suffix selects ZIP, TAR, or TAR.GZ. Directory packing includes the source directory itself as the top-level entry, preserving empty directories and regular files. ZIP output uses Deflate.
+The output suffix selects ZIP, 7z, TAR, TAR.GZ/TGZ, TAR.BZ2/TBZ2, TAR.XZ/TXZ, TAR.ZST/TZST, or a single Gzip/Bzip2/XZ/Zstandard stream. Single streams require a regular source file. Directory packing includes the source directory itself as the top-level entry, preserving empty directories and regular files. ZIP output uses Deflate.
 
-Symlinks and special files are rejected. The destination must not exist. The lifecycle is:
+`pack` currently creates unencrypted output. Passing `--password-file`, `--volume`, or `--within` returns `unsupported_operation` instead of silently ignoring the option.
+
+Symlinks and special files are rejected. The default destination policy refuses a collision; `--overwrite`, `--skip-existing`, and `--rename` have the same meanings as extraction. `--dry-run` returns the resolved plan. The lifecycle is:
 
 ```text
-scan source -> write temporary sibling -> finalize -> sync -> reopen -> verify -> no-clobber commit
+scan source -> write temporary sibling -> finalize -> sync -> reopen -> verify -> commit -> optionally delete source
 ```
 
-The source is never deleted. `--delete-source` is planned, not implemented.
+With `--delete-source`, the source is removed only after the committed archive reopens and verifies successfully. Every earlier failure preserves it.
+
+## `convert` — change archive format with verified lifecycle
+
+```sh
+arcthis convert backup.zip --output backup.tar.zst --dry-run --json
+arcthis convert backup.zip --output backup.7z --delete-source
+arcthis convert data.7z.001 --volume data.7z.002 --output data.tar.zst
+```
+
+The output suffix selects the same writable formats as `pack`; RAR creation is intentionally unsupported. v0.4 conversion uses `staged_materialization`: it opens the source through the unified backend, enforces extraction path and resource limits, materializes validated regular entries into a system temporary directory, packs a temporary target, reopens and verifies it, commits it under the selected collision policy, and only then optionally deletes the single source archive.
+
+```text
+open -> validate -> stage entries -> pack/finalize -> reopen/verify -> commit -> optionally delete source
+```
+
+`--dry-run` performs source enumeration, path/resource validation, target-format validation, and collision resolution, then emits a typed plan without creating a target or staging directory. Conversion preserves archive entry paths rather than adding the temporary staging directory name. A single-stream target (`.gz`, `.bz2`, `.xz`, or `.zst`) requires exactly one root-level regular entry and no other entries.
+
+Conversion accepts the same `--overwrite`, `--skip-existing`, `--rename`, extraction limit, and `--password-file` options. Compound suffix rename is preserved (`backup.tar.zst` becomes `backup.1.tar.zst`). Nested conversion and multipart `--delete-source` are rejected. Any failure before target commit preserves the source.
 
 ## `verify` — check readable archive data
 
@@ -210,7 +350,7 @@ arcthis verify archive.zip
 arcthis verify archive.tar.gz --json
 ```
 
-ZIP verification opens and streams every entry so CRC validation runs. TAR/TAR.GZ verification parses each header and streams every entry; the Gzip stream is consumed through its integrity trailer. Verification checks structural and codec integrity, not cryptographic authenticity or content safety.
+ZIP, 7z, and RAR verification stream every readable entry through backend integrity checks. TAR and every compressed TAR variant parse each header and stream every entry through the codec trailer. Single streams are decoded completely. Verification checks structural and codec integrity, not cryptographic authenticity or content safety.
 
 ## Machine output
 
@@ -234,7 +374,7 @@ Archive-based results include:
 }
 ```
 
-Command-specific fields are `entries`, `tree`, `entry`, inspect fields, `extraction`, `verification`, or `pack`. `pack` has no input archive envelope because its input is a filesystem source.
+Command-specific fields include `entries`, `tree`, `entry`, inspect fields, `find`, `grep`, `hash`, `extraction`, `verification`, `pack`, `index`, and `convert`. Dry-runs use `operation` plus a typed `plan`; batch execution uses `result`. `pack`, `index`, and `convert` use operation-specific envelopes instead of pretending their inputs are ordinary entry-query results.
 
 With `--json`, runtime errors are one JSON document on stderr and stdout remains empty:
 
@@ -271,22 +411,30 @@ The complete schema contract is in [docs/CLI.md](./docs/CLI.md).
 
 ## Troubleshooting
 
-### `unsupported_format` for a `.gz` file
+### A compressed stream exposes an unexpected entry name
 
-v0.1 supports TAR.GZ, not arbitrary single-file Gzip streams. Detection requires decompressed TAR structure.
+A matching codec suffix is removed (`report.txt.gz` becomes `report.txt`). A stream with a misleading filename uses an `.out` payload name so a codec suffix is not silently fabricated.
 
 ### ZIP lists but cannot be read or verified
 
-The current build supports Stored and Deflate entry methods. Another ZIP compression method returns `unsupported_operation`.
+The Rust ZIP backend supports the methods enabled by its dependency build. A method outside that set returns `unsupported_operation` rather than invoking an external tool.
 
 ### Extraction reports `collision`
 
-The destination already exists, the archive contains duplicate/case-colliding paths, or an entry conflicts with a parent. v0.1 never overwrites. Choose a new `--output` path or inspect the archive.
+The destination already exists, the archive contains duplicate/case-colliding paths, an entry conflicts with a parent, or two `extract-all` plans resolve to one destination. Keep the default refusal, choose a new `--output`, or explicitly select one collision policy.
 
 ### Extraction rejects links
 
 This is intentional. Link restoration requires additional target and ordering rules and is planned only after those rules have regression coverage.
 
-### Where are `find`, `grep`, `hash`, `extract-all`, `convert`, `--dry-run`, and `--delete-source`?
+### RAR works but reports limited metadata
 
-They are roadmap capabilities. Compose v0.1 `read` with existing tools when possible; do not rely on undocumented placeholders.
+The libarchive adapter does not expose every RAR property. `inspect` emits `rar_metadata_limited`; read/extract/verify behavior is authoritative. RAR creation and format-native RAR multi-volume traversal are not implemented.
+
+### A split archive still fails with `--volume`
+
+Check that the positional path is the first byte segment and every later `--volume` is present in exact order. The feature combines byte-stream splits; it does not reinterpret format-native volume protocols.
+
+### Where is recursive cross-archive search?
+
+Recursive cross-archive search remains roadmap work after v0.4. Use an explicit `--within` chain for known nested archives; do not rely on undocumented locator syntax.
