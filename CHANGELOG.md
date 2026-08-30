@@ -2,7 +2,7 @@
 
 This file records user-visible changes to Arcthis. The project follows semantic versioning after the first public release.
 
-## 0.5.0 - 2026-08-30
+## 0.5.0 - 2026-08-31
 
 First public release.
 
