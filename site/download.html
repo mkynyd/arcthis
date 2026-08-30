@@ -120,7 +120,7 @@
             <span class="step-num" aria-hidden="true"></span>
             <div>
               <h3>下载源码并编译</h3>
-              <p>编译完成后,程序位于 <code>target/release/arcthis</code>。默认编译只包含命令行工具和库,不包含 MCP 功能。</p>
+              <p>编译完成后,程序位于 <code>target/release/arcthis</code>。默认编译同时包含命令行工具、库和 MCP 功能,与后续 Homebrew、npm、pnpm 安装的命令保持一致。</p>
               <div class="code-frame">
                 <div class="code-head">
                   <span>build — sh</span>
@@ -160,17 +160,17 @@ arcthis <span class="f">--version</span>
           <li class="step reveal">
             <span class="step-num" aria-hidden="true"></span>
             <div>
-              <h3>可选:MCP 支持</h3>
-              <p>本地 MCP 服务需要编译时显式开启。除非你同时授权输出目录,否则修改类工具不会出现。</p>
+              <h3>启动 MCP</h3>
+              <p>本地 MCP 服务已经包含在默认构建中。除非你同时授权输出目录,否则修改类工具不会出现。</p>
               <div class="code-frame">
                 <div class="code-head">
                   <span>mcp — sh</span>
-                  <button class="term-copy" type="button" data-copy="cargo build --release --locked --features mcp" data-copy-name="构建命令" aria-label="复制构建命令">
+                  <button class="term-copy" type="button" data-copy="cargo build --release --locked" data-copy-name="构建命令" aria-label="复制构建命令">
                     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
                     <span data-copy-label>复制</span>
                   </button>
                 </div>
-                <pre><span class="f">cargo build</span> --release --locked --features mcp
+                <pre><span class="f">cargo build</span> --release --locked
 arcthis <span class="f">mcp</span> --allow-root ./archives --allow-output-root ./outputs</pre>
               </div>
             </div>

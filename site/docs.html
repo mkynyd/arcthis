@@ -269,7 +269,7 @@
           <div class="cmd" id="cmd-mcp">
             <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
             <div class="cmd-body">
-              <p>通过 stdio 提供本地 MCP(Model Context Protocol)服务,需编译时显式开启,协议版本固定 <code>2025-06-18</code>,资源占用有上限。九个只读工具始终可用;extract/pack/convert 的六个先出计划、再执行的工具只在明确授权输出目录后才会出现。删除源文件需要 <code>--allow-source-deletion</code> 和请求中的 <code>delete_source: true</code> 双重确认。</p>
+              <p>默认构建通过 stdio 提供本地 MCP(Model Context Protocol)服务,协议版本固定 <code>2025-06-18</code>,资源占用有上限。九个只读工具始终可用;extract/pack/convert 的六个先出计划、再执行的工具只在明确授权输出目录后才会出现。删除源文件需要 <code>--allow-source-deletion</code> 和请求中的 <code>delete_source: true</code> 双重确认。</p>
             </div>
           </div>
         </section>

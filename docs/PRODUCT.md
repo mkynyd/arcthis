@@ -100,10 +100,10 @@ v0.4 expands compatibility without weakening the access and lifecycle rules:
 v0.5 makes the same archive behavior directly usable by local agent runtimes:
 
 - Application service: structured interface-independent inspect/list/tree/stat/read/find/grep/hash/verify requests with finite limits and cancellation checkpoints.
-- Local MCP: optional stdio transport with declared formats, structured results, input-root authorization, capped text/base64 windows, and strict stdout separation.
+- Local MCP: built-in stdio transport with declared formats, structured results, input-root authorization, capped text/base64 windows, and strict stdout separation.
 - Controlled change: opt-in output roots and plan/execute tools for extract, pack, and convert; stale source/destination state invalidates a SHA-256 plan digest before any change.
 - Destructive policy: source deletion remains disabled by default, requires two explicit opt-ins, and still runs only after a verified save.
-- Compatibility: default builds remain free of MCP dependencies; the feature-enabled server is covered by subprocess clients, official Inspector validation, and macOS/Linux automated tests.
+- Compatibility: public installation channels include MCP by default so they expose the same commands; library-only builds may use `--no-default-features`. The server is covered by subprocess clients, official Inspector validation, and macOS/Linux automated tests.
 
 ## Current non-goals
 

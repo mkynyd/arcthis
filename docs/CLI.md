@@ -10,7 +10,7 @@ arcthis <command> <archive> [entry] [options]
 
 Commands are format-independent. There are no ZIP-specific or TAR-specific top-level commands.
 
-When built with `--features mcp`, `arcthis mcp --allow-root <path>` starts the local stdio MCP entry point. This transport is a separate protocol surface rather than a versioned CLI result: stdout contains JSON-RPC only and stderr contains diagnostics. Nine read-only tools are always available. Six extract/pack/convert `_plan`/`_execute` tools are advertised only when an explicit `--allow-output-root` policy exists. See [RFC 0003](./RFC-0003-MCP-INTEGRATION.md) for their input/output formats and safety rules.
+The default build includes the local stdio MCP entry point. `arcthis mcp --allow-root <path>` starts it. This transport is a separate protocol surface rather than a versioned CLI result: stdout contains JSON-RPC only and stderr contains diagnostics. Nine read-only tools are always available. Six extract/pack/convert `_plan`/`_execute` tools are advertised only when an explicit `--allow-output-root` policy exists. Library-only builds can disable it with `--no-default-features`. See [RFC 0003](./RFC-0003-MCP-INTEGRATION.md) for the input/output formats and safety rules.
 
 ## Implemented commands
 

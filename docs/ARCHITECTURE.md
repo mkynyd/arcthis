@@ -2,7 +2,7 @@
 
 ## Architectural goal
 
-The library presents a small archive interface that hides format-specific enumeration and decoding while preserving meaningful capability and cost differences. The CLI and optional local MCP server are frontends over a shared application service.
+The library presents a small archive interface that hides format-specific enumeration and decoding while preserving meaningful capability and cost differences. The CLI and default-enabled local MCP server are frontends over a shared application service.
 
 ## Module model
 

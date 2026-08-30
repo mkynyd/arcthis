@@ -82,7 +82,7 @@ impl ArchiveBackend for RarBackend {
         for item in self.iterator(None)? {
             match item {
                 ArchiveContents::StartOfEntry(path, stat) => {
-                    let mode = u32::from(stat.st_mode);
+                    let mode = u64::from(stat.st_mode);
                     let kind = if mode & 0o170_000 == 0o040_000 || path.ends_with('/') {
                         EntryKind::Directory
                     } else if mode & 0o170_000 == 0o120_000 {

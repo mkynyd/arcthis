@@ -457,7 +457,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
           <span class="section-index">06 — MCP</span>
           <h2 class="section-title">同样的能力, <span class="tone-2">直接接入你的 AI Agent。</span></h2>
           <ul class="fact-list">
-            <li><strong>可选的 MCP 服务。</strong>需要编译时显式开启,协议版本固定 <code>2025-06-18</code>,stdout 只输出数据,资源占用有上限。</li>
+            <li><strong>内置 MCP 服务。</strong>默认构建已包含,协议版本固定 <code>2025-06-18</code>,stdout 只输出数据,资源占用有上限。</li>
             <li><strong>九个只读工具</strong>:inspect、list、tree、stat、read、find、grep、hash、verify —— 用 <code>--allow-root</code> 明确授权目录后始终可用。</li>
             <li><strong>六个修改类工具</strong>(extract/pack/convert,先出计划再执行)只有用 <code>--allow-output-root</code> 明确授权输出目录后才会出现。</li>
             <li><strong>过期的计划会被拒绝。</strong>计划生成后,只要源文件或目标位置有变化,计划的 SHA-256 指纹就会失效。</li>

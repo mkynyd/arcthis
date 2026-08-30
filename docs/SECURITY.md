@@ -83,7 +83,7 @@ Dry-run computes and serializes the destination, collision action, estimated siz
 
 ## Local MCP policy
 
-The optional stdio MCP server grants no implicit filesystem access. Every input is canonicalized and must remain within an explicit `--allow-root`; MCP client roots are informational only. Read requests have finite file, decoded-byte, result, and window limits. Binary windows are base64-encoded only after the raw byte limit is enforced. Passwords are not accepted as tool arguments.
+The built-in stdio MCP server grants no implicit filesystem access. Every input is canonicalized and must remain within an explicit `--allow-root`; MCP client roots are informational only. Read requests have finite file, decoded-byte, result, and window limits. Binary windows are base64-encoded only after the raw byte limit is enforced. Passwords are not accepted as tool arguments.
 
 Mutation tools are not advertised without an explicit `--allow-output-root`. Output paths must be descendants, not the root itself; `..`, symlink traversal below the allowed root, and destinations resolving outside it are rejected. Planning is non-mutating. Execute requires a SHA-256 digest over the exact request and plan plus source and destination fingerprints, then recomputes it before entering the normal staged process. A mismatch preserves source and destination state. Source deletion is a double opt-in: server policy plus request intent, and still occurs only after a verified save.
 
