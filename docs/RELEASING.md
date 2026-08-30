@@ -43,7 +43,7 @@ dist plan
 - `Cargo.toml`、`Cargo.lock`、`CHANGELOG.md`、网站与文档版本一致；
 - GitHub 的 `CI` 和 `Release` pull request 检查全部通过；
 - 发布计划只包含已支持的三个 target；
-- release 二进制不依赖 Homebrew 或其他用户机器上未必存在的动态库；
+- macOS release 二进制的 `otool -L` 只列出系统库；Linux x86_64 的 `ldd` 只列出 glibc 基础库与已确认的 `libnettle.so.8`、`liblzma.so.5`、`liblz4.so.1`、`libz.so.1`、`libxml2.so.2`，并在受支持发行版上实际运行；
 - crates.io 与 npm 上的目标版本尚不存在；
 - GitHub Release、Tag 和 Homebrew Formula 中不存在同版本产物。
 

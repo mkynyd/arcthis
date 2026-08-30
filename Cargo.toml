@@ -1,6 +1,6 @@
 [package]
 name = "arcthis"
-version = "0.5.0-rc.2"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.98"
 description = "An agent-native CLI for accessing and manipulating compressed files"
