@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arcthis — 面向 AI Agent 的压缩文件命令行工具</title>
+  <meta name="description" content="Arcthis 是面向 AI Agent 与人类的压缩文件命令行工具。先查看、按需读取压缩包内容,再决定是否解压。">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="alternate" hreflang="zh-CN" href="https://arcthis.mkynstudio.top/">
+  <link rel="alternate" hreflang="en" href="https://arcthis.mkynstudio.top/en/">
+  <script>
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('arcthis-theme') || 'system'; } catch (e) {}
+      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = pref === 'system' ? (dark ? 'dark' : 'light') : pref;
+    })();
+  </script>
+  <script>
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem('arcthis-lang'); } catch (e) {}
+      if (pref) return;
+      var nav = (navigator.language || '').toLowerCase();
+      if (nav && nav.indexOf('zh') !== 0) {
+        location.replace('/en' + (location.pathname === '/' || location.pathname === '/index.html' ? '/' : location.pathname) + location.search + location.hash);
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <span id="copy-live" aria-live="polite" style="position:absolute;left:-9999px;"></span>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/" aria-label="Arcthis 首页">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+          <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+          <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+        </svg>
+        Arcthis
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="/docs.html">文档</a>
+        <a href="/download.html">下载</a>
+        <a href="/#formats">格式</a>
+        <a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a>
+      </nav>
+      <div class="nav-right">
+        <a class="lang-switch" href="/en/" data-lang="en" hreflang="en" aria-label="Switch to English">EN</a>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Theme: system" title="主题">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.2"/>
+            <path d="M8 2.8v10.4" />
+            <path d="M8 2.8a5.2 5.2 0 0 1 0 10.4z" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <a class="btn btn-primary btn-sm" href="/download.html">下载</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ================= hero ================= -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow">v0.5.0 <span class="sep">·</span> MIT <span class="sep">·</span> Rust</p>
+          <h1 class="hero-title">压缩包就是文件树。<span class="tone-2">不必全部解压。</span></h1>
+          <p class="hero-sub">面向 AI Agent 与人类的统一压缩文件工具。先查看内容、按需读取需要的文件,再决定是否解压。</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/download.html">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M8 2.5v8m0 0L4.8 7.3M8 10.5l3.2-3.2M2.5 13.5h11"/>
+              </svg>
+              下载
+            </a>
+            <a class="btn btn-secondary" href="/docs.html">
+              文档
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10"/>
+              </svg>
+            </a>
+          </div>
+          <p class="hero-meta">
+            12 种格式 <span class="sep">·</span> JSON 输出稳定 <span class="sep">·</span> macOS + Linux 自动化测试
+          </p>
+        </div>
+
+        <div class="frame reveal">
+          <div class="term">
+            <div class="term-bar">
+              <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="term-title">~/datasets — zsh</span>
+              <button class="term-copy" type="button" data-copy="arcthis inspect dataset.zip" data-copy-name="命令" aria-label="复制命令">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
+                  <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/>
+                </svg>
+                <span data-copy-label>复制</span>
+              </button>
+            </div>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">inspect</span> dataset.zip
+<span class="td">archive:</span> <span class="to">dataset.zip</span>
+<span class="td">format:</span> <span class="to">zip</span>
+<span class="td">compression:</span> <span class="to">mixed</span>
+<span class="td">entries:</span> <span class="to">7</span>
+<span class="td">compressed size:</span> <span class="to">201315</span>
+<span class="td">uncompressed size:</span> <span class="to">200124</span>
+<span class="td">random access:</span> <span class="to">true</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">tree</span> dataset.zip
+<span class="td">dataset.zip</span>
+<span class="td">└── </span><span class="tc">dataset</span>
+<span class="td">    ├── </span><span class="to">README.md</span>
+<span class="td">    ├── </span><span class="tc">docs</span>
+<span class="td">    │   └── </span><span class="to">notes.md</span>
+<span class="td">    └── </span><span class="tc">train</span>
+<span class="td">        ├── </span><span class="to">data.csv</span>
+<span class="td">        └── </span><span class="to">labels.csv</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">read</span> dataset.zip dataset/train/labels.csv
+<span class="to">id,label
+1,cat
+2,dog
+3,bird</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= quickstart ================= -->
+    <section class="section" id="quickstart">
+      <div class="wrap quickstart-grid">
+        <div class="reveal">
+          <span class="section-index">01 — 快速开始</span>
+          <h2 class="section-title">三条命令, <span class="tone-2">从获取源码到查看压缩包。</span></h2>
+          <p class="quickstart-note">v0.5 目前只提供源码 —— 还没有 crates.io 安装包,也没有编译好的可执行文件。RAR 支持依赖 libarchive,各平台的安装方法见<a href="/download.html">下载页</a>。</p>
+        </div>
+        <div class="frame reveal">
+          <div class="term">
+            <div class="term-bar">
+              <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="term-title">install — zsh</span>
+              <button class="term-copy" type="button" data-copy="git clone https://github.com/mkynyd/arcthis.git &amp;&amp; cd arcthis &amp;&amp; cargo build --release --locked" data-copy-name="安装命令" aria-label="复制安装命令">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
+                  <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/>
+                </svg>
+                <span data-copy-label>复制</span>
+              </button>
+            </div>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">git clone</span> https://github.com/mkynyd/arcthis.git
+<span class="tp">$ </span><span class="tc">cd</span> arcthis
+<span class="tp">$ </span><span class="tc">cargo build</span> <span class="tf">--release --locked</span>
+<span class="tp">$ </span><span class="tc">./target/release/arcthis</span> <span class="tf">--version</span>
+<span class="to">arcthis 0.5.0</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= scroll stack ================= -->
+    <section class="stack-section" id="moves">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <span class="section-index">02 — 招牌功能</span>
+            <h2 class="section-title">一套语法。 <span class="tone-2">全部格式。默认不解压。</span></h2>
+          </div>
+          <p class="section-note">统一的 <code class="mono" style="font-size:13px;">arcthis &lt;command&gt; &lt;archive&gt; [entry]</code> 语法适用于 ZIP、7z、RAR、TAR 和单文件压缩格式。以下所有会话都是 Arcthis 0.5.0 的真实输出。</p>
+        </div>
+
+        <div class="stack-inner">
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 01</span>
+              <h3>不解压,先查文件</h3>
+              <p class="stack-desc"><code>find</code> 只对照压缩包的文件清单按通配符匹配路径,完全不读取文件内容 —— 哪怕是几个 GB 的压缩包,查找也一样快。</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">find</span>
+                <button class="term-copy" type="button" data-copy="arcthis find dataset.zip --glob '**/*.csv'" data-copy-name="命令" aria-label="复制命令">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>复制</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">find</span> dataset.zip <span class="tf">--glob</span> <span class="ts">'**/*.csv'</span>
+<span class="to">dataset/train/labels.csv
+dataset/train/data.csv</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 02</span>
+              <h3>原地搜索内容</h3>
+              <p class="stack-desc"><code>grep</code> 直接在压缩包里逐行扫描文本文件,对文件大小、行数、匹配数量和二进制文件都设有上限 —— 搜索全程不写入任何磁盘文件。</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">grep</span>
+                <button class="term-copy" type="button" data-copy="arcthis grep dataset.zip TODO --glob '**/*.md'" data-copy-name="命令" aria-label="复制命令">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>复制</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">grep</span> dataset.zip TODO <span class="tf">--glob</span> <span class="ts">'**/*.md'</span>
+<span class="to">dataset/docs/notes.md:1:</span><span class="tc">TODO</span><span class="to">: fill in preprocessing notes
+dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><span class="to">: document the schema.</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 03</span>
+              <h3>不解压校验完整性</h3>
+              <p class="stack-desc"><code>hash</code> 计算单个文件的 SHA-256 或 SHA-512 校验值;<code>verify</code> 从头到尾读一遍,一次性校验压缩包结构和每个可读文件。</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">hash · verify</span>
+                <button class="term-copy" type="button" data-copy="arcthis verify dataset.zip" data-copy-name="命令" aria-label="复制命令">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>复制</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">hash</span> dataset.zip dataset/train/data.csv
+<span class="to">3307d48518fd5bc59980caee9f4833a1aef4a3ae7f16ef4102a132b719d947c2  dataset/train/data.csv</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">verify</span> dataset.zip
+<span class="tok">verified 7 entries (200124 bytes)</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 04</span>
+              <h3>先预演,再写入</h3>
+              <p class="stack-desc"><code>pack</code>、<code>extract</code> 和 <code>convert</code> 都支持 <code>--dry-run</code>:先把完整的执行计划列出来,确认无误再动手。真正的写入会先放到临时位置,验证通过后才会保存为最终结果。</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">pack --dry-run</span>
+                <button class="term-copy" type="button" data-copy="arcthis pack ./dataset --output dataset.tar.zst --dry-run" data-copy-name="命令" aria-label="复制命令">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>复制</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">pack</span> ./dataset <span class="tf">--output</span> dataset.tar.zst <span class="tf">--dry-run</span>
+<span class="td">dry-run pack plan</span>
+<span class="td">source:</span> <span class="to">~/demo/dataset</span>
+<span class="td">destination:</span> <span class="to">dataset.tar.zst</span>
+<span class="td">format:</span> <span class="to">tar_zstd</span>
+<span class="td">entries:</span> <span class="to">7</span>
+<span class="td">estimated bytes:</span> <span class="to">200124</span>
+<span class="td">collision:</span> <span class="to">false</span>
+<span class="td">will skip:</span> <span class="to">false</span>
+<span class="td">delete source after success:</span> <span class="to">false</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 05</span>
+              <h3>压缩包里的压缩包</h3>
+              <p class="stack-desc"><code>--within</code> 可以重复使用,逐层进入压缩包里的压缩包,全程在内存中完成,最多 8 层 —— 不会在磁盘上留下临时文件。</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">tree --within</span>
+                <button class="term-copy" type="button" data-copy="arcthis tree backup.zip --within project.tar.gz" data-copy-name="命令" aria-label="复制命令">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>复制</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">tree</span> backup.zip <span class="tf">--within</span> project.tar.gz
+<span class="td">backup.zip::project.tar.gz</span>
+<span class="td">└── </span><span class="tc">dataset</span>
+<span class="td">    ├── </span><span class="to">README.md</span>
+<span class="td">    ├── </span><span class="tc">docs</span>
+<span class="td">    │   └── </span><span class="to">notes.md</span>
+<span class="td">    └── </span><span class="tc">train</span>
+<span class="td">        ├── </span><span class="to">data.csv</span>
+<span class="td">        └── </span><span class="to">labels.csv</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 06</span>
+              <h3>为 Agent 准备的结构化输出</h3>
+              <p class="stack-desc">每个查询命令加上 <code>--json</code> 都会输出带版本号的 JSON:字段保持稳定,错误有固定类型并写入 stderr,退出码也是确定的。</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">stat --json</span>
+                <button class="term-copy" type="button" data-copy="arcthis stat dataset.zip dataset/train/labels.csv --json" data-copy-name="命令" aria-label="复制命令">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>复制</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">stat</span> dataset.zip dataset/train/labels.csv <span class="tf">--json</span>
+<span class="ts">{"schema_version":"1","archive":{"path":"dataset.zip","path_lossy":false,"format":"zip"},"entry":{"archive_index":5,"path":"dataset/train/labels.csv","path_encoding":"utf8","kind":"file","size":28,"compressed_size":28,"modified_time":"2026-08-30T01:05:30","encrypted":false,"executable":false,"symlink_target":null,"crc32":"9e6ad3e5","mime_guess":"text/csv"}}</span></div>
+            </div>
+          </article>
+
+          <div class="stack-end" aria-hidden="true"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= formats ================= -->
+    <section class="section" id="formats">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <span class="section-index">03 — 格式</span>
+            <h2 class="section-title">十二种格式, <span class="tone-2">同一套使用方式。</span></h2>
+          </div>
+          <p class="section-note">识别格式看内容,不看扩展名:改错的扩展名骗不过它。不同格式的差异在底层各自处理,你面对的是统一的行为和诚实的能力说明。</p>
+        </div>
+        <div class="table-frame reveal">
+          <div class="table-scroll">
+            <table class="data">
+              <thead>
+                <tr><th>格式</th><th>访问 / 解压</th><th>创建</th><th>读取方式</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>zip</td><td>Stored/Deflate,含 ZipCrypto/AES 解密</td><td><span class="mono">Deflate,不加密</span></td><td>可直接读取任意文件</td></tr>
+                <tr><td>7z</td><td>支持,含 AES 解密</td><td><span class="mono">LZMA2,不加密</span></td><td>取决于压缩结构</td></tr>
+                <tr><td>rar / rar5</td><td>支持(经 libarchive)</td><td><span class="pill no">只读</span></td><td>需从头读到尾</td></tr>
+                <tr><td>tar</td><td>支持</td><td><span class="pill yes">支持</span></td><td>需从头读到尾</td></tr>
+                <tr><td>tar.gz / tgz</td><td>支持</td><td><span class="pill yes">支持</span></td><td>需从头解压</td></tr>
+                <tr><td>tar.bz2 / tbz2</td><td>支持</td><td><span class="pill yes">支持</span></td><td>需从头解压</td></tr>
+                <tr><td>tar.xz / txz</td><td>支持</td><td><span class="pill yes">支持</span></td><td>需从头解压</td></tr>
+                <tr><td>tar.zst / tzst</td><td>支持</td><td><span class="pill yes">支持</span></td><td>需从头解压</td></tr>
+                <tr><td>gzip</td><td>单个文件</td><td><span class="pill yes">支持</span></td><td>需从头读到尾</td></tr>
+                <tr><td>bzip2</td><td>单个文件</td><td><span class="pill yes">支持</span></td><td>需从头读到尾</td></tr>
+                <tr><td>xz</td><td>单个文件</td><td><span class="pill yes">支持</span></td><td>需从头读到尾</td></tr>
+                <tr><td>zstd</td><td>单个文件</td><td><span class="pill yes">支持</span></td><td>需从头读到尾</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= agent interface ================= -->
+    <section class="section" id="agents">
+      <div class="wrap split">
+        <div class="reveal">
+          <span class="section-index">04 — Agent 接口</span>
+          <h2 class="section-title">JSON 输出, <span class="tone-2">字段稳定、版本明确。</span></h2>
+          <ul class="fact-list">
+            <li><strong>真实结构化输出。</strong>每个成功响应都是一份带 <code>schema_version: "1"</code> 的完整 JSON 文档,字段名与类型是公开的版本化接口。</li>
+            <li><strong>输出严格分流。</strong>结果走 stdout;诊断、警告和错误走 stderr。<code>read</code> 输出原始文件内容,并且拒绝 <code>--json</code>。</li>
+            <li><strong>错误有固定类型。</strong>给程序读取的错误是带固定代码的 JSON,对应确定的退出码。</li>
+            <li><strong>诚实的成本。</strong><code>inspect</code> 报告 <code>random_access</code>、<code>solid</code> 等能力,Agent 可以在执行前推算操作成本。</li>
+          </ul>
+        </div>
+        <div class="reveal">
+          <div class="frame">
+            <div class="code-frame">
+              <div class="code-head">
+                <span>响应结构 — schema_version "1"</span>
+                <button class="term-copy" type="button" data-copy='{"schema_version":"1","archive":{"path":"dataset.zip","path_lossy":false,"format":"zip"}}' data-copy-name="JSON 信封" aria-label="复制 JSON">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>复制</span>
+                </button>
+              </div>
+              <pre><span class="p">{</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"archive"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s">"path"</span><span class="p">:</span> <span class="s">"dataset.zip"</span><span class="p">,</span>
+    <span class="s">"path_lossy"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span>
+    <span class="s">"format"</span><span class="p">:</span> <span class="s">"zip"</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+            </div>
+          </div>
+          <div class="chip-row" style="margin-top:18px;" aria-label="稳定错误码">
+            <span class="chip">unsupported_format</span>
+            <span class="chip">invalid_archive</span>
+            <span class="chip">corrupted_archive</span>
+            <span class="chip">entry_not_found</span>
+            <span class="chip">unsafe_path</span>
+            <span class="chip">resource_limit</span>
+            <span class="chip">password_required</span>
+            <span class="chip">wrong_password</span>
+            <span class="chip">collision</span>
+            <span class="chip">verification_failed</span>
+            <span class="chip">partial_failure</span>
+            <span class="chip">io_error</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= safety ================= -->
+    <section class="section" id="safety">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <span class="section-index">05 — 安全模型</span>
+            <h2 class="section-title">默认 <span class="tone-2">安全优先于方便。</span></h2>
+          </div>
+          <p class="section-note">来源不明的压缩包可能是恶意的。每一次写入都谨慎、可验证,要么全部成功要么不生效 —— 图省事的选项也有,但必须明确指定。</p>
+        </div>
+        <div class="def-grid reveal-stagger">
+          <div class="def-item">
+            <span class="def-k">路径</span>
+            <h3>统一的路径检查</h3>
+            <p>解压时会拒绝 <code class="mono" style="font-size:12px;">..</code>、绝对路径、Windows 盘符/UNC 前缀、NUL 字节,以及可能跳出目标目录的链接。</p>
+          </div>
+          <div class="def-item">
+            <span class="def-k">写入</span>
+            <h3>先写临时文件,再正式保存</h3>
+            <p>输出先写到旁边的临时位置,全部文件成功后才正式保存;失败不会留下看似完整的半成品。</p>
+          </div>
+          <div class="def-item">
+            <span class="def-k">冲突</span>
+            <h3>默认拒绝</h3>
+            <p>已存在的目标默认拒绝;<code class="mono" style="font-size:12px;">--overwrite</code>、<code class="mono" style="font-size:12px;">--skip-existing</code>、<code class="mono" style="font-size:12px;">--rename</code> 三选一,且必须明确指定。</p>
+          </div>
+          <div class="def-item">
+            <span class="def-k">删除</span>
+            <h3>最后才删源文件</h3>
+            <p><code class="mono" style="font-size:12px;">--delete-source</code> 只在新文件写入、验证并正式保存之后才执行;任何错误、中断或验证失败都会保留源文件。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= mcp ================= -->
+    <section class="section" id="mcp">
+      <div class="wrap split">
+        <div class="reveal">
+          <span class="section-index">06 — MCP</span>
+          <h2 class="section-title">同样的能力, <span class="tone-2">直接接入你的 AI Agent。</span></h2>
+          <ul class="fact-list">
+            <li><strong>可选的 MCP 服务。</strong>需要编译时显式开启,协议版本固定 <code>2025-06-18</code>,stdout 只输出数据,资源占用有上限。</li>
+            <li><strong>九个只读工具</strong>:inspect、list、tree、stat、read、find、grep、hash、verify —— 用 <code>--allow-root</code> 明确授权目录后始终可用。</li>
+            <li><strong>六个修改类工具</strong>(extract/pack/convert,先出计划再执行)只有用 <code>--allow-output-root</code> 明确授权输出目录后才会出现。</li>
+            <li><strong>过期的计划会被拒绝。</strong>计划生成后,只要源文件或目标位置有变化,计划的 SHA-256 指纹就会失效。</li>
+          </ul>
+        </div>
+        <div class="frame reveal">
+          <div class="term">
+            <div class="term-bar">
+              <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="term-title">mcp — zsh</span>
+              <button class="term-copy" type="button" data-copy="arcthis mcp --allow-root ./archives --allow-output-root ./outputs" data-copy-name="命令" aria-label="复制命令">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                <span data-copy-label>复制</span>
+              </button>
+            </div>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">cargo build</span> <span class="tf">--release --locked --features</span> mcp
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">mcp</span> <span class="tf">--allow-root</span> ./archives
+<span class="td"># read-only tools only</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">mcp</span> <span class="tf">--allow-root</span> ./archives <span class="tf">--allow-output-root</span> ./outputs
+<span class="td"># plan/execute mutation tools become visible</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= cta ================= -->
+    <section class="cta">
+      <div class="wrap">
+        <h2 class="cta-title reveal">先访问,再解压。</h2>
+        <p class="cta-sub reveal">从源码编译 v0.5.0,一分钟内查看你的第一个压缩包。</p>
+        <div class="reveal">
+          <div class="install-chip">
+            <span><span class="tp">$ </span>cargo install --path . --locked</span>
+            <button type="button" data-copy="cargo install --path . --locked" data-copy-name="安装命令" aria-label="复制安装命令">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+              <span data-copy-label>复制</span>
+            </button>
+          </div>
+        </div>
+        <div class="cta-actions reveal">
+          <a class="btn btn-primary" href="/download.html">下载</a>
+          <a class="btn btn-secondary" href="/docs.html">阅读文档</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= footer ================= -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="/" aria-label="Arcthis 首页">
+            <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" style="width:26px;height:26px;">
+              <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+              <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+              <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+            </svg>
+            Arcthis
+          </a>
+          <p>面向 AI Agent 与人类的统一压缩文件命令行工具。</p>
+        </div>
+        <div class="footer-col">
+          <h4>产品</h4>
+          <ul>
+            <li><a href="/download.html">下载</a></li>
+            <li><a href="/docs.html">文档</a></li>
+            <li><a href="/#formats">支持的格式</a></li>
+            <li><a href="/#mcp">MCP 前端</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>资源</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">Roadmap</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">安全模型</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/CONTRIBUTING.md" rel="noopener">贡献指南</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>设计</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0001-NESTED-ARCHIVES.md" rel="noopener">RFC 0001 — 嵌套压缩包</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0002-MULTIPART-SOURCES.md" rel="noopener">RFC 0002 — 多卷数据源</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0003-MCP-INTEGRATION.md" rel="noopener">RFC 0003 — MCP 集成</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/LICENSE" rel="noopener">MIT 许可证</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Arcthis v0.5.0</span>
+        <span class="sep">·</span>
+        <span>MIT</span>
+        <span class="sep">·</span>
+        <span>schema_version "1"</span>
+        <span class="push">macOS + Linux</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" defer></script>
+  <script src="/assets/main.js" defer></script>
+</body>
+</html>

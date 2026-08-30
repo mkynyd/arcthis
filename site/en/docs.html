@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — Arcthis</title>
+  <meta name="description" content="How the Arcthis CLI behaves: commands, JSON output, error codes, exit codes, limits and safety defaults.">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="alternate" hreflang="zh-CN" href="https://arcthis.mkynstudio.top/docs.html">
+  <link rel="alternate" hreflang="en" href="https://arcthis.mkynstudio.top/en/docs.html">
+  <script>
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('arcthis-theme') || 'system'; } catch (e) {}
+      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = pref === 'system' ? (dark ? 'dark' : 'light') : pref;
+    })();
+  </script>
+  <script>
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem('arcthis-lang'); } catch (e) {}
+      if (pref) return;
+      var nav = (navigator.language || '').toLowerCase();
+      if (nav.indexOf('zh') === 0) {
+        location.replace('/docs.html' + location.search + location.hash);
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <span id="copy-live" aria-live="polite" style="position:absolute;left:-9999px;"></span>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/en/" aria-label="Arcthis home">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+          <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+          <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+        </svg>
+        Arcthis
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/en/docs.html" aria-current="page">Docs</a>
+        <a href="/en/download.html">Download</a>
+        <a href="/en/#formats">Formats</a>
+        <a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a>
+      </nav>
+      <div class="nav-right">
+        <a class="lang-switch" href="/docs.html" data-lang="zh" hreflang="zh-CN" aria-label="Switch to Chinese">中文</a>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Theme: system" title="Theme">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.2"/>
+            <path d="M8 2.8v10.4" />
+            <path d="M8 2.8a5.2 5.2 0 0 1 0 10.4z" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <a class="btn btn-primary btn-sm" href="/en/download.html">Download</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <div class="wrap">
+        <p class="eyebrow">Documentation <span class="sep">·</span> v0.5.0 <span class="sep">·</span> schema_version "1"</p>
+        <h1 class="page-title">The CLI reference, <span class="tone-2">as implemented.</span></h1>
+        <p class="page-sub">Everything on this page describes implemented, tested behavior of Arcthis 0.5.0. Features that are still planned are marked <span class="pill planned">planned</span>. The full long-form guide is <a href="https://github.com/mkynyd/arcthis/blob/main/START.md" rel="noopener">START.md</a> in the repository.</p>
+      </div>
+    </section>
+
+    <div class="wrap docs-layout">
+      <aside class="docs-side" aria-label="Documentation sections">
+        <div class="side-group">
+          <h5>Start</h5>
+          <a href="#grammar">Command syntax</a>
+          <a href="#output">Output contract</a>
+          <a href="#options">Global options</a>
+        </div>
+        <div class="side-group">
+          <h5>Commands</h5>
+          <a class="mono" href="#cmd-inspect">inspect</a>
+          <a class="mono" href="#cmd-list">list</a>
+          <a class="mono" href="#cmd-tree">tree</a>
+          <a class="mono" href="#cmd-stat">stat</a>
+          <a class="mono" href="#cmd-read">read</a>
+          <a class="mono" href="#cmd-find">find</a>
+          <a class="mono" href="#cmd-grep">grep</a>
+          <a class="mono" href="#cmd-hash">hash</a>
+          <a class="mono" href="#cmd-index">index</a>
+          <a class="mono" href="#cmd-extract">extract</a>
+          <a class="mono" href="#cmd-extract-all">extract-all</a>
+          <a class="mono" href="#cmd-pack">pack</a>
+          <a class="mono" href="#cmd-verify">verify</a>
+          <a class="mono" href="#cmd-convert">convert</a>
+          <a class="mono" href="#cmd-mcp">mcp</a>
+        </div>
+        <div class="side-group">
+          <h5>Reference</h5>
+          <a href="#json">JSON &amp; errors</a>
+          <a href="#exit-codes">Exit codes</a>
+          <a href="#limits">Resource limits</a>
+          <a href="#safety">Safety defaults</a>
+          <a href="#planned">Planned</a>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+
+        <!-- grammar -->
+        <section class="doc-block" id="grammar">
+          <h2>Command syntax<a class="anchor" href="#grammar" aria-hidden="true">#</a></h2>
+          <p class="lead">One format-independent syntax. There are no ZIP-specific or TAR-specific top-level commands.</p>
+          <div class="code-frame">
+            <div class="code-head"><span>grammar</span></div>
+            <pre>arcthis &lt;command&gt; &lt;archive&gt; [entry] [options]</pre>
+          </div>
+          <p style="margin-top:16px;">The default workflow is <strong style="color:var(--text-primary);font-weight:550;">access before extraction</strong>: <code>inspect</code> → <code>tree</code>/<code>list</code> → <code>stat</code>/<code>read</code> → <code>extract</code> only what you actually need. Full extraction is always an explicit operation.</p>
+        </section>
+
+        <!-- output -->
+        <section class="doc-block" id="output">
+          <h2>Output rules<a class="anchor" href="#output" aria-hidden="true">#</a></h2>
+          <p class="lead">Strict output separation makes Arcthis safe to drive from scripts and agents.</p>
+          <ul class="fact-list">
+            <li><strong>stdout</strong> carries result data only. <strong>stderr</strong> carries diagnostics, warnings and progress.</li>
+            <li><code>--json</code> makes supported commands emit machine-readable JSON; <code>read</code> always prints raw file contents and rejects <code>--json</code>.</li>
+            <li>JSON output and output not attached to a terminal contain no color or styling. <code>--no-color</code> and <code>NO_COLOR</code> disable color in a terminal.</li>
+            <li>If the program on the other end of a pipe quits early (like <code>| head</code>), that counts as success — <code>arcthis read a.zip big.bin | head</code> exits 0.</li>
+            <li>Non-UTF-8 filenames are flagged explicitly through <code>path_encoding</code>; extraction refuses these escaped paths, so files never come out with the wrong name.</li>
+          </ul>
+        </section>
+
+        <!-- options -->
+        <section class="doc-block" id="options">
+          <h2>Global options<a class="anchor" href="#options" aria-hidden="true">#</a></h2>
+          <p class="lead">Accepted before the subcommand, from <code>arcthis --help</code>.</p>
+          <div class="table-frame">
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr><th>Option</th><th>Default</th><th>Meaning</th></tr></thead>
+                <tbody>
+                  <tr><td>--json</td><td>off</td><td>Emit stable machine-readable JSON where supported</td></tr>
+                  <tr><td>--no-color</td><td>off</td><td>Disable terminal color decoration</td></tr>
+                  <tr><td>--within &lt;entry&gt;</td><td>—</td><td>Step into an archive inside the archive; repeat to go deeper (up to 8 levels)</td></tr>
+                  <tr><td>--max-nested-entry-size &lt;bytes&gt;</td><td class="num">268435456</td><td>Maximum memory (bytes) a single file inside a nested archive may use</td></tr>
+                  <tr><td>--password-file &lt;path&gt;</td><td>—</td><td>Read the archive password from this file (trailing newlines are removed). Passwords are never passed on the command line</td></tr>
+                  <tr><td>--volume &lt;path&gt;</td><td>—</td><td>Add one part of a multi-volume archive; repeat in exact volume order</td></tr>
+                  <tr><td>--index-directory &lt;path&gt;</td><td>platform cache</td><td>Change where index files are stored (defaults to the system cache directory)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- commands -->
+        <section class="doc-block" id="commands">
+          <h2>Commands<a class="anchor" href="#commands" aria-hidden="true">#</a></h2>
+          <p class="lead">Signatures match the real CLI; descriptions come from <code>arcthis --help</code>.</p>
+
+          <div class="cmd" id="cmd-inspect">
+            <div class="cmd-head"><span class="cmd-name">inspect</span><span class="cmd-sig">arcthis inspect &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>Show an archive's basic info, capabilities and risk warnings: file counts, sizes, compression ratio, and capability flags such as <code>random_access</code> (can jump to any file), <code>solid</code> (compressed as one block) and <code>encrypted</code> — enough for an agent to estimate what an operation will cost before running it.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-list">
+            <div class="cmd-head"><span class="cmd-name">list</span><span class="cmd-sig">arcthis list &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>List the archive's files in their original order, keeping duplicates. JSON output adds a full <code>entries</code> array.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-tree">
+            <div class="cmd-head"><span class="cmd-name">tree</span><span class="cmd-sig">arcthis tree &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>Display the archive's contents as a file tree. JSON output is a nested <code>tree</code> array; directories that only exist as part of a path carry <code>entry: null</code>.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-stat">
+            <div class="cmd-head"><span class="cmd-name">stat</span><span class="cmd-sig">arcthis stat &lt;archive&gt; &lt;entry&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>Show details for one file: kind, size, compressed size, modification time, encryption, CRC-32 and a file-type guess based on its extension. A missing path returns <code>entry_not_found</code>; a duplicate path returns <code>collision</code> because it's ambiguous which one you mean.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-read">
+            <div class="cmd-head"><span class="cmd-name">read</span><span class="cmd-sig">arcthis read &lt;archive&gt; &lt;entry&gt;</span></div>
+            <div class="cmd-body">
+              <p>Print one file from the archive straight to stdout, without writing it to disk — so archive contents pipe directly into the tools you already use:</p>
+              <p class="flags"><b>arcthis read source.zip src/lib.rs | rg unsafe</b>&nbsp;&nbsp;·&nbsp;&nbsp;<b>arcthis read media.zip video.mp4 | ffprobe -i pipe:0</b></p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-find">
+            <div class="cmd-head"><span class="cmd-name">find</span><span class="cmd-sig">arcthis find &lt;archive&gt; --glob &lt;pattern&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>Find files whose paths match a wildcard pattern. Only full paths are matched; file contents are never read.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-grep">
+            <div class="cmd-head"><span class="cmd-name">grep</span><span class="cmd-sig">arcthis grep &lt;archive&gt; &lt;literal&gt; [--glob &lt;pattern&gt;] [--json]</span></div>
+            <div class="cmd-body">
+              <p>Search file contents without extracting them. Matches literal text (no regular expressions), entirely in memory, with caps: 16 MiB per file, 10,000 matches, 1 MiB per retained line. Binary files are skipped unless you pass <code>--binary</code>.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-hash">
+            <div class="cmd-head"><span class="cmd-name">hash</span><span class="cmd-sig">arcthis hash &lt;archive&gt; &lt;entry&gt; [--algorithm sha256|sha512]</span></div>
+            <div class="cmd-body">
+              <p>Compute a file's checksum. SHA-256 is the default; SHA-512 is also supported. The result is lowercase hexadecimal.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-index">
+            <div class="cmd-head"><span class="cmd-name">index</span><span class="cmd-sig">arcthis index &lt;archive&gt; [--refresh|--delete] [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>Create, refresh, inspect or delete a persistent index of the archive's file list, speeding up later queries. Indexes are only a cache: if the archive's size or modification time changes, the index is discarded.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-extract">
+            <div class="cmd-head"><span class="cmd-name">extract</span><span class="cmd-sig">arcthis extract &lt;archive&gt; [entry] [--output &lt;path&gt;] [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>Safely extract everything or one selected file. The full file list is checked first; output is written to a temporary location next to the destination and saved only after every file succeeds. Related flags: <code>--dry-run</code>, <code>--delete-source</code>, and exactly one of <code>--overwrite</code> / <code>--skip-existing</code> / <code>--rename</code>.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-extract-all">
+            <div class="cmd-head"><span class="cmd-name">extract-all</span><span class="cmd-sig">arcthis extract-all &lt;directory&gt; [--recursive] [--workers &lt;n&gt;]</span></div>
+            <div class="cmd-body">
+              <p>Safely extract every supported archive found in a directory. Archives are processed in parallel with a concurrency cap, results come out in a fixed order, and <code>--dry-run</code> returns one structured plan per archive found.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-pack">
+            <div class="cmd-head"><span class="cmd-name">pack</span><span class="cmd-sig">arcthis pack &lt;source&gt; --output &lt;archive&gt; [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>Pack files or a directory into an archive, then verify it. A temporary archive is built next to the destination, reopened and checked file by file, and only then saved as the final result. An output path inside the source directory, or one that points at the same file as the source, is rejected.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-verify">
+            <div class="cmd-head"><span class="cmd-name">verify</span><span class="cmd-sig">arcthis verify &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>Read the archive start to finish once, verifying its structure and every readable file's data. JSON output adds a <code>verification</code> object with <code>verified</code>, <code>entries_checked</code> and <code>bytes_checked</code>.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-convert">
+            <div class="cmd-head"><span class="cmd-name">convert</span><span class="cmd-sig">arcthis convert &lt;archive&gt; --output &lt;archive&gt; [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>Convert an archive to another format: extract safely to a temporary location, then pack and verify. File paths are preserved, resource and path safety checks run before anything is written to disk, and the new archive is verified and saved before <code>--delete-source</code> can remove the original.</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-mcp">
+            <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
+            <div class="cmd-body">
+              <p>Serve a local MCP (Model Context Protocol) server over stdio, with bounded resource use (enabled at build time, protocol revision <code>2025-06-18</code>). Nine read-only tools are always available; the six extract/pack/convert plan-and-execute tools appear only after you explicitly grant an output directory. Source deletion requires both <code>--allow-source-deletion</code> and <code>delete_source: true</code>.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- json -->
+        <section class="doc-block" id="json">
+          <h2>JSON &amp; errors<a class="anchor" href="#json" aria-hidden="true">#</a></h2>
+          <p class="lead">Every successful structured response is one JSON document followed by a newline. Command-specific fields extend a shared base structure.</p>
+          <div class="code-frame" style="margin-bottom:24px;">
+            <div class="code-head"><span>base structure + entry object</span></div>
+            <pre><span class="p">{</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"archive"</span><span class="p">:</span> <span class="p">{</span> <span class="s">"path"</span><span class="p">:</span> <span class="s">"dataset.zip"</span><span class="p">,</span> <span class="s">"path_lossy"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span> <span class="s">"format"</span><span class="p">:</span> <span class="s">"zip"</span> <span class="p">},</span>
+  <span class="s">"entry"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s">"archive_index"</span><span class="p">:</span> <span class="n">42</span><span class="p">,</span>        <span class="c">// fixed order within the archive</span>
+    <span class="s">"path"</span><span class="p">:</span> <span class="s">"train/data.csv"</span><span class="p">,</span>
+    <span class="s">"path_encoding"</span><span class="p">:</span> <span class="s">"utf8"</span><span class="p">,</span>   <span class="c">// or "escaped_bytes" (%XX)</span>
+    <span class="s">"kind"</span><span class="p">:</span> <span class="s">"file"</span><span class="p">,</span>
+    <span class="s">"size"</span><span class="p">:</span> <span class="n">1048576</span><span class="p">,</span>
+    <span class="s">"compressed_size"</span><span class="p">:</span> <span class="n">182341</span><span class="p">,</span>
+    <span class="s">"modified_time"</span><span class="p">:</span> <span class="s">"2026-08-27T12:00:00Z"</span><span class="p">,</span>
+    <span class="s">"encrypted"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span>
+    <span class="s">"crc32"</span><span class="p">:</span> <span class="s">"c0ffee00"</span><span class="p">,</span>
+    <span class="s">"mime_guess"</span><span class="p">:</span> <span class="s">"text/csv"</span>   <span class="c">// extension-based, never reads content</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+          </div>
+          <p>With <code>--json</code>, command errors are JSON on stderr and stdout stays empty:</p>
+          <div class="code-frame" style="margin-bottom:24px;">
+            <div class="code-head"><span>machine error — stderr</span></div>
+            <pre><span class="p">{</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"error"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s">"code"</span><span class="p">:</span> <span class="s">"entry_not_found"</span><span class="p">,</span>
+    <span class="s">"message"</span><span class="p">:</span> <span class="s">"archive entry was not found"</span><span class="p">,</span>
+    <span class="s">"details"</span><span class="p">:</span> <span class="p">{</span> <span class="s">"entry"</span><span class="p">:</span> <span class="s">"README.md"</span> <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+          </div>
+          <p>Stable error categories:</p>
+          <div class="chip-row">
+            <span class="chip">unsupported_format</span>
+            <span class="chip">invalid_archive</span>
+            <span class="chip">corrupted_archive</span>
+            <span class="chip">entry_not_found</span>
+            <span class="chip">permission_denied</span>
+            <span class="chip">unsafe_path</span>
+            <span class="chip">resource_limit</span>
+            <span class="chip">password_required</span>
+            <span class="chip">wrong_password</span>
+            <span class="chip">collision</span>
+            <span class="chip">unsupported_operation</span>
+            <span class="chip">verification_failed</span>
+            <span class="chip">partial_failure</span>
+            <span class="chip">io_error</span>
+          </div>
+        </section>
+
+        <!-- exit codes -->
+        <section class="doc-block" id="exit-codes">
+          <h2>Exit codes<a class="anchor" href="#exit-codes" aria-hidden="true">#</a></h2>
+          <p class="lead">Each error category maps to a fixed exit code.</p>
+          <div class="table-frame">
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr><th>Exit</th><th>Category</th></tr></thead>
+                <tbody>
+                  <tr><td>0</td><td>Success, including BrokenPipe consumer stop</td></tr>
+                  <tr><td>1</td><td>General I/O error</td></tr>
+                  <tr><td>2</td><td>Command-line syntax or usage error</td></tr>
+                  <tr><td>3</td><td><span class="mono">unsupported_format</span></td></tr>
+                  <tr><td>4</td><td><span class="mono">invalid_archive</span> or <span class="mono">corrupted_archive</span></td></tr>
+                  <tr><td>5</td><td><span class="mono">entry_not_found</span></td></tr>
+                  <tr><td>6</td><td><span class="mono">permission_denied</span></td></tr>
+                  <tr><td>7</td><td><span class="mono">unsafe_path</span></td></tr>
+                  <tr><td>8</td><td><span class="mono">resource_limit</span></td></tr>
+                  <tr><td>9</td><td><span class="mono">collision</span></td></tr>
+                  <tr><td>10</td><td><span class="mono">unsupported_operation</span>, password categories</td></tr>
+                  <tr><td>11</td><td><span class="mono">verification_failed</span></td></tr>
+                  <tr><td>12</td><td><span class="mono">partial_failure</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- limits -->
+        <section class="doc-block" id="limits">
+          <h2>Resource limits<a class="anchor" href="#limits" aria-hidden="true">#</a></h2>
+          <p class="lead">Limits are enforced while actually writing and decompressing — not just as warnings when you look inside.</p>
+          <div class="table-frame">
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr><th>Option</th><th>Default</th></tr></thead>
+                <tbody>
+                  <tr><td>--max-entries</td><td class="num">100,000</td></tr>
+                  <tr><td>--max-total-size</td><td class="num">16 GiB</td></tr>
+                  <tr><td>--max-entry-size</td><td class="num">4 GiB</td></tr>
+                  <tr><td>--max-compression-ratio</td><td>Disabled unless specified</td></tr>
+                  <tr><td>--max-entry-duration-seconds</td><td>Disabled unless specified</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- safety -->
+        <section class="doc-block" id="safety">
+          <h2>Safety defaults<a class="anchor" href="#safety" aria-hidden="true">#</a></h2>
+          <p class="lead">The short version; exact guarantees and known limits live in <a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">docs/SECURITY.md</a>.</p>
+          <ul class="fact-list">
+            <li><strong>Path checks.</strong> One unified check rejects <code>..</code>, absolute paths, Windows drive/UNC prefixes, NUL bytes, and links that could escape the destination.</li>
+            <li><strong>No automatic links or special files.</strong> Symlinks, hardlinks and special files are not restored by default.</li>
+            <li><strong>All-or-nothing writes.</strong> Output is staged in a temporary location and saved only when complete; pack reopens and verifies the new archive before it appears where you asked.</li>
+            <li><strong>Overlap checks.</strong> Operations that delete or overwrite first verify the source and destination aren't the same file and don't contain each other.</li>
+            <li><strong>Delete-source last.</strong> <code>--delete-source</code> runs only after the new files are written, verified and saved; errors, interruptions and failed checks keep the source. Dry-runs never write or delete.</li>
+            <li><strong>No passwords on the command line.</strong> Passwords come from <code>--password-file</code> only and are hidden from debug output.</li>
+          </ul>
+        </section>
+
+        <!-- planned -->
+        <section class="doc-block" id="planned">
+          <h2>Planned<a class="anchor" href="#planned" aria-hidden="true">#</a></h2>
+          <p class="lead">These are not implemented in v0.5.0 — listed here so agents never have to guess. Each one ships only after it has matching code, JSON output, tests and documentation. See <a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">ROADMAP.md</a>.</p>
+          <div class="chip-row">
+            <span class="chip">preview <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">recursive cross-archive search <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">native RAR multi-volume archives <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">interactive passwords / secret managers <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">remote archives <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">crates.io package + prebuilt binaries <span style="color:var(--warn);">· planned</span></span>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="/en/" aria-label="Arcthis home">
+            <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" style="width:26px;height:26px;">
+              <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+              <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+              <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+            </svg>
+            Arcthis
+          </a>
+          <p>An agent-native CLI for accessing and manipulating compressed files.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="/en/download.html">Download</a></li>
+            <li><a href="/en/docs.html">Documentation</a></li>
+            <li><a href="/en/#formats">Supported formats</a></li>
+            <li><a href="/en/#mcp">MCP frontend</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">Roadmap</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">Security model</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/CONTRIBUTING.md" rel="noopener">Contributing</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Design</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0001-NESTED-ARCHIVES.md" rel="noopener">RFC 0001 — Nested archives</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0002-MULTIPART-SOURCES.md" rel="noopener">RFC 0002 — Multipart sources</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0003-MCP-INTEGRATION.md" rel="noopener">RFC 0003 — MCP integration</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/LICENSE" rel="noopener">MIT License</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Arcthis v0.5.0</span>
+        <span class="sep">·</span>
+        <span>MIT</span>
+        <span class="sep">·</span>
+        <span>schema_version "1"</span>
+        <span class="push">macOS + Linux</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="/assets/main.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文档 — Arcthis</title>
+  <meta name="description" content="Arcthis 命令行用法说明:命令、JSON 格式、错误码、退出码、资源限制与安全默认值。">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="alternate" hreflang="zh-CN" href="https://arcthis.mkynstudio.top/docs.html">
+  <link rel="alternate" hreflang="en" href="https://arcthis.mkynstudio.top/en/docs.html">
+  <script>
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('arcthis-theme') || 'system'; } catch (e) {}
+      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = pref === 'system' ? (dark ? 'dark' : 'light') : pref;
+    })();
+  </script>
+  <script>
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem('arcthis-lang'); } catch (e) {}
+      if (pref) return;
+      var nav = (navigator.language || '').toLowerCase();
+      if (nav && nav.indexOf('zh') !== 0) {
+        location.replace('/en/docs.html' + location.search + location.hash);
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <span id="copy-live" aria-live="polite" style="position:absolute;left:-9999px;"></span>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/" aria-label="Arcthis 首页">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+          <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+          <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+        </svg>
+        Arcthis
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="/docs.html" aria-current="page">文档</a>
+        <a href="/download.html">下载</a>
+        <a href="/#formats">格式</a>
+        <a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a>
+      </nav>
+      <div class="nav-right">
+        <a class="lang-switch" href="/en/docs.html" data-lang="en" hreflang="en" aria-label="Switch to English">EN</a>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Theme: system" title="主题">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.2"/>
+            <path d="M8 2.8v10.4" />
+            <path d="M8 2.8a5.2 5.2 0 0 1 0 10.4z" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <a class="btn btn-primary btn-sm" href="/download.html">下载</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <div class="wrap">
+        <p class="eyebrow">文档 <span class="sep">·</span> v0.5.0 <span class="sep">·</span> schema_version "1"</p>
+        <h1 class="page-title">CLI 用法说明, <span class="tone-2">以已实现的为准。</span></h1>
+        <p class="page-sub">本页描述的都是 Arcthis 0.5.0 已实现、已测试的行为。还在规划中的功能会标记 <span class="pill planned">planned</span>。完整长篇指南是仓库里的 <a href="https://github.com/mkynyd/arcthis/blob/main/START.zh-CN.md" rel="noopener">START.zh-CN.md</a>。</p>
+      </div>
+    </section>
+
+    <div class="wrap docs-layout">
+      <aside class="docs-side" aria-label="文档章节">
+        <div class="side-group">
+          <h5>开始</h5>
+          <a href="#grammar">命令语法</a>
+          <a href="#output">输出契约</a>
+          <a href="#options">全局选项</a>
+        </div>
+        <div class="side-group">
+          <h5>命令</h5>
+          <a class="mono" href="#cmd-inspect">inspect</a>
+          <a class="mono" href="#cmd-list">list</a>
+          <a class="mono" href="#cmd-tree">tree</a>
+          <a class="mono" href="#cmd-stat">stat</a>
+          <a class="mono" href="#cmd-read">read</a>
+          <a class="mono" href="#cmd-find">find</a>
+          <a class="mono" href="#cmd-grep">grep</a>
+          <a class="mono" href="#cmd-hash">hash</a>
+          <a class="mono" href="#cmd-index">index</a>
+          <a class="mono" href="#cmd-extract">extract</a>
+          <a class="mono" href="#cmd-extract-all">extract-all</a>
+          <a class="mono" href="#cmd-pack">pack</a>
+          <a class="mono" href="#cmd-verify">verify</a>
+          <a class="mono" href="#cmd-convert">convert</a>
+          <a class="mono" href="#cmd-mcp">mcp</a>
+        </div>
+        <div class="side-group">
+          <h5>参考</h5>
+          <a href="#json">JSON 与错误</a>
+          <a href="#exit-codes">退出码</a>
+          <a href="#limits">资源限制</a>
+          <a href="#safety">安全默认值</a>
+          <a href="#planned">Planned</a>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+
+        <!-- grammar -->
+        <section class="doc-block" id="grammar">
+          <h2>命令语法<a class="anchor" href="#grammar" aria-hidden="true">#</a></h2>
+          <p class="lead">一套与格式无关的语法。没有 ZIP 专属或 TAR 专属的一级命令。</p>
+          <div class="code-frame">
+            <div class="code-head"><span>grammar</span></div>
+            <pre>arcthis &lt;command&gt; &lt;archive&gt; [entry] [options]</pre>
+          </div>
+          <p style="margin-top:16px;">默认工作流是<strong style="color:var(--text-primary);font-weight:550;">先访问,再解压</strong>:<code>inspect</code> → <code>tree</code>/<code>list</code> → <code>stat</code>/<code>read</code> → 只 <code>extract</code> 真正需要的内容。完整解压始终是显式操作。</p>
+        </section>
+
+        <!-- output -->
+        <section class="doc-block" id="output">
+          <h2>输出规则<a class="anchor" href="#output" aria-hidden="true">#</a></h2>
+          <p class="lead">两种输出严格分开,让脚本和 AI Agent 可以安全地调用 Arcthis。</p>
+          <ul class="fact-list">
+            <li><strong>stdout</strong> 只承载结果数据;<strong>stderr</strong> 承载诊断、警告与进度。</li>
+            <li><code>--json</code> 让支持的命令输出给程序读取的 JSON;<code>read</code> 始终输出原始文件内容,并且拒绝 <code>--json</code>。</li>
+            <li>JSON 输出和不接终端时的输出都不含颜色等终端装饰。在终端里可以用 <code>--no-color</code> 或 <code>NO_COLOR</code> 关闭颜色。</li>
+            <li>管道另一端的程序提前退出(比如 <code>| head</code>)不算错误 —— <code>arcthis read a.zip big.bin | head</code> 的退出码为 0。</li>
+            <li>非 UTF-8 的文件名会通过 <code>path_encoding</code> 字段如实标出;解压时会拒绝这类转义路径,避免写出文件名错误的文件。</li>
+          </ul>
+        </section>
+
+        <!-- options -->
+        <section class="doc-block" id="options">
+          <h2>全局选项<a class="anchor" href="#options" aria-hidden="true">#</a></h2>
+          <p class="lead">放在子命令之前,出自 <code>arcthis --help</code>。</p>
+          <div class="table-frame">
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr><th>选项</th><th>默认值</th><th>含义</th></tr></thead>
+                <tbody>
+                  <tr><td>--json</td><td>关</td><td>在支持的命令上输出稳定的机器可读 JSON</td></tr>
+                  <tr><td>--no-color</td><td>关</td><td>禁用终端颜色装饰</td></tr>
+                  <tr><td>--within &lt;entry&gt;</td><td>—</td><td>进入压缩包内的某个压缩包;可重复使用以逐层深入(最多 8 层)</td></tr>
+                  <tr><td>--max-nested-entry-size &lt;bytes&gt;</td><td class="num">268435456</td><td>嵌套压缩包中单个文件允许占用的最大内存(字节)</td></tr>
+                  <tr><td>--password-file &lt;path&gt;</td><td>—</td><td>从文件读取压缩包密码(自动去掉行尾换行);密码绝不直接写在命令行里</td></tr>
+                  <tr><td>--volume &lt;path&gt;</td><td>—</td><td>添加一个分卷压缩包文件;需按分卷顺序逐个添加</td></tr>
+                  <tr><td>--index-directory &lt;path&gt;</td><td>平台缓存目录</td><td>更改索引文件的存放位置(默认用系统缓存目录)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- commands -->
+        <section class="doc-block" id="commands">
+          <h2>命令<a class="anchor" href="#commands" aria-hidden="true">#</a></h2>
+          <p class="lead">命令签名来自实际 CLI,说明来自 <code>arcthis --help</code>。</p>
+
+          <div class="cmd" id="cmd-inspect">
+            <div class="cmd-head"><span class="cmd-name">inspect</span><span class="cmd-sig">arcthis inspect &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>展示压缩包的基本信息、能力和风险提示:文件数量、大小、压缩率,以及 <code>random_access</code>(能否随机读取)、<code>solid</code>(是否整体压缩)、<code>encrypted</code>(是否加密)等能力标记 —— 足以让 Agent 在执行前估算一次操作要付出的代价。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-list">
+            <div class="cmd-head"><span class="cmd-name">list</span><span class="cmd-sig">arcthis list &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>按压缩包内的原始顺序列出所有文件,重名也保留。JSON 输出会附带完整的 <code>entries</code> 数组。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-tree">
+            <div class="cmd-head"><span class="cmd-name">tree</span><span class="cmd-sig">arcthis tree &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>以文件树的形式展示压缩包内容。JSON 输出为嵌套的 <code>tree</code> 数组;只在路径中出现、没有实际条目的目录,<code>entry</code> 为 <code>null</code>。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-stat">
+            <div class="cmd-head"><span class="cmd-name">stat</span><span class="cmd-sig">arcthis stat &lt;archive&gt; &lt;entry&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>展示单个文件的详细信息:类型、大小、压缩后大小、修改时间、是否加密、CRC-32,以及按扩展名推测的文件类型。路径不存在返回 <code>entry_not_found</code>;路径重复返回 <code>collision</code>,因为无法确定你指的是哪一个。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-read">
+            <div class="cmd-head"><span class="cmd-name">read</span><span class="cmd-sig">arcthis read &lt;archive&gt; &lt;entry&gt;</span></div>
+            <div class="cmd-body">
+              <p>把压缩包里的一个文件直接输出到 stdout,不在磁盘上解压。这让压缩包内容可以直接接进你已有的工具:</p>
+              <p class="flags"><b>arcthis read source.zip src/lib.rs | rg unsafe</b>&nbsp;&nbsp;·&nbsp;&nbsp;<b>arcthis read media.zip video.mp4 | ffprobe -i pipe:0</b></p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-find">
+            <div class="cmd-head"><span class="cmd-name">find</span><span class="cmd-sig">arcthis find &lt;archive&gt; --glob &lt;pattern&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>按通配符查找路径匹配的文件。只对完整路径做匹配,完全不读取文件内容。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-grep">
+            <div class="cmd-head"><span class="cmd-name">grep</span><span class="cmd-sig">arcthis grep &lt;archive&gt; &lt;literal&gt; [--glob &lt;pattern&gt;] [--json]</span></div>
+            <div class="cmd-body">
+              <p>不解压直接搜索文件内容。只按字面文字匹配(不支持正则表达式),全程在内存中执行并有限额:单个文件 16 MiB、最多 10,000 条匹配、单行最长保留 1 MiB;默认跳过二进制文件,除非加上 <code>--binary</code>。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-hash">
+            <div class="cmd-head"><span class="cmd-name">hash</span><span class="cmd-sig">arcthis hash &lt;archive&gt; &lt;entry&gt; [--algorithm sha256|sha512]</span></div>
+            <div class="cmd-body">
+              <p>计算单个文件的校验值,默认 SHA-256,也支持 SHA-512。结果是小写十六进制。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-index">
+            <div class="cmd-head"><span class="cmd-name">index</span><span class="cmd-sig">arcthis index &lt;archive&gt; [--refresh|--delete] [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>为压缩包创建、刷新、查看或删除一个持久的文件清单索引,加快后续查询。索引只当作缓存:源文件的大小或修改时间一变,索引即失效。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-extract">
+            <div class="cmd-head"><span class="cmd-name">extract</span><span class="cmd-sig">arcthis extract &lt;archive&gt; [entry] [--output &lt;path&gt;] [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>安全地解压全部内容或指定的单个文件。先完整检查一遍文件清单;解压结果先写到旁边的临时位置,全部成功后才正式保存。相关选项:<code>--dry-run</code>、<code>--delete-source</code>,以及 <code>--overwrite</code> / <code>--skip-existing</code> / <code>--rename</code> 三选一。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-extract-all">
+            <div class="cmd-head"><span class="cmd-name">extract-all</span><span class="cmd-sig">arcthis extract-all &lt;directory&gt; [--recursive] [--workers &lt;n&gt;]</span></div>
+            <div class="cmd-body">
+              <p>安全地解压目录中找到的每一个受支持的压缩包。多个压缩包并行处理且数量有上限,结果按固定顺序输出;<code>--dry-run</code> 会为找到的每个压缩包给出一份结构化计划。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-pack">
+            <div class="cmd-head"><span class="cmd-name">pack</span><span class="cmd-sig">arcthis pack &lt;source&gt; --output &lt;archive&gt; [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>把文件或目录打包成压缩包并验证。先在旁边生成临时文件,再重新打开逐个校验内容,全部通过后才保存为正式结果。输出路径位于被压缩的目录内部、或与源是同一个文件,都会被拒绝。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-verify">
+            <div class="cmd-head"><span class="cmd-name">verify</span><span class="cmd-sig">arcthis verify &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-body">
+              <p>从头到尾完整读一遍,校验压缩包结构和每个可读文件的数据。JSON 输出会附带含 <code>verified</code>、<code>entries_checked</code>、<code>bytes_checked</code> 的 <code>verification</code> 对象。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-convert">
+            <div class="cmd-head"><span class="cmd-name">convert</span><span class="cmd-sig">arcthis convert &lt;archive&gt; --output &lt;archive&gt; [--dry-run]</span></div>
+            <div class="cmd-body">
+              <p>把压缩包转换成另一种格式:先安全地解压到临时位置,再打包并校验。文件路径保持不变;写入磁盘前先完成资源与路径安全检查;新压缩包验证通过并正式保存后,<code>--delete-source</code> 才可能删除原文件。</p>
+            </div>
+          </div>
+
+          <div class="cmd" id="cmd-mcp">
+            <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
+            <div class="cmd-body">
+              <p>通过 stdio 提供本地 MCP(Model Context Protocol)服务,需编译时显式开启,协议版本固定 <code>2025-06-18</code>,资源占用有上限。九个只读工具始终可用;extract/pack/convert 的六个先出计划、再执行的工具只在明确授权输出目录后才会出现。删除源文件需要 <code>--allow-source-deletion</code> 和请求中的 <code>delete_source: true</code> 双重确认。</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- json -->
+        <section class="doc-block" id="json">
+          <h2>JSON 与错误<a class="anchor" href="#json" aria-hidden="true">#</a></h2>
+          <p class="lead">每个成功的结构化响应都是一份 JSON 文档加一个换行。各命令特有的字段会加在共享的基本结构上。</p>
+          <div class="code-frame" style="margin-bottom:24px;">
+            <div class="code-head"><span>基本结构 + 文件对象</span></div>
+            <pre><span class="p">{</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"archive"</span><span class="p">:</span> <span class="p">{</span> <span class="s">"path"</span><span class="p">:</span> <span class="s">"dataset.zip"</span><span class="p">,</span> <span class="s">"path_lossy"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span> <span class="s">"format"</span><span class="p">:</span> <span class="s">"zip"</span> <span class="p">},</span>
+  <span class="s">"entry"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s">"archive_index"</span><span class="p">:</span> <span class="n">42</span><span class="p">,</span>        <span class="c">// 在压缩包内的固定顺序</span>
+    <span class="s">"path"</span><span class="p">:</span> <span class="s">"train/data.csv"</span><span class="p">,</span>
+    <span class="s">"path_encoding"</span><span class="p">:</span> <span class="s">"utf8"</span><span class="p">,</span>   <span class="c">// 或 "escaped_bytes"(%XX)</span>
+    <span class="s">"kind"</span><span class="p">:</span> <span class="s">"file"</span><span class="p">,</span>
+    <span class="s">"size"</span><span class="p">:</span> <span class="n">1048576</span><span class="p">,</span>
+    <span class="s">"compressed_size"</span><span class="p">:</span> <span class="n">182341</span><span class="p">,</span>
+    <span class="s">"modified_time"</span><span class="p">:</span> <span class="s">"2026-08-27T12:00:00Z"</span><span class="p">,</span>
+    <span class="s">"encrypted"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span>
+    <span class="s">"crc32"</span><span class="p">:</span> <span class="s">"c0ffee00"</span><span class="p">,</span>
+    <span class="s">"mime_guess"</span><span class="p">:</span> <span class="s">"text/csv"</span>   <span class="c">// 基于扩展名,绝不读取内容</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+          </div>
+          <p>使用 <code>--json</code> 时,命令错误以 JSON 写入 stderr,stdout 保持为空:</p>
+          <div class="code-frame" style="margin-bottom:24px;">
+            <div class="code-head"><span>机器错误 — stderr</span></div>
+            <pre><span class="p">{</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"error"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s">"code"</span><span class="p">:</span> <span class="s">"entry_not_found"</span><span class="p">,</span>
+    <span class="s">"message"</span><span class="p">:</span> <span class="s">"archive entry was not found"</span><span class="p">,</span>
+    <span class="s">"details"</span><span class="p">:</span> <span class="p">{</span> <span class="s">"entry"</span><span class="p">:</span> <span class="s">"README.md"</span> <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+          </div>
+          <p>稳定错误类别:</p>
+          <div class="chip-row">
+            <span class="chip">unsupported_format</span>
+            <span class="chip">invalid_archive</span>
+            <span class="chip">corrupted_archive</span>
+            <span class="chip">entry_not_found</span>
+            <span class="chip">permission_denied</span>
+            <span class="chip">unsafe_path</span>
+            <span class="chip">resource_limit</span>
+            <span class="chip">password_required</span>
+            <span class="chip">wrong_password</span>
+            <span class="chip">collision</span>
+            <span class="chip">unsupported_operation</span>
+            <span class="chip">verification_failed</span>
+            <span class="chip">partial_failure</span>
+            <span class="chip">io_error</span>
+          </div>
+        </section>
+
+        <!-- exit codes -->
+        <section class="doc-block" id="exit-codes">
+          <h2>退出码<a class="anchor" href="#exit-codes" aria-hidden="true">#</a></h2>
+          <p class="lead">每种错误类别对应一个固定的退出码。</p>
+          <div class="table-frame">
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr><th>退出码</th><th>类别</th></tr></thead>
+                <tbody>
+                  <tr><td>0</td><td>成功,包括 BrokenPipe 消费方停止</td></tr>
+                  <tr><td>1</td><td>一般 I/O 错误</td></tr>
+                  <tr><td>2</td><td>命令行语法或用法错误</td></tr>
+                  <tr><td>3</td><td><span class="mono">unsupported_format</span></td></tr>
+                  <tr><td>4</td><td><span class="mono">invalid_archive</span> 或 <span class="mono">corrupted_archive</span></td></tr>
+                  <tr><td>5</td><td><span class="mono">entry_not_found</span></td></tr>
+                  <tr><td>6</td><td><span class="mono">permission_denied</span></td></tr>
+                  <tr><td>7</td><td><span class="mono">unsafe_path</span></td></tr>
+                  <tr><td>8</td><td><span class="mono">resource_limit</span></td></tr>
+                  <tr><td>9</td><td><span class="mono">collision</span></td></tr>
+                  <tr><td>10</td><td><span class="mono">unsupported_operation</span>、密码类错误</td></tr>
+                  <tr><td>11</td><td><span class="mono">verification_failed</span></td></tr>
+                  <tr><td>12</td><td><span class="mono">partial_failure</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- limits -->
+        <section class="doc-block" id="limits">
+          <h2>资源限制<a class="anchor" href="#limits" aria-hidden="true">#</a></h2>
+          <p class="lead">限制在真正写入和解压时强制执行 —— 不只是查看时给个警告。</p>
+          <div class="table-frame">
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr><th>选项</th><th>默认值</th></tr></thead>
+                <tbody>
+                  <tr><td>--max-entries</td><td class="num">100,000</td></tr>
+                  <tr><td>--max-total-size</td><td class="num">16 GiB</td></tr>
+                  <tr><td>--max-entry-size</td><td class="num">4 GiB</td></tr>
+                  <tr><td>--max-compression-ratio</td><td>未指定则不启用</td></tr>
+                  <tr><td>--max-entry-duration-seconds</td><td>未指定则不启用</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- safety -->
+        <section class="doc-block" id="safety">
+          <h2>安全默认值<a class="anchor" href="#safety" aria-hidden="true">#</a></h2>
+          <p class="lead">简短版;精确保证与已知限制见 <a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">docs/SECURITY.md</a>。</p>
+          <ul class="fact-list">
+            <li><strong>路径检查。</strong>统一的检查会拒绝 <code>..</code>、绝对路径、Windows 盘符/UNC 前缀、NUL 字节,以及可能跳出目标目录的链接。</li>
+            <li><strong>不自动恢复链接和特殊文件。</strong>符号链接、硬链接和特殊文件默认不恢复。</li>
+            <li><strong>写入要么完整生效,要么不生效。</strong>先写临时文件再正式保存;pack 会重新打开新压缩包逐个验证,通过后才放到你指定的位置。</li>
+            <li><strong>重叠检查。</strong>涉及删除或覆盖的操作,写入前会检查源和目标是否是同一个文件、是否互相包含,是则拒绝。</li>
+            <li><strong>最后才删源文件。</strong><code>--delete-source</code> 只在新文件写入、验证并正式保存之后才运行;错误、中断和验证失败都会保留源文件。dry-run 不写入也不删除。</li>
+            <li><strong>密码不出现在命令行参数里。</strong>密码只能来自 <code>--password-file</code> 指定的文件,在调试输出中也会被隐藏。</li>
+          </ul>
+        </section>
+
+        <!-- planned -->
+        <section class="doc-block" id="planned">
+          <h2>Planned<a class="anchor" href="#planned" aria-hidden="true">#</a></h2>
+          <p class="lead">以下功能 v0.5.0 还没有实现 —— 列在这里是为了让 Agent 不用猜。每一项都要有配套的代码、JSON 格式、测试和文档之后才会正式提供。详见 <a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">ROADMAP.md</a>。</p>
+          <div class="chip-row">
+            <span class="chip">preview <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">跨压缩包递归搜索 <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">RAR 原生分卷 <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">交互式密码输入 / 密码管理器 <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">远程压缩包 <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">crates.io 安装包与编译好的可执行文件 <span style="color:var(--warn);">· planned</span></span>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="/" aria-label="Arcthis 首页">
+            <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" style="width:26px;height:26px;">
+              <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+              <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+              <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+            </svg>
+            Arcthis
+          </a>
+          <p>面向 AI Agent 与人类的统一压缩文件命令行工具。</p>
+        </div>
+        <div class="footer-col">
+          <h4>产品</h4>
+          <ul>
+            <li><a href="/download.html">下载</a></li>
+            <li><a href="/docs.html">文档</a></li>
+            <li><a href="/#formats">支持的格式</a></li>
+            <li><a href="/#mcp">MCP 前端</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>资源</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">Roadmap</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">安全模型</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/CONTRIBUTING.md" rel="noopener">贡献指南</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>设计</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0001-NESTED-ARCHIVES.md" rel="noopener">RFC 0001 — 嵌套压缩包</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0002-MULTIPART-SOURCES.md" rel="noopener">RFC 0002 — 多卷数据源</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0003-MCP-INTEGRATION.md" rel="noopener">RFC 0003 — MCP 集成</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/LICENSE" rel="noopener">MIT 许可证</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Arcthis v0.5.0</span>
+        <span class="sep">·</span>
+        <span>MIT</span>
+        <span class="sep">·</span>
+        <span>schema_version "1"</span>
+        <span class="push">macOS + Linux</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="/assets/main.js" defer></script>
+</body>
+</html>

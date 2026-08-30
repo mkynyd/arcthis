@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>下载 — Arcthis</title>
+  <meta name="description" content="在 macOS 和 Linux 上从源码构建 Arcthis 0.5.0。">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="alternate" hreflang="zh-CN" href="https://arcthis.mkynstudio.top/download.html">
+  <link rel="alternate" hreflang="en" href="https://arcthis.mkynstudio.top/en/download.html">
+  <script>
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('arcthis-theme') || 'system'; } catch (e) {}
+      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = pref === 'system' ? (dark ? 'dark' : 'light') : pref;
+    })();
+  </script>
+  <script>
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem('arcthis-lang'); } catch (e) {}
+      if (pref) return;
+      var nav = (navigator.language || '').toLowerCase();
+      if (nav && nav.indexOf('zh') !== 0) {
+        location.replace('/en/download.html' + location.search + location.hash);
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <span id="copy-live" aria-live="polite" style="position:absolute;left:-9999px;"></span>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/" aria-label="Arcthis 首页">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+          <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+          <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+        </svg>
+        Arcthis
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="/docs.html">文档</a>
+        <a href="/download.html" aria-current="page">下载</a>
+        <a href="/#formats">格式</a>
+        <a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a>
+      </nav>
+      <div class="nav-right">
+        <a class="lang-switch" href="/en/download.html" data-lang="en" hreflang="en" aria-label="Switch to English">EN</a>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Theme: system" title="主题">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.2"/>
+            <path d="M8 2.8v10.4" />
+            <path d="M8 2.8a5.2 5.2 0 0 1 0 10.4z" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <a class="btn btn-secondary btn-sm" href="/docs.html">阅读文档</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <div class="wrap">
+        <p class="eyebrow">v0.5.0 <span class="sep">·</span> MIT <span class="sep">·</span> 源码构建</p>
+        <h1 class="page-title">下载 Arcthis。</h1>
+        <p class="page-sub">Arcthis 用固定版本的 Rust 工具链从源码编译,依赖版本也已锁定(<code class="mono" style="font-size:13px;">--locked</code>),每次编译结果一致,并在 macOS 和 Linux 上都经过自动化测试。</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:0;">
+      <div class="wrap">
+        <div class="notice reveal">
+          <strong>如实说明:</strong>v0.5.0 还没有 crates.io 安装包,也没有编译好的可执行文件。下面的命令就是目前完整的安装方法,一步不少。
+        </div>
+
+        <ol class="step-list">
+          <li class="step reveal">
+            <span class="step-num" aria-hidden="true"></span>
+            <div>
+              <h3>安装 Rust 与系统依赖</h3>
+              <p>仓库已用 <code>rust-toolchain.toml</code> 固定 <code>Rust 1.98.0</code>,进入项目目录后 <code>rustup</code> 会自动切换。RAR 支持依赖 libarchive,因此编译前需要安装它和相关的解压库。</p>
+              <div class="dl-grid" style="margin-bottom:0;">
+                <div class="code-frame">
+                  <div class="code-head">
+                    <span>macOS — Homebrew</span>
+                    <button class="term-copy" type="button" data-copy="brew install libarchive libb2 bzip2 lz4 xz zstd" data-copy-name="命令" aria-label="复制命令">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                      <span data-copy-label>复制</span>
+                    </button>
+                  </div>
+                  <pre><span class="f">brew install</span> libarchive libb2 bzip2 lz4 xz zstd</pre>
+                </div>
+                <div class="code-frame">
+                  <div class="code-head">
+                    <span>Debian / Ubuntu — apt</span>
+                    <button class="term-copy" type="button" data-copy="sudo apt install libarchive-dev libb2-dev libbz2-dev liblz4-dev liblzma-dev libxml2-dev libzstd-dev zlib1g-dev" data-copy-name="命令" aria-label="复制命令">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                      <span data-copy-label>复制</span>
+                    </button>
+                  </div>
+                  <pre><span class="f">sudo apt install</span> libarchive-dev libb2-dev libbz2-dev \
+  liblz4-dev liblzma-dev libxml2-dev libzstd-dev zlib1g-dev</pre>
+                </div>
+              </div>
+            </div>
+          </li>
+
+          <li class="step reveal">
+            <span class="step-num" aria-hidden="true"></span>
+            <div>
+              <h3>下载源码并编译</h3>
+              <p>编译完成后,程序位于 <code>target/release/arcthis</code>。默认编译只包含命令行工具和库,不包含 MCP 功能。</p>
+              <div class="code-frame">
+                <div class="code-head">
+                  <span>build — sh</span>
+                  <button class="term-copy" type="button" data-copy="git clone https://github.com/mkynyd/arcthis.git &amp;&amp; cd arcthis &amp;&amp; cargo build --release --locked" data-copy-name="构建命令" aria-label="复制构建命令">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                    <span data-copy-label>复制</span>
+                  </button>
+                </div>
+                <pre><span class="f">git clone</span> https://github.com/mkynyd/arcthis.git
+<span class="k">cd</span> arcthis
+<span class="f">cargo build</span> --release --locked
+./target/release/arcthis <span class="f">--help</span></pre>
+              </div>
+            </div>
+          </li>
+
+          <li class="step reveal">
+            <span class="step-num" aria-hidden="true"></span>
+            <div>
+              <h3>把 arcthis 加入 PATH(可选)</h3>
+              <p>装好后 <code>arcthis</code> 会加入 <code>PATH</code>,在任何目录都能直接运行。</p>
+              <div class="code-frame">
+                <div class="code-head">
+                  <span>install — sh</span>
+                  <button class="term-copy" type="button" data-copy="cargo install --path . --locked" data-copy-name="安装命令" aria-label="复制安装命令">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                    <span data-copy-label>复制</span>
+                  </button>
+                </div>
+                <pre><span class="f">cargo install</span> --path . --locked
+arcthis <span class="f">--version</span>
+<span class="c"># arcthis 0.5.0</span></pre>
+              </div>
+            </div>
+          </li>
+
+          <li class="step reveal">
+            <span class="step-num" aria-hidden="true"></span>
+            <div>
+              <h3>可选:MCP 支持</h3>
+              <p>本地 MCP 服务需要编译时显式开启。除非你同时授权输出目录,否则修改类工具不会出现。</p>
+              <div class="code-frame">
+                <div class="code-head">
+                  <span>mcp — sh</span>
+                  <button class="term-copy" type="button" data-copy="cargo build --release --locked --features mcp" data-copy-name="构建命令" aria-label="复制构建命令">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                    <span data-copy-label>复制</span>
+                  </button>
+                </div>
+                <pre><span class="f">cargo build</span> --release --locked --features mcp
+arcthis <span class="f">mcp</span> --allow-root ./archives --allow-output-root ./outputs</pre>
+              </div>
+            </div>
+          </li>
+        </ol>
+
+        <h3 style="font-size:20px;letter-spacing:-0.01em;margin-bottom:16px;">平台支持</h3>
+        <div class="table-frame reveal" style="margin-bottom:48px;">
+          <div class="table-scroll">
+            <table class="data">
+              <thead>
+                <tr><th>平台</th><th>状态</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>macOS</td><td><span class="pill yes">支持</span></td><td>本地测试加 GitHub 自动化测试,包含完整 MCP 功能</td></tr>
+                <tr><td>Linux</td><td><span class="pill yes">支持</span></td><td>本地测试加 GitHub 自动化测试,包含完整 MCP 功能</td></tr>
+                <tr><td>Windows</td><td><span class="pill planned">暂不支持</span></td><td>设计上已避免依赖 Unix 专属功能,但 v0.5 还没有在 Windows 上运行自动化测试</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="notice reveal">
+          <strong>验证你运行的东西。</strong>完整测试套件 <code>cargo test --all-features</code> 和命令行测试数据都随源码一起发布。安全保证和已知限制记录在 <a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">docs/SECURITY.md</a>。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="/" aria-label="Arcthis 首页">
+            <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" style="width:26px;height:26px;">
+              <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+              <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+              <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+            </svg>
+            Arcthis
+          </a>
+          <p>面向 AI Agent 与人类的统一压缩文件命令行工具。</p>
+        </div>
+        <div class="footer-col">
+          <h4>产品</h4>
+          <ul>
+            <li><a href="/download.html">下载</a></li>
+            <li><a href="/docs.html">文档</a></li>
+            <li><a href="/#formats">支持的格式</a></li>
+            <li><a href="/#mcp">MCP 前端</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>资源</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">Roadmap</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">安全模型</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/CONTRIBUTING.md" rel="noopener">贡献指南</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>设计</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0001-NESTED-ARCHIVES.md" rel="noopener">RFC 0001 — 嵌套压缩包</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0002-MULTIPART-SOURCES.md" rel="noopener">RFC 0002 — 多卷数据源</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0003-MCP-INTEGRATION.md" rel="noopener">RFC 0003 — MCP 集成</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/LICENSE" rel="noopener">MIT 许可证</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Arcthis v0.5.0</span>
+        <span class="sep">·</span>
+        <span>MIT</span>
+        <span class="sep">·</span>
+        <span>schema_version "1"</span>
+        <span class="push">macOS + Linux</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="/assets/main.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arcthis — An agent-native CLI for accessing and manipulating compressed files</title>
+  <meta name="description" content="Arcthis is one CLI for AI agents and humans to work with compressed files. Look inside and read what you need before choosing to extract anything.">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="alternate" hreflang="zh-CN" href="https://arcthis.mkynstudio.top/">
+  <link rel="alternate" hreflang="en" href="https://arcthis.mkynstudio.top/en/">
+  <script>
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('arcthis-theme') || 'system'; } catch (e) {}
+      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = pref === 'system' ? (dark ? 'dark' : 'light') : pref;
+    })();
+  </script>
+  <script>
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem('arcthis-lang'); } catch (e) {}
+      if (pref) return;
+      var nav = (navigator.language || '').toLowerCase();
+      if (nav.indexOf('zh') === 0) {
+        location.replace('/' + location.search + location.hash);
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <span id="copy-live" aria-live="polite" style="position:absolute;left:-9999px;"></span>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/en/" aria-label="Arcthis home">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+          <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+          <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+        </svg>
+        Arcthis
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/en/docs.html">Docs</a>
+        <a href="/en/download.html">Download</a>
+        <a href="/en/#formats">Formats</a>
+        <a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a>
+      </nav>
+      <div class="nav-right">
+        <a class="lang-switch" href="/" data-lang="zh" hreflang="zh-CN" aria-label="Switch to Chinese">中文</a>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Theme: system" title="Theme">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.2"/>
+            <path d="M8 2.8v10.4" />
+            <path d="M8 2.8a5.2 5.2 0 0 1 0 10.4z" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <a class="btn btn-primary btn-sm" href="/en/download.html">Download</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ================= hero ================= -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow">v0.5.0 <span class="sep">·</span> MIT <span class="sep">·</span> Rust</p>
+          <h1 class="hero-title">Archives are file trees. <span class="tone-2">Stop extracting to look inside.</span></h1>
+          <p class="hero-sub">One CLI for AI agents and humans to work with compressed files. Look inside, read what you need, then decide whether to extract anything.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/en/download.html">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M8 2.5v8m0 0L4.8 7.3M8 10.5l3.2-3.2M2.5 13.5h11"/>
+              </svg>
+              Download
+            </a>
+            <a class="btn btn-secondary" href="/en/docs.html">
+              Docs
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10"/>
+              </svg>
+            </a>
+          </div>
+          <p class="hero-meta">
+            12 archive formats <span class="sep">·</span> stable JSON output <span class="sep">·</span> tested on macOS + Linux
+          </p>
+        </div>
+
+        <div class="frame reveal">
+          <div class="term">
+            <div class="term-bar">
+              <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="term-title">~/datasets — zsh</span>
+              <button class="term-copy" type="button" data-copy="arcthis inspect dataset.zip" data-copy-name="Command" aria-label="Copy command">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
+                  <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/>
+                </svg>
+                <span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">inspect</span> dataset.zip
+<span class="td">archive:</span> <span class="to">dataset.zip</span>
+<span class="td">format:</span> <span class="to">zip</span>
+<span class="td">compression:</span> <span class="to">mixed</span>
+<span class="td">entries:</span> <span class="to">7</span>
+<span class="td">compressed size:</span> <span class="to">201315</span>
+<span class="td">uncompressed size:</span> <span class="to">200124</span>
+<span class="td">random access:</span> <span class="to">true</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">tree</span> dataset.zip
+<span class="td">dataset.zip</span>
+<span class="td">└── </span><span class="tc">dataset</span>
+<span class="td">    ├── </span><span class="to">README.md</span>
+<span class="td">    ├── </span><span class="tc">docs</span>
+<span class="td">    │   └── </span><span class="to">notes.md</span>
+<span class="td">    └── </span><span class="tc">train</span>
+<span class="td">        ├── </span><span class="to">data.csv</span>
+<span class="td">        └── </span><span class="to">labels.csv</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">read</span> dataset.zip dataset/train/labels.csv
+<span class="to">id,label
+1,cat
+2,dog
+3,bird</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= quickstart ================= -->
+    <section class="section" id="quickstart">
+      <div class="wrap quickstart-grid">
+        <div class="reveal">
+          <span class="section-index">01 — Quickstart</span>
+          <h2 class="section-title">From clone to first inspect <span class="tone-2">in three commands.</span></h2>
+          <p class="quickstart-note">v0.5 currently ships as source only — no crates.io package and no ready-made binaries yet. RAR support needs libarchive; see <a href="/en/download.html">Download</a> for platform dependencies.</p>
+        </div>
+        <div class="frame reveal">
+          <div class="term">
+            <div class="term-bar">
+              <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="term-title">install — zsh</span>
+              <button class="term-copy" type="button" data-copy="git clone https://github.com/mkynyd/arcthis.git &amp;&amp; cd arcthis &amp;&amp; cargo build --release --locked" data-copy-name="Install commands" aria-label="Copy install commands">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
+                  <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/>
+                </svg>
+                <span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">git clone</span> https://github.com/mkynyd/arcthis.git
+<span class="tp">$ </span><span class="tc">cd</span> arcthis
+<span class="tp">$ </span><span class="tc">cargo build</span> <span class="tf">--release --locked</span>
+<span class="tp">$ </span><span class="tc">./target/release/arcthis</span> <span class="tf">--version</span>
+<span class="to">arcthis 0.5.0</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= scroll stack ================= -->
+    <section class="stack-section" id="moves">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <span class="section-index">02 — Signature moves</span>
+            <h2 class="section-title">One command style. <span class="tone-2">Every format. Nothing extracted unless you ask.</span></h2>
+          </div>
+          <p class="section-note">The same <code class="mono" style="font-size:13px;">arcthis &lt;command&gt; &lt;archive&gt; [entry]</code> shape works with ZIP, 7z, RAR, TAR and single-file compression formats. Every session below is real output from Arcthis 0.5.0.</p>
+        </div>
+
+        <div class="stack-inner">
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 01</span>
+              <h3>Find files without decompressing</h3>
+              <p class="stack-desc"><code>find</code> matches paths against the archive's file list using wildcards. File contents are never read, so finding files stays fast even on multi-gigabyte archives.</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">find</span>
+                <button class="term-copy" type="button" data-copy="arcthis find dataset.zip --glob '**/*.csv'" data-copy-name="Command" aria-label="Copy command">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">find</span> dataset.zip <span class="tf">--glob</span> <span class="ts">'**/*.csv'</span>
+<span class="to">dataset/train/labels.csv
+dataset/train/data.csv</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 02</span>
+              <h3>Search contents in place</h3>
+              <p class="stack-desc"><code>grep</code> scans text files directly inside the archive, with caps on file size, lines, matches and binary files. Nothing is written to disk while you search.</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">grep</span>
+                <button class="term-copy" type="button" data-copy="arcthis grep dataset.zip TODO --glob '**/*.md'" data-copy-name="Command" aria-label="Copy command">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">grep</span> dataset.zip TODO <span class="tf">--glob</span> <span class="ts">'**/*.md'</span>
+<span class="to">dataset/docs/notes.md:1:</span><span class="tc">TODO</span><span class="to">: fill in preprocessing notes
+dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><span class="to">: document the schema.</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 03</span>
+              <h3>Verify without extracting</h3>
+              <p class="stack-desc"><code>hash</code> computes a file's SHA-256 or SHA-512 checksum; <code>verify</code> reads the archive start to finish once, checking its structure and every readable file.</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">hash · verify</span>
+                <button class="term-copy" type="button" data-copy="arcthis verify dataset.zip" data-copy-name="Command" aria-label="Copy command">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">hash</span> dataset.zip dataset/train/data.csv
+<span class="to">3307d48518fd5bc59980caee9f4833a1aef4a3ae7f16ef4102a132b719d947c2  dataset/train/data.csv</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">verify</span> dataset.zip
+<span class="tok">verified 7 entries (200124 bytes)</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 04</span>
+              <h3>Rehearse before you write</h3>
+              <p class="stack-desc"><code>pack</code>, <code>extract</code> and <code>convert</code> all accept <code>--dry-run</code> to preview the full plan before anything is written. Real writes go to a temporary location first and are saved as final only after verification passes.</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">pack --dry-run</span>
+                <button class="term-copy" type="button" data-copy="arcthis pack ./dataset --output dataset.tar.zst --dry-run" data-copy-name="Command" aria-label="Copy command">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">pack</span> ./dataset <span class="tf">--output</span> dataset.tar.zst <span class="tf">--dry-run</span>
+<span class="td">dry-run pack plan</span>
+<span class="td">source:</span> <span class="to">~/demo/dataset</span>
+<span class="td">destination:</span> <span class="to">dataset.tar.zst</span>
+<span class="td">format:</span> <span class="to">tar_zstd</span>
+<span class="td">entries:</span> <span class="to">7</span>
+<span class="td">estimated bytes:</span> <span class="to">200124</span>
+<span class="td">collision:</span> <span class="to">false</span>
+<span class="td">will skip:</span> <span class="to">false</span>
+<span class="td">delete source after success:</span> <span class="to">false</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 05</span>
+              <h3>Archives inside archives</h3>
+              <p class="stack-desc">Repeat <code>--within</code> to step into archives nested inside archives — up to 8 levels deep, entirely in memory, with no temporary files left on disk.</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">tree --within</span>
+                <button class="term-copy" type="button" data-copy="arcthis tree backup.zip --within project.tar.gz" data-copy-name="Command" aria-label="Copy command">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">tree</span> backup.zip <span class="tf">--within</span> project.tar.gz
+<span class="td">backup.zip::project.tar.gz</span>
+<span class="td">└── </span><span class="tc">dataset</span>
+<span class="td">    ├── </span><span class="to">README.md</span>
+<span class="td">    ├── </span><span class="tc">docs</span>
+<span class="td">    │   └── </span><span class="to">notes.md</span>
+<span class="td">    └── </span><span class="tc">train</span>
+<span class="td">        ├── </span><span class="to">data.csv</span>
+<span class="td">        └── </span><span class="to">labels.csv</span></div>
+            </div>
+          </article>
+
+          <article class="stack-card">
+            <div>
+              <span class="stack-num">move / 06</span>
+              <h3>Structured by default, for agents</h3>
+              <p class="stack-desc">Add <code>--json</code> to any query command for versioned JSON: fields stay stable, errors carry fixed codes on stderr, and exit codes are predictable.</p>
+            </div>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="term-title">stat --json</span>
+                <button class="term-copy" type="button" data-copy="arcthis stat dataset.zip dataset/train/labels.csv --json" data-copy-name="Command" aria-label="Copy command">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">stat</span> dataset.zip dataset/train/labels.csv <span class="tf">--json</span>
+<span class="ts">{"schema_version":"1","archive":{"path":"dataset.zip","path_lossy":false,"format":"zip"},"entry":{"archive_index":5,"path":"dataset/train/labels.csv","path_encoding":"utf8","kind":"file","size":28,"compressed_size":28,"modified_time":"2026-08-30T01:05:30","encrypted":false,"executable":false,"symlink_target":null,"crc32":"9e6ad3e5","mime_guess":"text/csv"}}</span></div>
+            </div>
+          </article>
+
+          <div class="stack-end" aria-hidden="true"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= formats ================= -->
+    <section class="section" id="formats">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <span class="section-index">03 — Formats</span>
+            <h2 class="section-title">Twelve formats, <span class="tone-2">one way to work.</span></h2>
+          </div>
+          <p class="section-note">Arcthis detects formats by content, not by file extension — a renamed file can't fool it. Each format's quirks are handled under the hood; every command behaves the same and tells you honestly what a format can do.</p>
+        </div>
+        <div class="table-frame reveal">
+          <div class="table-scroll">
+            <table class="data">
+              <thead>
+                <tr><th>Format</th><th>Access / extract</th><th>Create</th><th>How it's read</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>zip</td><td>Stored/Deflate, including ZipCrypto/AES decryption</td><td><span class="mono">Deflate, unencrypted</span></td><td>Jump straight to any file</td></tr>
+                <tr><td>7z</td><td>Yes, including AES decryption</td><td><span class="mono">LZMA2, unencrypted</span></td><td>Depends on compression layout</td></tr>
+                <tr><td>rar / rar5</td><td>Yes (via libarchive)</td><td><span class="pill no">read-only</span></td><td>Read start to finish</td></tr>
+                <tr><td>tar</td><td>Yes</td><td><span class="pill yes">yes</span></td><td>Read start to finish</td></tr>
+                <tr><td>tar.gz / tgz</td><td>Yes</td><td><span class="pill yes">yes</span></td><td>Decompressed start to finish</td></tr>
+                <tr><td>tar.bz2 / tbz2</td><td>Yes</td><td><span class="pill yes">yes</span></td><td>Decompressed start to finish</td></tr>
+                <tr><td>tar.xz / txz</td><td>Yes</td><td><span class="pill yes">yes</span></td><td>Decompressed start to finish</td></tr>
+                <tr><td>tar.zst / tzst</td><td>Yes</td><td><span class="pill yes">yes</span></td><td>Decompressed start to finish</td></tr>
+                <tr><td>gzip</td><td>Contains one file</td><td><span class="pill yes">yes</span></td><td>Read start to finish</td></tr>
+                <tr><td>bzip2</td><td>Contains one file</td><td><span class="pill yes">yes</span></td><td>Read start to finish</td></tr>
+                <tr><td>xz</td><td>Contains one file</td><td><span class="pill yes">yes</span></td><td>Read start to finish</td></tr>
+                <tr><td>zstd</td><td>Contains one file</td><td><span class="pill yes">yes</span></td><td>Read start to finish</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= agent interface ================= -->
+    <section class="section" id="agents">
+      <div class="wrap split">
+        <div class="reveal">
+          <span class="section-index">04 — Agent interface</span>
+          <h2 class="section-title">JSON is the contract. <span class="tone-2">Stable fields, versioned schema.</span></h2>
+          <ul class="fact-list">
+            <li><strong>Real structured output.</strong> Every successful response is one JSON document with <code>schema_version: "1"</code>. Field names and types are a public, versioned interface.</li>
+            <li><strong>Clean output separation.</strong> Results go to stdout; diagnostics, warnings and errors go to stderr. <code>read</code> prints raw file contents and rejects <code>--json</code>.</li>
+            <li><strong>Predictable failures.</strong> Errors come as JSON with fixed codes, each mapped to a deterministic exit code.</li>
+            <li><strong>Honest costs.</strong> <code>inspect</code> reports capabilities like <code>random_access</code> and <code>solid</code>, so an agent can reason about what an operation will cost.</li>
+          </ul>
+        </div>
+        <div class="reveal">
+          <div class="frame">
+            <div class="code-frame">
+              <div class="code-head">
+                <span>response shape — schema_version "1"</span>
+                <button class="term-copy" type="button" data-copy='{"schema_version":"1","archive":{"path":"dataset.zip","path_lossy":false,"format":"zip"}}' data-copy-name="JSON envelope" aria-label="Copy JSON">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <pre><span class="p">{</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"archive"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s">"path"</span><span class="p">:</span> <span class="s">"dataset.zip"</span><span class="p">,</span>
+    <span class="s">"path_lossy"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span>
+    <span class="s">"format"</span><span class="p">:</span> <span class="s">"zip"</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+            </div>
+          </div>
+          <div class="chip-row" style="margin-top:18px;" aria-label="Stable error codes">
+            <span class="chip">unsupported_format</span>
+            <span class="chip">invalid_archive</span>
+            <span class="chip">corrupted_archive</span>
+            <span class="chip">entry_not_found</span>
+            <span class="chip">unsafe_path</span>
+            <span class="chip">resource_limit</span>
+            <span class="chip">password_required</span>
+            <span class="chip">wrong_password</span>
+            <span class="chip">collision</span>
+            <span class="chip">verification_failed</span>
+            <span class="chip">partial_failure</span>
+            <span class="chip">io_error</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= safety ================= -->
+    <section class="section" id="safety">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <span class="section-index">05 — Safety model</span>
+            <h2 class="section-title">Safe before convenient, <span class="tone-2">by default.</span></h2>
+          </div>
+          <p class="section-note">An archive from an untrusted source can be malicious. Every write is careful, verified and all-or-nothing — shortcuts exist, but you always have to ask for them explicitly.</p>
+        </div>
+        <div class="def-grid reveal-stagger">
+          <div class="def-item">
+            <span class="def-k">paths</span>
+            <h3>One path safety check</h3>
+            <p>Extraction rejects <code class="mono" style="font-size:12px;">..</code>, absolute paths, Windows drive/UNC prefixes, NUL bytes, and links that could escape the destination.</p>
+          </div>
+          <div class="def-item">
+            <span class="def-k">writes</span>
+            <h3>Temporary first, saved when done</h3>
+            <p>Output is written to a temporary location next to the destination and saved only after every file succeeds. A failure never leaves a half-finished result that looks complete.</p>
+          </div>
+          <div class="def-item">
+            <span class="def-k">collisions</span>
+            <h3>Refuse by default</h3>
+            <p>Existing destinations are refused unless you pass exactly one explicit policy: <code class="mono" style="font-size:12px;">--overwrite</code>, <code class="mono" style="font-size:12px;">--skip-existing</code> or <code class="mono" style="font-size:12px;">--rename</code>.</p>
+          </div>
+          <div class="def-item">
+            <span class="def-k">deletion</span>
+            <h3>Source deleted last</h3>
+            <p><code class="mono" style="font-size:12px;">--delete-source</code> runs only after the new files are written, verified and saved. Any error, interruption or failed check keeps the source.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= mcp ================= -->
+    <section class="section" id="mcp">
+      <div class="wrap split">
+        <div class="reveal">
+          <span class="section-index">06 — MCP</span>
+          <h2 class="section-title">The same commands, <span class="tone-2">straight into your AI agent.</span></h2>
+          <ul class="fact-list">
+            <li><strong>An optional MCP server.</strong> Enabled at build time, pinned to protocol revision <code>2025-06-18</code>, with bounded resource use and nothing but data on stdout.</li>
+            <li><strong>Nine read-only tools</strong> for inspect, list, tree, stat, read, find, grep, hash and verify — available once you explicitly grant a directory with <code>--allow-root</code>.</li>
+            <li><strong>Six write tools</strong> (plan + execute for extract/pack/convert) appear only after you grant an output directory with <code>--allow-output-root</code>.</li>
+            <li><strong>Outdated plans are refused.</strong> If the source or destination changes after a plan is made, the plan's SHA-256 fingerprint no longer matches and it won't run.</li>
+          </ul>
+        </div>
+        <div class="frame reveal">
+          <div class="term">
+            <div class="term-bar">
+              <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="term-title">mcp — zsh</span>
+              <button class="term-copy" type="button" data-copy="arcthis mcp --allow-root ./archives --allow-output-root ./outputs" data-copy-name="Command" aria-label="Copy command">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+                <span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">cargo build</span> <span class="tf">--release --locked --features</span> mcp
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">mcp</span> <span class="tf">--allow-root</span> ./archives
+<span class="td"># read-only tools only</span>
+
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">mcp</span> <span class="tf">--allow-root</span> ./archives <span class="tf">--allow-output-root</span> ./outputs
+<span class="td"># plan/execute mutation tools become visible</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= cta ================= -->
+    <section class="cta">
+      <div class="wrap">
+        <h2 class="cta-title reveal">Access before extraction.</h2>
+        <p class="cta-sub reveal">Build v0.5.0 from source and look inside your first archive in under a minute.</p>
+        <div class="reveal">
+          <div class="install-chip">
+            <span><span class="tp">$ </span>cargo install --path . --locked</span>
+            <button type="button" data-copy="cargo install --path . --locked" data-copy-name="Install command" aria-label="Copy install command">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
+              <span data-copy-label>Copy</span>
+            </button>
+          </div>
+        </div>
+        <div class="cta-actions reveal">
+          <a class="btn btn-primary" href="/en/download.html">Download</a>
+          <a class="btn btn-secondary" href="/en/docs.html">Read the docs</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= footer ================= -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="/en/" aria-label="Arcthis home">
+            <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" style="width:26px;height:26px;">
+              <rect x="2" y="2" width="28" height="28" rx="7.5" stroke="currentColor" stroke-width="2.2"/>
+              <path d="M11 8.5v15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 13.5h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M11 19.5h5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <circle cx="21.5" cy="13.5" r="1.9" fill="currentColor"/>
+              <circle cx="19" cy="19.5" r="1.9" fill="currentColor"/>
+            </svg>
+            Arcthis
+          </a>
+          <p>An agent-native CLI for accessing and manipulating compressed files.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="/en/download.html">Download</a></li>
+            <li><a href="/en/docs.html">Documentation</a></li>
+            <li><a href="/en/#formats">Supported formats</a></li>
+            <li><a href="/en/#mcp">MCP frontend</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">Roadmap</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">Security model</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/CONTRIBUTING.md" rel="noopener">Contributing</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Design</h4>
+          <ul>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0001-NESTED-ARCHIVES.md" rel="noopener">RFC 0001 — Nested archives</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0002-MULTIPART-SOURCES.md" rel="noopener">RFC 0002 — Multipart sources</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/docs/RFC-0003-MCP-INTEGRATION.md" rel="noopener">RFC 0003 — MCP integration</a></li>
+            <li><a href="https://github.com/mkynyd/arcthis/blob/main/LICENSE" rel="noopener">MIT License</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Arcthis v0.5.0</span>
+        <span class="sep">·</span>
+        <span>MIT</span>
+        <span class="sep">·</span>
+        <span>schema_version "1"</span>
+        <span class="push">macOS + Linux</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" defer></script>
+  <script src="/assets/main.js" defer></script>
+</body>
+</html>
