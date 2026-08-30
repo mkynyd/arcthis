@@ -39,10 +39,12 @@ zstd = "*"
 
 [dist.dependencies.apt]
 libarchive-dev = "*"
+libacl1-dev = "*"
 libb2-dev = "*"
 libbz2-dev = "*"
 liblz4-dev = "*"
 liblzma-dev = "*"
 libxml2-dev = "*"
 libzstd-dev = "*"
+nettle-dev = "*"
 zlib1g-dev = "*"
