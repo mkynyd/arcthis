@@ -1,13 +1,13 @@
 # Contributing to arcthis
 
-Thank you for helping build a reliable archive access layer for agents and humans.
+Thank you for helping build a reliable archive access tool for agents and humans.
 
 ## Before changing code
 
 1. Read `README.md`, `START.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, and `AGENTS.md`.
 2. Check `ROADMAP.md` so planned behavior is not presented as implemented.
-3. Keep format-specific behavior behind the archive backend seam.
-4. Open an RFC or ADR before changing public CLI grammar, JSON field semantics, extraction safety, or the nested locator model.
+3. Keep format-specific behavior behind the archive format-handling interface.
+4. Open an RFC or ADR before changing public CLI syntax, JSON field meanings, extraction safety, or the nested source model.
 
 ## Development checks
 
@@ -20,7 +20,7 @@ cargo test --all-features
 cargo build --release --locked
 ```
 
-Changes to archive behavior need real dynamically built fixtures and CLI integration tests. Security fixes need regression tests that demonstrate both rejection and absence of committed output.
+Changes to archive behavior need real dynamically built fixtures and CLI integration tests. Security fixes need regression tests that demonstrate both rejection and absence of saved output.
 
 ## Documentation
 

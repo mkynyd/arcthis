@@ -1,14 +1,14 @@
 # arcthis
 
-**An agent-native CLI for accessing and manipulating compressed files.**
+**An agent-native command-line tool for accessing and changing compressed files.**
 
-`arcthis` is a unified archive access layer that lets humans and AI agents inspect, enumerate, find, search, hash, stream, extract, pack, and verify compressed-file contents without materializing the entire archive by default.
+`arcthis` is one unified tool that lets humans and AI agents inspect, list, find, search, hash, read, extract, pack, and verify the contents of compressed files without first unpacking the whole thing.
 
 [简体中文](./README.zh-CN.md)
 
 ## Why arcthis?
 
-An agent should not need to fully extract a multi-gigabyte dataset just to discover and read one `README.md`. `arcthis` treats an archive as an accessible file tree:
+An agent should not have to fully extract a multi-gigabyte dataset just to find and read one `README.md`. `arcthis` treats an archive like a browsable file tree:
 
 ```sh
 arcthis inspect dataset.tar.gz --json
@@ -18,56 +18,57 @@ arcthis find dataset.tar.gz --glob '**/*.csv' --json
 arcthis read dataset.tar.gz train/data.csv | head
 ```
 
-`read` streams one entry to stdout, so archive contents compose with existing tools:
+`read` prints one file's contents to stdout, so archive contents work with tools you already have:
 
 ```sh
 arcthis read source.zip src/lib.rs | rg unsafe
 arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 ```
 
-"Without materializing the entire archive" does not promise constant-time random access. ZIP can usually decode a selected entry directly; TAR and TAR.GZ require sequential scans. `inspect --json` reports the implemented capability model so agents can reason about that cost.
+"Not unpacking the whole archive" does not mean every format can jump to any file instantly. ZIP can usually read a single file directly; TAR and TAR.GZ must scan from start to finish. `inspect --json` reports what each format actually supports, so agents can plan around that cost.
 
 ## Project status
 
-The repository contains the implemented and tested v0.4 foundation. It is not yet published as a crates.io package or a prebuilt binary release.
+The repository contains the implemented and tested v0.5 foundation. It is not yet published as a crates.io package or a prebuilt binary release.
 
 Current commands:
 
-- `list`, `tree`, `stat`, `inspect`, and streaming `read`
-- glob-based `find`, bounded streaming literal `grep`, and SHA-256/SHA-512 `hash`
-- explicit, bounded nested archive traversal with repeatable `--within`
+- `list`, `tree`, `stat`, `inspect`, and `read` (which reads a file directly)
+- glob-based `find`, capped line-by-line text search `grep`, and SHA-256/SHA-512 `hash`
+- explicit nested-archive access with repeatable `--within`
 - password-file access for encrypted ZIP and 7z archives
-- explicit ordered byte-stream volumes with repeatable `--volume`
-- persistent entry metadata indexes with an explicit cache lifecycle
-- safe complete or single-entry `extract`
-- bounded `extract-all` with recursive discovery
-- transactional `pack`, `--dry-run`, collision policies, and `--delete-source`
-- full-stream `verify`
-- verified staged archive `convert`
-- schema-versioned JSON for every structured command
+- explicit ordered split files with repeatable `--volume`
+- a saved file-list cache (`index`) you can create, refresh, or delete
+- safe full or single-file `extract`
+- `extract-all` with a parallel-job cap and recursive discovery
+- all-or-nothing `pack`, `--dry-run`, destination-collision policies, and `--delete-source`
+- `verify` that checks as it reads
+- a format `convert` that writes a temporary file and only saves it after re-verification
+- an optional local stdio MCP entry point: nine capped read-only tools and six plan-then-execute write tools that need explicit permission
+- JSON output with a version number on every structured command
 
 Planned commands and formats are kept in [ROADMAP.md](./ROADMAP.md) and are not presented as currently available.
 
 ## Supported formats
 
-| Format | Detect | Access / extract | Create | Access model |
+| Format | Detect | Access / extract | Create | How it reads |
 | --- | --- | --- | --- | --- |
-| ZIP | Magic bytes | Stored/Deflate, including ZipCrypto/AES decryption | Deflate, unencrypted | Random entry access |
-| 7z | Magic bytes | Yes, including AES decryption | LZMA2, unencrypted | Block/solid dependent |
-| RAR / RAR5 | Magic bytes | Read/extract through libarchive | No | Sequential; proprietary-format limitations |
-| TAR | Validated TAR header | Yes | Yes | Sequential |
-| TAR.GZ / TGZ | Gzip magic plus TAR validation | Yes | Yes | Sequential decompression |
-| TAR.BZ2 / TBZ2 | Bzip2 magic plus TAR validation | Yes | Yes | Sequential decompression |
-| TAR.XZ / TXZ | XZ magic plus TAR validation | Yes | Yes | Sequential decompression |
-| TAR.ZST / TZST | Zstandard magic plus TAR validation | Yes | Yes | Sequential decompression |
-| GZIP | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
-| BZIP2 | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
-| XZ | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
-| Zstandard | Magic bytes, non-TAR payload | One implicit entry | Yes | Sequential |
+| ZIP | File signature | Stored/Deflate, including ZipCrypto/AES decryption | Deflate, unencrypted | Jump straight to a file |
+| 7z | File signature | Yes, including AES decryption | LZMA2, unencrypted | Depends on block/solid |
+| RAR / RAR5 | File signature | Read/extract through libarchive | No | Read in order; closed-format limits |
+| TAR | Validated TAR header | Yes | Yes | Read in order |
+| TAR.GZ / TGZ | Gzip signature plus TAR validation | Yes | Yes | Decompress in order |
+| TAR.BZ2 / TBZ2 | Bzip2 signature plus TAR validation | Yes | Yes | Decompress in order |
+| TAR.XZ / TXZ | XZ signature plus TAR validation | Yes | Yes | Decompress in order |
+| TAR.ZST / TZST | Zstandard signature plus TAR validation | Yes | Yes | Decompress in order |
+| GZIP | File signature, non-TAR content | One implicit file | Yes | Decompress in order |
+| BZIP2 | File signature, non-TAR content | One implicit file | Yes | Decompress in order |
+| XZ | File signature, non-TAR content | One implicit file | Yes | Decompress in order |
+| Zstandard | File signature, non-TAR content | One implicit file | Yes | Decompress in order |
 
-Detection is content-first for input archives; misleading input extensions do not override valid signatures. `pack` uses the requested output suffix to choose the new archive format.
+Detection is content-first for input archives; misleading input extensions do not override valid signatures. `pack` uses the output suffix you ask for to choose the new archive format.
 
-The current ZIP build enables Stored/Deflate and AES decryption. Metadata listing can still identify a ZIP using another compression method, but content access or verification returns `unsupported_operation` when the codec is unavailable. RAR is intentionally read-only; see [docs/RAR.md](./docs/RAR.md) for backend, licensing, encryption, and native multipart limits.
+The current ZIP build enables Stored/Deflate and AES decryption. Metadata listing can still identify a ZIP using another compression method, but reading or verifying that content returns `unsupported_operation` when the codec is unavailable. RAR is intentionally read-only; see [docs/RAR.md](./docs/RAR.md) for the underlying implementation, licensing, encryption, and native multipart limits.
 
 ## Install from source
 
@@ -80,11 +81,22 @@ cargo build --release --locked
 ./target/release/arcthis --help
 ```
 
-To install the current checkout into Cargo's binary directory:
+To install the current source into Cargo's binary directory:
 
 ```sh
 cargo install --path . --locked
 ```
+
+The default build remains the CLI and library without MCP dependencies. Build the local MCP entry point explicitly:
+
+```sh
+cargo build --release --locked --features mcp
+arcthis mcp --allow-root ./archives
+# Write tools become visible only with an explicit output policy:
+arcthis mcp --allow-root ./archives --allow-output-root ./outputs
+```
+
+The stdio server pins MCP revision `2025-06-18`. `archive_read` requires an offset and length and returns at most the configured window. Source deletion additionally requires both `--allow-source-deletion` and `delete_source: true` in a plan/execute request. See [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) for the full rules.
 
 ## Quick start
 
@@ -94,7 +106,7 @@ arcthis inspect archive.zip
 arcthis list archive.zip
 arcthis tree archive.zip --json
 
-# Stream one entry
+# Read one file directly
 arcthis read archive.zip README.md
 
 # Discover and search content before extraction
@@ -102,63 +114,63 @@ arcthis find source.tar.zst --glob '**/*.rs' --json
 arcthis grep source.tar.zst TODO --glob '**/*.rs' --json
 arcthis hash archive.zip model.bin --algorithm sha256
 
-# Traverse an inner archive without creating a temporary inner file
+# Browse an inner archive without creating a temporary file
 arcthis tree backup.zip --within project.tar.gz --json
 
-# Read an encrypted archive without exposing the secret in process arguments
+# Read an encrypted archive without exposing the password in process arguments
 arcthis read secret.7z data.txt --password-file ./password.txt
 
-# Access an explicitly ordered byte-split archive
+# Access an explicitly ordered split archive
 arcthis inspect dataset.7z.001 --volume dataset.7z.002 --volume dataset.7z.003 --json
 
-# Create or refresh a persistent metadata index
+# Create or refresh the saved file-list cache
 arcthis index dataset.7z --json
 
-# Extract one regular file through a temporary sibling file and commit
+# Write a temporary sibling file, then safely save one file
 arcthis extract archive.zip README.md --output ./README.md
 
-# Safely extract all entries
+# Safely extract all files
 arcthis extract archive.tar.gz
 
-# Inspect a destructive batch plan before execution
+# Review a destructive batch plan before anything runs
 arcthis extract-all ./downloads --recursive --delete-source --dry-run --json
 
-# Create, reopen, verify, and commit a new archive
+# Create, reopen, verify, and save a new archive
 arcthis pack ./project --output project.tar.gz
 
-# Verify every readable entry
+# Verify every readable file
 arcthis verify project.tar.gz --json
 
-# Convert through safety-checked staging, then verify before commit
+# Review the plan, write to a temporary location, verify, then save
 arcthis convert project.zip --output project.tar.zst --dry-run --json
 ```
 
-See [START.md](./START.md) for destination rules, resource limits, JSON schemas, exit codes, and complete command guidance.
+See [START.md](./START.md) for destination rules, resource limits, JSON formats, exit codes, and complete command guidance.
 
 ## Safety model
 
-Extraction performs a complete metadata preflight, validates paths, rejects links and special files, enforces declared and actual byte/time/ratio limits, writes into a sibling staging location, and commits only after all entries succeed. Existing destinations are refused by default; `--overwrite`, `--skip-existing`, and `--rename` are mutually exclusive explicit policies.
+Extraction first checks metadata and paths, rejects links and special files, enforces declared and actual byte/time/ratio limits, writes into a temporary folder on the same filesystem, and saves the result only after every file succeeds. Existing destinations are refused by default; `--overwrite`, `--skip-existing`, and `--rename` are mutually exclusive explicit choices.
 
-Packing writes a temporary sibling archive, finalizes it, reopens it through the normal archive interface, verifies every entry, and only then commits the requested output. Pack destinations inside a directory source and any source/destination alias are rejected. `--delete-source` runs only after that commit and only when deleting the source cannot remove the destination; dry-runs never write or delete.
+Packing writes a temporary sibling archive, finishes it, reopens it through the normal archive interface, verifies every file, and only then saves the requested output. An output inside a directory source, or any source/destination that points to the same place, is rejected. `--delete-source` runs only after that save, and only when deleting the source cannot remove the destination; dry-runs never write or delete.
 
-Nested access decodes the selected inner entry into a resource-bounded immutable memory source; it does not create a named temporary inner archive. Conversion deliberately materializes validated entries inside a system temporary staging directory before verified packing. Persistent metadata indexes are treated as untrusted cache input and invalidated by source size and modification time. Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limits.
+Nested access decodes the selected inner file into a size-limited read-only memory buffer; it does not create a temporary file. Conversion writes validated files to a system temporary folder, packs, reopens, and verifies before saving. The saved file-list cache is treated as untrusted input and is invalidated by source size and modification time. Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limits.
 
 ## Agent interface
 
 - Successful structured output uses `schema_version: "1"`.
 - Results go to stdout; warnings and errors go to stderr.
-- Machine errors are JSON on stderr when `--json` is active.
+- Program errors are JSON on stderr when `--json` is active.
 - `read` always emits raw bytes and rejects `--json`.
-- BrokenPipe is treated as a successful consumer stop.
-- Entry metadata explicitly reports `path_encoding` for non-UTF-8 names.
-- Entry metadata includes stable archive order and lightweight extension-based MIME guesses.
-- Non-TTY and JSON output contain no ANSI decoration.
+- BrokenPipe is treated as a successful early stop by the reader.
+- File metadata explicitly reports `path_encoding` for non-UTF-8 names.
+- File metadata includes stable archive order and lightweight extension-based file-type guesses.
+- Non-TTY and JSON output contain no ANSI color decoration.
 
-The public schema and error model are documented in [docs/CLI.md](./docs/CLI.md).
+The public JSON format and error model are documented in [docs/CLI.md](./docs/CLI.md).
 
 ## Platform support
 
-v0.4 is developed and tested on macOS and Linux through local tests and a two-platform GitHub Actions workflow. The architecture avoids Unix-only public interfaces, but Windows is not yet a supported CI target.
+v0.5 is developed and tested on macOS and Linux through local tests and a two-platform GitHub Actions workflow, including all-feature MCP coverage. The design avoids Unix-only public interfaces, but Windows is not yet a supported automated-test target.
 
 ## Development
 
@@ -166,7 +178,7 @@ v0.4 is developed and tested on macOS and Linux through local tests and a two-pl
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
-cargo build --release --locked
+cargo build --release --locked --all-features
 ```
 
 Important entry points:
@@ -174,14 +186,14 @@ Important entry points:
 - [START.md](./START.md) — detailed user guide
 - [INDEX.md](./INDEX.md) — concise repository map
 - [docs/PRODUCT.md](./docs/PRODUCT.md) — product definition and non-goals
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — archive interface and backend design
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — archive interface and underlying-format design
 - [docs/SECURITY.md](./docs/SECURITY.md) — extraction and lifecycle security
 - [AGENTS.md](./AGENTS.md) — long-lived repository rules for coding agents
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — contribution workflow
 
 ## Roadmap and contributing
 
-The staged format and feature plan is in [ROADMAP.md](./ROADMAP.md); the six-stage MCP/remote/service/binding program is detailed in [docs/V0.5-INTEGRATIONS-PLAN.md](./docs/V0.5-INTEGRATIONS-PLAN.md). Contributions should preserve unified command semantics, streaming I/O, schema compatibility, and conservative extraction defaults. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before changing public behavior.
+The staged format and feature plan is in [ROADMAP.md](./ROADMAP.md); the six-stage MCP/remote/service/binding program is detailed in [docs/V0.5-INTEGRATIONS-PLAN.md](./docs/V0.5-INTEGRATIONS-PLAN.md). Contributions should preserve unified command behavior, direct read/write, JSON format compatibility, and conservative extraction defaults. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before changing public behavior.
 
 ## License
 
