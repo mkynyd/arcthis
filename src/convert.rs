@@ -35,6 +35,7 @@ impl Default for ConvertOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ConvertPlan {
     pub source: PathBuf,
@@ -53,6 +54,7 @@ pub struct ConvertPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ConvertResult {
     pub source: PathBuf,
     pub destination: PathBuf,

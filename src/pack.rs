@@ -22,6 +22,7 @@ use crate::lifecycle::{
 use crate::model::{ArchiveFormat, VerificationResult};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct PackResult {
     pub source: PathBuf,
     pub destination: PathBuf,
@@ -52,6 +53,7 @@ impl Default for PackOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[allow(clippy::struct_excessive_bools)] // Independent plan facts are a stable machine contract.
 pub struct PackPlan {
     pub source: PathBuf,

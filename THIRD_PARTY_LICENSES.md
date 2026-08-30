@@ -11,6 +11,7 @@ Direct dependencies and their declared licenses:
 | Crate | Version | License | Purpose |
 | --- | --- | --- | --- |
 | `bzip2` | 0.6 | MIT OR Apache-2.0 | Bzip2 single-stream codec (delegates to pure-Rust `libbz2-rs-sys`) |
+| `base64` | 0.23 | MIT OR Apache-2.0 | Optional MCP binary-window encoding |
 | `clap` | 4.6 | MIT OR Apache-2.0 | CLI grammar and help |
 | `compress-tools` | 0.16 | MIT OR Apache-2.0 | libarchive adapter used by the RAR backend |
 | `directories` | 6.0 | MIT OR Apache-2.0 | Platform cache directory for persistent indexes |
@@ -18,6 +19,8 @@ Direct dependencies and their declared licenses:
 | `globset` | 0.4 | Unlicense OR MIT | Glob matching for `find`/`grep` |
 | `lzma-rust2` | 0.20 | Apache-2.0 | Pure-Rust XZ/LZMA codec |
 | `mime_guess` | 2.0 | MIT | Lightweight MIME guess on entry names |
+| `rmcp` | 3.1 | Apache-2.0 | Optional MCP `2025-06-18` server and stdio transport |
+| `schemars` | 1.2 | MIT | Optional MCP input/output JSON Schema generation |
 | `serde` / `serde_json` | 1.0 | MIT OR Apache-2.0 | Stable JSON schema serialization |
 | `sha2` | 0.11 | MIT OR Apache-2.0 | SHA-256/SHA-512 streaming digests |
 | `sevenz-rust2` | 0.22 | Apache-2.0 | Pure-Rust 7z read/write (AES-256, bzip2, deflate, ppmd, zstd) |
@@ -25,6 +28,7 @@ Direct dependencies and their declared licenses:
 | `tempfile` | 3.27 | MIT OR Apache-2.0 | Staging directories and sibling files |
 | `thiserror` | 2.0 | MIT OR Apache-2.0 | Typed library errors |
 | `time` | 0.3 | MIT OR Apache-2.0 | Timestamp formatting |
+| `tokio` | 1.53 | MIT | Optional MCP stdio task runtime and cancellation bridge |
 | `walkdir` | 2.5 | Unlicense OR MIT | Filesystem recursion for `extract-all` |
 | `zip` | 8.2 | MIT | ZIP read/write and AES decryption |
 | `zstd` | 0.13 | MIT | Zstandard codec (links `zstd-sys`) |

@@ -3,6 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ArchiveFormat {
     Zip,
@@ -45,6 +46,7 @@ impl fmt::Display for ArchiveFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum EntryKind {
     File,
@@ -55,6 +57,7 @@ pub enum EntryKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum EntryPathEncoding {
     Utf8,
@@ -75,6 +78,7 @@ impl fmt::Display for EntryKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ArchiveEntry {
     pub archive_index: u64,
     pub path: String,
@@ -91,6 +95,7 @@ pub struct ArchiveEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[allow(clippy::struct_excessive_bools)] // Stable JSON capability flags are intentionally independent.
 pub struct ArchiveCapabilities {
     pub random_access: bool,
@@ -104,12 +109,14 @@ pub struct ArchiveCapabilities {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ArchiveWarning {
     pub code: String,
     pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[allow(clippy::struct_excessive_bools)] // Independent archive facts are stable JSON fields.
 pub struct ArchiveInspection {
     pub compression: String,
@@ -127,11 +134,13 @@ pub struct ArchiveInspection {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct EntryCopyResult {
     pub bytes_written: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct VerificationResult {
     pub verified: bool,
     pub entries_checked: u64,

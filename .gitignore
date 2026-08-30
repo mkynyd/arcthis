@@ -1,5 +1,6 @@
 /target/
 /.codegraph/
+/.playwright-cli/
 /log.md
 *.arcthis-tmp-*
 /archive_test/

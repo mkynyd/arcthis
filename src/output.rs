@@ -4,12 +4,13 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::SCHEMA_VERSION;
+use crate::app::{TreeNode, build_tree};
 use crate::batch::{ExtractAllPlan, ExtractAllResult};
 use crate::convert::{ConvertPlan, ConvertResult};
 use crate::error::{ArcthisError, Result};
 use crate::extract::{ExtractPlan, ExtractResult};
 use crate::index::IndexResult;
-use crate::model::{ArchiveEntry, ArchiveFormat, ArchiveInspection, EntryKind, VerificationResult};
+use crate::model::{ArchiveEntry, ArchiveFormat, ArchiveInspection, VerificationResult};
 use crate::pack::{PackPlan, PackResult};
 use crate::query::{FindResult, GrepResult, HashResult};
 
@@ -35,15 +36,6 @@ struct ListResponse<'a> {
     schema_version: &'static str,
     archive: ArchiveReference,
     entries: &'a [ArchiveEntry],
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TreeNode {
-    name: String,
-    path: String,
-    kind: EntryKind,
-    entry: Option<ArchiveEntry>,
-    children: Vec<Self>,
 }
 
 #[derive(Debug, Serialize)]
@@ -676,83 +668,6 @@ fn write_json(writer: &mut impl Write, value: &impl Serialize) -> Result<()> {
     serde_json::to_writer(&mut *writer, value)
         .map_err(|error| ArcthisError::io("serializing JSON output", io::Error::other(error)))?;
     writeln!(writer).map_err(|error| ArcthisError::io("writing JSON output", error))
-}
-
-fn build_tree(entries: &[ArchiveEntry]) -> Vec<TreeNode> {
-    let mut roots = Vec::new();
-    for entry in entries {
-        let components = entry
-            .path
-            .split('/')
-            .filter(|component| !component.is_empty())
-            .collect::<Vec<_>>();
-        if components.is_empty() {
-            continue;
-        }
-        insert_entry(&mut roots, &components, entry, "");
-    }
-    sort_tree(&mut roots);
-    roots
-}
-
-fn insert_entry(
-    nodes: &mut Vec<TreeNode>,
-    components: &[&str],
-    entry: &ArchiveEntry,
-    parent: &str,
-) {
-    let name = components[0];
-    let path = if parent.is_empty() {
-        name.to_owned()
-    } else {
-        format!("{parent}/{name}")
-    };
-
-    if components.len() == 1 {
-        if entry.kind == EntryKind::Directory
-            && let Some(node) = nodes
-                .iter_mut()
-                .find(|node| node.name == name && node.kind == EntryKind::Directory)
-        {
-            node.entry = Some(entry.clone());
-            return;
-        }
-        nodes.push(TreeNode {
-            name: name.to_owned(),
-            path,
-            kind: entry.kind,
-            entry: Some(entry.clone()),
-            children: Vec::new(),
-        });
-        return;
-    }
-
-    let directory_index = nodes
-        .iter()
-        .position(|node| node.name == name && node.kind == EntryKind::Directory)
-        .unwrap_or_else(|| {
-            nodes.push(TreeNode {
-                name: name.to_owned(),
-                path: path.clone(),
-                kind: EntryKind::Directory,
-                entry: None,
-                children: Vec::new(),
-            });
-            nodes.len() - 1
-        });
-    insert_entry(
-        &mut nodes[directory_index].children,
-        &components[1..],
-        entry,
-        &path,
-    );
-}
-
-fn sort_tree(nodes: &mut [TreeNode]) {
-    nodes.sort_by(|left, right| left.name.cmp(&right.name));
-    for node in nodes {
-        sort_tree(&mut node.children);
-    }
 }
 
 fn write_human_tree(writer: &mut impl Write, nodes: &[TreeNode], prefix: &str) -> Result<()> {

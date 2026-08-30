@@ -12,6 +12,7 @@ const BINARY_PROBE_BYTES: usize = 8 * 1024;
 const MAX_LINE_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct FindResult {
     pub glob: String,
     pub matched: u64,
@@ -19,6 +20,7 @@ pub struct FindResult {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum HashAlgorithm {
     Sha256,
@@ -35,6 +37,7 @@ impl HashAlgorithm {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct HashResult {
     pub entry: String,
     pub algorithm: HashAlgorithm,
@@ -62,6 +65,7 @@ impl Default for GrepOptions {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct GrepMatch {
     pub path: String,
     pub line_number: u64,
@@ -70,6 +74,7 @@ pub struct GrepMatch {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct GrepResult {
     pub pattern: String,
     pub glob: Option<String>,

@@ -7,6 +7,7 @@ use tempfile::Builder;
 use crate::error::{ArcthisError, Result};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CollisionPolicy {
     #[default]
@@ -17,6 +18,7 @@ pub enum CollisionPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum OperationStatus {
     Completed,

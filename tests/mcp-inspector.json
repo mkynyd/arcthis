@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "arcthis": {
+      "command": "./target/debug/arcthis",
+      "args": [
+        "mcp",
+        "--allow-root",
+        "archive_test",
+        "--allow-output-root",
+        "archive_test"
+      ]
+    }
+  }
+}

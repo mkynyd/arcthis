@@ -30,6 +30,7 @@ pub struct ExtractOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ExtractResult {
     pub destination: PathBuf,
     pub entries_extracted: u64,
@@ -39,6 +40,7 @@ pub struct ExtractResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 #[allow(clippy::struct_excessive_bools)] // Independent plan facts are a stable machine contract.
 pub struct ExtractPlan {
     pub source: PathBuf,

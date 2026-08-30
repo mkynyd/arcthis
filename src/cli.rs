@@ -5,7 +5,10 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 use crate::error::{ArcthisError, Result};
-use crate::{Archive, CollisionPolicy, ExtractOptions, ExtractionLimits, SCHEMA_VERSION, output};
+use crate::{
+    ApplicationService, Archive, ArchiveSourceRequest, CancellationToken, CollisionPolicy,
+    ExtractOptions, ExtractionLimits, SCHEMA_VERSION, ServiceLimits, output,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -49,6 +52,31 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Serve the bounded local Model Context Protocol frontend over stdio.
+    #[cfg(feature = "mcp")]
+    Mcp {
+        /// Canonical filesystem root allowed for archive reads; repeat as needed.
+        #[arg(long = "allow-root", required = true)]
+        allow_roots: Vec<PathBuf>,
+        /// Canonical filesystem root allowed for mutation outputs; repeat as needed.
+        #[arg(long = "allow-output-root")]
+        allow_output_roots: Vec<PathBuf>,
+        /// Permit explicitly requested source deletion after verified commit.
+        #[arg(long)]
+        allow_source_deletion: bool,
+        /// Maximum archive entries per request.
+        #[arg(long, default_value_t = 100_000)]
+        max_entries: u64,
+        /// Maximum decoded bytes per request.
+        #[arg(long, default_value_t = 1024 * 1024 * 1024_u64)]
+        max_decoded_bytes: u64,
+        /// Maximum find/grep results per request.
+        #[arg(long, default_value_t = 10_000)]
+        max_results: u64,
+        /// Maximum bytes returned by one `archive_read` window.
+        #[arg(long, default_value_t = 1024 * 1024_u64)]
+        max_read_window: u64,
+    },
     /// List archive entries in archive order.
     List { archive: PathBuf },
     /// Display archive entries as a file tree.
@@ -285,48 +313,80 @@ pub fn main_entry() -> i32 {
 #[allow(clippy::too_many_lines)] // Keeping top-level command dispatch in one exhaustive match is clearer.
 fn run(cli: &Cli) -> Result<()> {
     let mut stdout = io::stdout().lock();
+    let service = ApplicationService::new(
+        ServiceLimits::cli_compatibility(),
+        CancellationToken::default(),
+    );
     match &cli.command {
+        #[cfg(feature = "mcp")]
+        Command::Mcp {
+            allow_roots,
+            allow_output_roots,
+            allow_source_deletion,
+            max_entries,
+            max_decoded_bytes,
+            max_results,
+            max_read_window,
+        } => {
+            if !cli.within.is_empty()
+                || !cli.volume.is_empty()
+                || cli.password_file.is_some()
+                || cli.index_directory.is_some()
+            {
+                return Err(ArcthisError::UnsupportedOperation {
+                    message: "mcp does not accept global archive source options".to_owned(),
+                });
+            }
+            drop(stdout);
+            crate::mcp::run_stdio(crate::mcp::McpConfig {
+                allowed_input_roots: allow_roots.clone(),
+                allowed_output_roots: allow_output_roots.clone(),
+                allow_source_deletion: *allow_source_deletion,
+                limits: ServiceLimits {
+                    max_entries: *max_entries,
+                    max_decoded_bytes: *max_decoded_bytes,
+                    max_results: *max_results,
+                    max_read_window: *max_read_window,
+                },
+            })
+        }
         Command::List { archive } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let entries = archive.entries()?;
+            let result = service.list(&archive_source_request(cli, archive)?)?;
             output::write_list(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &entries,
+                &result.archive.path,
+                result.archive.format,
+                &result.entries,
                 cli.json,
             )
         }
         Command::Tree { archive } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let entries = archive.entries()?;
+            let result = service.tree(&archive_source_request(cli, archive)?)?;
             output::write_tree(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &entries,
+                &result.archive.path,
+                result.archive.format,
+                &result.entries,
                 cli.json,
             )
         }
         Command::Stat { archive, entry } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let entry = archive.entry(entry)?;
+            let result = service.stat(&archive_source_request(cli, archive)?, entry)?;
             output::write_stat(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &entry,
+                &result.archive.path,
+                result.archive.format,
+                &result.entry,
                 cli.json,
             )
         }
         Command::Inspect { archive } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let inspection = archive.inspect()?;
+            let result = service.inspect(&archive_source_request(cli, archive)?)?;
             output::write_inspect(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &inspection,
+                &result.archive.path,
+                result.archive.format,
+                &result.inspection,
                 cli.json,
             )
         }
@@ -337,20 +397,18 @@ fn run(cli: &Cli) -> Result<()> {
                         .to_owned(),
                 });
             }
-            let archive = open_cli_archive(cli, archive)?;
-            archive.copy_entry_to(entry, &mut stdout)?;
+            service.read_to(&archive_source_request(cli, archive)?, entry, &mut stdout)?;
             stdout
                 .flush()
                 .map_err(|error| ArcthisError::io("flushing entry output", error))
         }
         Command::Find { archive, glob } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let result = crate::query::find(&archive, glob)?;
+            let result = service.find(&archive_source_request(cli, archive)?, glob)?;
             output::write_find(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &result,
+                &result.archive.path,
+                result.archive.format,
+                &result.find,
                 cli.json,
             )
         }
@@ -362,9 +420,8 @@ fn run(cli: &Cli) -> Result<()> {
             max_matches,
             binary,
         } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let result = crate::query::grep(
-                &archive,
+            let result = service.grep(
+                &archive_source_request(cli, archive)?,
                 pattern,
                 &crate::query::GrepOptions {
                     glob: glob.clone(),
@@ -375,9 +432,9 @@ fn run(cli: &Cli) -> Result<()> {
             )?;
             output::write_grep(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &result,
+                &result.archive.path,
+                result.archive.format,
+                &result.grep,
                 cli.json,
             )
         }
@@ -386,13 +443,16 @@ fn run(cli: &Cli) -> Result<()> {
             entry,
             algorithm,
         } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let result = crate::query::hash(&archive, entry, (*algorithm).into())?;
+            let result = service.hash(
+                &archive_source_request(cli, archive)?,
+                entry,
+                (*algorithm).into(),
+            )?;
             output::write_hash(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &result,
+                &result.archive.path,
+                result.archive.format,
+                &result.hash,
                 cli.json,
             )
         }
@@ -473,13 +533,12 @@ fn run(cli: &Cli) -> Result<()> {
             )
         }
         Command::Verify { archive } => {
-            let archive = open_cli_archive(cli, archive)?;
-            let result = archive.verify()?;
+            let result = service.verify(&archive_source_request(cli, archive)?)?;
             output::write_verify(
                 &mut stdout,
-                archive.path(),
-                archive.format(),
-                &result,
+                &result.archive.path,
+                result.archive.format,
+                &result.verification,
                 cli.json,
             )
         }
@@ -608,6 +667,15 @@ fn run(cli: &Cli) -> Result<()> {
             output::write_convert(&mut stdout, &result, cli.json)
         }
     }
+}
+
+fn archive_source_request(cli: &Cli, path: &Path) -> Result<ArchiveSourceRequest> {
+    Ok(ArchiveSourceRequest {
+        path: path.to_path_buf(),
+        within: cli.within.clone(),
+        max_nested_entry_size: cli.max_nested_entry_size,
+        open_options: archive_open_options(cli)?,
+    })
 }
 
 fn open_cli_archive(cli: &Cli, path: &Path) -> Result<Archive> {

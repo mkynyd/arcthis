@@ -1,5 +1,6 @@
 //! Reusable archive access primitives for `arcthis` frontends.
 
+pub mod app;
 pub mod archive;
 pub mod batch;
 pub mod cli;
@@ -8,12 +9,22 @@ pub mod error;
 pub mod extract;
 pub mod index;
 mod lifecycle;
+#[cfg(feature = "mcp")]
+pub mod mcp;
+#[cfg(feature = "mcp")]
+mod mcp_mutation;
 pub mod model;
 mod output;
 pub mod pack;
 pub mod query;
 pub mod security;
 
+pub use app::{
+    ApplicationService, ArchiveReference as ServiceArchiveReference, ArchiveSourceRequest,
+    CancellationToken, FindServiceResult, GrepServiceResult, HashServiceResult, InspectResult,
+    ListResult, ReadRequest, ReadResult, ServiceLimits, StatResult, TreeNode, TreeResult,
+    VerifyServiceResult,
+};
 pub use archive::{Archive, ArchiveLocator, ArchiveOpenOptions, ArchivePassword};
 pub use batch::{
     ExtractAllItem, ExtractAllOptions, ExtractAllPlan, ExtractAllResult, extract_all,

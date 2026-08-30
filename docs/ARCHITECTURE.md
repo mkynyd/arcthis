@@ -2,15 +2,17 @@
 
 ## Architectural goal
 
-The library presents a small archive interface that hides format-specific enumeration and decoding while preserving meaningful capability and cost differences. The CLI is one frontend over that interface.
+The library presents a small archive interface that hides format-specific enumeration and decoding while preserving meaningful capability and cost differences. The CLI and optional local MCP server are frontends over a shared application service.
 
 ## Module model
 
 The design favors deep modules: callers learn a small interface while backend selection, decoder setup, metadata normalization, streaming, limits, and error translation remain local to the archive implementation.
 
 ```text
-CLI frontend
-  -> output/error contracts
+CLI frontend             MCP stdio frontend
+       \                 /
+        -> typed application service
+             -> output/error contracts and finite request limits
   -> Archive interface
        -> format detector
        -> ZIP backend adapter
@@ -26,6 +28,12 @@ CLI frontend
 ```
 
 The backend seam is real because ZIP, 7z, TAR-family, and single-stream formats have materially different adapters. It is internal to the library. Backend crate types must not leak through the public interface.
+
+## Application service and MCP frontend
+
+`src/app.rs` is synchronous and frontend-neutral. It accepts typed requests for inspect/list/tree/stat/read/find/grep/hash/verify and returns owned domain results. It centralizes cancellation checkpoints, finite decoded-byte and result budgets, and bounded read windows without depending on Clap, terminal rendering, MCP, or Tokio. The CLI uses a compatibility limit profile so existing JSON and raw-byte behavior remains stable.
+
+`src/mcp.rs` adapts that service to feature-gated stdio MCP using protocol revision `2025-06-18`. It owns transport schemas, tool annotations, canonical input/output-root authorization, cancellation bridging, and UTF-8/base64 window encoding. `src/mcp_mutation.rs` composes the existing extraction, packing, conversion, and lifecycle modules for controlled plan/execute tools. A SHA-256 digest binds the exact request, plan, source fingerprint, destination state, resource limits, collision policy, and deletion intent; execute replans and rejects stale state before mutation.
 
 ## Public library interface
 
@@ -147,7 +155,7 @@ The library returns typed errors with stable public categories. Backend errors a
 - Additional backend adapters can join the internal seam without changing command implementations.
 - Seek-point and range indexes may extend the existing metadata cache when measurements justify them.
 - Remote locators can reuse the source seam once range and retry semantics are specified.
-- MCP, HTTP, FFI, and language bindings can reuse the library interface.
+- HTTP, FFI, and language bindings can reuse the application service; MCP already does so.
 - Async I/O is added only if a server/remote-source performance model demonstrates value.
 
 The staged integration plan is documented in [the v0.5+ integrations plan](./V0.5-INTEGRATIONS-PLAN.md).

@@ -18,8 +18,10 @@
 ## 目录与模块约定
 
 - `src/lib.rs` 只暴露可复用的 library interface，不应依赖 CLI 表现层。
+- `src/app.rs` 提供 frontend-neutral typed application service；CLI、MCP 和未来 frontend 必须复用该层的查询语义与资源限制。
 - `src/archive/` 管理 archive 抽象、格式检测与 backend adapter。上层命令不得重复 ZIP/TAR-specific 分支。
 - `src/cli.rs` 和 `src/output.rs` 只负责 CLI 语法、输出和进程退出语义。
+- `src/mcp.rs` 只负责 MCP transport、schema、授权和 tool contract；受控写操作的 plan digest 与执行适配集中在 `src/mcp_mutation.rs`。
 - `src/security.rs` 是 entry path 和 extraction 安全规则的单一真相源。
 - `src/lifecycle.rs` 统一管理 collision policy、staged commit、rollback 与 post-commit source deletion；pack/extract/batch 不得各自发明生命周期语义。
 - `src/batch.rs` 只编排独立 archive，必须复用单 archive 的 planning/extraction 路径，并保持有界 worker 与确定性结果顺序。
