@@ -40,6 +40,13 @@
 - 保持依赖克制，新增主要依赖时在代码或文档中能说明用途。
 - 完成任务前必须运行 `cargo fmt --check`、`cargo clippy --all-targets --all-features -- -D warnings`、`cargo test --all-features` 和与改动相称的真实 CLI smoke test。
 
+## 发布约束
+
+- MCP 是公开安装渠道的默认功能；Cargo、GitHub Release、Homebrew、npm 与 pnpm 安装必须暴露相同命令。仅代码库用户可显式使用 `--no-default-features`。
+- `dist-workspace.toml` 是 GitHub Release、shell installer、npm 与 Homebrew 生成配置的单一真相源；`.github/workflows/release.yml` 由 cargo-dist 生成，不手工改写。配置变化后必须运行 `dist generate` 与 `dist generate --check`。
+- 首个公开版本只发布经过独立构建验证的 `aarch64-apple-darwin`、`x86_64-apple-darwin` 与 `x86_64-unknown-linux-gnu`。Windows 与 Linux arm64 在建立对应测试前不得加入发布列表。
+- 正式发布前遵循 `docs/RELEASING.md`，先验证候选版本；不得在 CI 红灯、工作树不干净、版本已存在或发布 Secret 缺失时打正式 Tag。
+
 ## CLI 与 JSON 兼容性
 
 - 命令语法优先保持 `arcthis <command> <archive> [entry] [options]`，禁止加入格式专属一级命令。

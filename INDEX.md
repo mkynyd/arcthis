@@ -10,11 +10,14 @@ This map lists important maintained files and their current responsibilities. Ge
 - `README.md` / `README.zh-CN.md` — English and Simplified Chinese project introductions.
 - `START.md` / `START.zh-CN.md` — Detailed, implementation-backed user guides.
 - `ROADMAP.md` — Staged future format and capability plan.
+- `CHANGELOG.md` — User-visible changes and release notes.
 - `AGENTS.md` — Long-lived Simplified Chinese engineering rules for coding agents.
 - `CONTRIBUTING.md` — Contributor workflow and required quality checks.
 - `LICENSE` — MIT license text.
 - `THIRD_PARTY_LICENSES.md` — Rust and native dependency license summary for redistribution review.
 - `.github/workflows/ci.yml` — macOS/Linux formatting, lint, test, and release-build workflow.
+- `.github/workflows/release.yml` — cargo-dist-generated three-platform GitHub Release, npm, and Homebrew workflow.
+- `dist-workspace.toml` — Release targets, native build dependencies, installers, attestations, and package-manager publishing configuration.
 - `.gitignore` — Excludes build output, CodeGraph data, fixtures, temporary archives, `log.md`, and `HANDOFF.md`.
 
 ## Library and CLI
@@ -71,6 +74,7 @@ This map lists important maintained files and their current responsibilities. Ge
 - `docs/ARCHITECTURE.md` — Module interfaces, format-handling interface, capabilities, direct reading, extraction, and future sources.
 - `docs/CLI.md` — Public command, JSON format, stdout/stderr, and machine error rules.
 - `docs/SECURITY.md` — Trust model, path rules, resource limits, temporary files, verification, and known limits.
+- `docs/RELEASING.md` — Release channels, credentials, quality gates, candidate validation, and publication steps.
 - `docs/ADR-0001-TRANSACTIONAL-LIFECYCLE.md` — Accepted source/destination separation and verified delete-source invariants.
 - `docs/RFC-0001-NESTED-ARCHIVES.md` — Accepted explicit `--within` syntax, source model, and nested resource limits.
 - `docs/RFC-0002-MULTIPART-SOURCES.md` — Accepted `--volume` byte-stream segment model and its format-native volume boundaries.

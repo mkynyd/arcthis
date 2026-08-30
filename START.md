@@ -2,7 +2,7 @@
 
 [简体中文](./START.zh-CN.md)
 
-This guide describes the command-line tool and optional local MCP entry point implemented through v0.5. For product goals and later commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
+This guide describes the command-line tool and built-in local MCP entry point implemented through v0.5. For product goals and later commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
 
 ## Build and install
 
@@ -23,12 +23,13 @@ cargo install --path . --locked
 
 ## Local MCP entry point
 
-MCP support is optional so the default build has no protocol runtime. Enable it and authorize one or more input roots:
+MCP is enabled in the default build so Cargo, Homebrew, npm, and pnpm installations expose the same command set. Start it by authorizing one or more input roots:
 
 ```sh
-cargo build --release --locked --features mcp
 ./target/release/arcthis mcp --allow-root ./archives
 ```
+
+Library users can still opt out with `cargo build --no-default-features`.
 
 The stdio transport uses protocol revision `2025-06-18` and reserves stdout for JSON-RPC. It exposes `archive_inspect`, `archive_list`, `archive_tree`, `archive_stat`, `archive_read`, `archive_find`, `archive_grep`, `archive_hash`, and `archive_verify`. Every request has finite limits on files, decoded bytes, and results; `archive_read` additionally requires `offset` and `length` and defaults to a 1 MiB maximum window.
 

@@ -2,7 +2,7 @@
 
 [English](./START.md)
 
-本文说明截至 v0.5 已真实实现的命令行工具与可选本地 MCP 入口。产品目标和后续规划见 [docs/PRODUCT.md](./docs/PRODUCT.md) 与 [ROADMAP.md](./ROADMAP.md)。
+本文说明截至 v0.5 已真实实现的命令行工具与内置本地 MCP 入口。产品目标和后续规划见 [docs/PRODUCT.md](./docs/PRODUCT.md) 与 [ROADMAP.md](./ROADMAP.md)。
 
 ## 构建与安装
 
@@ -18,12 +18,13 @@ cargo install --path . --locked
 
 ## 本地 MCP 入口
 
-MCP 是可选功能开关，默认构建不会引入协议运行时。启用后必须显式授权至少一个输入根目录：
+默认构建启用 MCP，因此 Cargo、Homebrew、npm 与 pnpm 安装得到的命令保持一致。启动时必须显式授权至少一个输入根目录：
 
 ```sh
-cargo build --release --locked --features mcp
 ./target/release/arcthis mcp --allow-root ./archives
 ```
+
+只使用代码库且不需要 MCP 时，仍可通过 `cargo build --no-default-features` 关闭默认功能。
 
 stdio 传输固定协议版本 `2025-06-18`，stdout 只允许 JSON-RPC。只读工具包括 `archive_inspect`、`archive_list`、`archive_tree`、`archive_stat`、`archive_read`、`archive_find`、`archive_grep`、`archive_hash` 与 `archive_verify`。所有请求都有有限的文件数、解码字节数和结果数上限；`archive_read` 还强制提供 `offset`（偏移量）与 `length`（长度），默认单次最多返回 1 MiB。
 

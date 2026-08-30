@@ -29,7 +29,7 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 ## Project status
 
-The repository contains the implemented and tested v0.5 foundation. It is not yet published as a crates.io package or a prebuilt binary release.
+The repository contains the implemented and tested v0.5 foundation. Its GitHub, Homebrew, npm, pnpm, and crates.io release path is prepared, but no public package or prebuilt binary has been published yet.
 
 Current commands:
 
@@ -44,7 +44,7 @@ Current commands:
 - all-or-nothing `pack`, `--dry-run`, destination-collision policies, and `--delete-source`
 - `verify` that checks as it reads
 - a format `convert` that writes a temporary file and only saves it after re-verification
-- an optional local stdio MCP entry point: nine capped read-only tools and six plan-then-execute write tools that need explicit permission
+- a built-in local stdio MCP entry point: nine capped read-only tools and six plan-then-execute write tools that need explicit permission
 - JSON output with a version number on every structured command
 
 Planned commands and formats are kept in [ROADMAP.md](./ROADMAP.md) and are not presented as currently available.
@@ -87,14 +87,15 @@ To install the current source into Cargo's binary directory:
 cargo install --path . --locked
 ```
 
-The default build remains the CLI and library without MCP dependencies. Build the local MCP entry point explicitly:
+The default build includes the CLI, library, and local MCP entry point, so every installation channel provides the same commands:
 
 ```sh
-cargo build --release --locked --features mcp
 arcthis mcp --allow-root ./archives
 # Write tools become visible only with an explicit output policy:
 arcthis mcp --allow-root ./archives --allow-output-root ./outputs
 ```
+
+Library users who deliberately do not need MCP can disable default features with `--no-default-features`.
 
 The stdio server pins MCP revision `2025-06-18`. `archive_read` requires an offset and length and returns at most the configured window. Source deletion additionally requires both `--allow-source-deletion` and `delete_source: true` in a plan/execute request. See [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) for the full rules.
 

@@ -29,7 +29,7 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 ## 当前状态
 
-仓库已经完成并测试 v0.5 基础实现，但尚未发布到 crates.io，也没有编译好的可执行文件 release。
+仓库已经完成并测试 v0.5 基础实现，也已准备 GitHub、Homebrew、npm、pnpm 与 crates.io 发布流程，但尚未真正发布公开安装包或编译好的可执行文件。
 
 当前正式命令包括：
 
@@ -44,7 +44,7 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 - 全部成功才保存的 `pack`、`--dry-run`、目标已存在处理方式与 `--delete-source`
 - 边读边校验的 `verify`
 - 先写临时文件、重新验证后才保存的格式转换 `convert`
-- 可选的本地 stdio MCP 入口：9 个有上限的只读工具，以及 6 个需显式授权的先计划后执行写工具
+- 内置的本地 stdio MCP 入口：9 个有上限的只读工具，以及 6 个需显式授权的先计划后执行写工具
 - 所有结构化命令的 JSON 输出都带版本号
 
 尚未实现的格式和命令只记录在 [ROADMAP.md](./ROADMAP.md)，不会在当前能力列表中冒充可用。
@@ -87,14 +87,15 @@ cargo build --release --locked
 cargo install --path . --locked
 ```
 
-默认构建仍然是不携带 MCP 依赖的命令行工具和代码库。需要本地 MCP 入口时显式启用功能开关：
+默认构建包含命令行工具、代码库和本地 MCP 入口，因此所有安装渠道提供相同命令：
 
 ```sh
-cargo build --release --locked --features mcp
 arcthis mcp --allow-root ./archives
 # 只有配置输出目录后，写工具才会出现：
 arcthis mcp --allow-root ./archives --allow-output-root ./outputs
 ```
+
+明确不需要 MCP 的代码库用户可以用 `--no-default-features` 关闭默认功能。
 
 stdio 服务固定使用 MCP `2025-06-18` 协议版本。`archive_read` 强制提供 offset/length（偏移量和长度），并受单次窗口上限约束。删除 source 还必须同时满足服务的 `--allow-source-deletion` 与 plan/execute 请求里的 `delete_source: true`。完整规则见 [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md)。
 
