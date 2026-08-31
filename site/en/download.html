@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Download — Arcthis</title>
-  <meta name="description" content="Build Arcthis 0.5.0 from source on macOS and Linux.">
+  <meta name="description" content="Install Arcthis 0.5.0 through Cargo, Homebrew, npm, pnpm or GitHub Releases.">
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="alternate" hreflang="zh-CN" href="https://arcthis.mkynstudio.top/download.html">
   <link rel="alternate" hreflang="en" href="https://arcthis.mkynstudio.top/en/download.html">
@@ -72,17 +72,40 @@
   <main id="main">
     <section class="page-head">
       <div class="wrap">
-        <p class="eyebrow">v0.5.0 <span class="sep">·</span> MIT <span class="sep">·</span> source build</p>
+        <p class="eyebrow">v0.5.0 <span class="sep">·</span> MIT <span class="sep">·</span> released</p>
         <h1 class="page-title">Download Arcthis.</h1>
-        <p class="page-sub">Arcthis is compiled from source with a fixed Rust version. Dependency versions are locked (<code class="mono" style="font-size:13px;">--locked</code>) so the build is the same every time, and it's covered by automated tests on macOS and Linux.</p>
+        <p class="page-sub">Install with Cargo, Homebrew, npm or pnpm, or download prebuilt macOS and Linux archives from GitHub Releases. MCP is included by default everywhere.</p>
       </div>
     </section>
 
     <section class="section" style="padding-top:0;">
       <div class="wrap">
         <div class="notice reveal">
-          <strong>Honest status:</strong> v0.5.0 has no crates.io package and no ready-made binary yet. The commands below are the complete, current way to install it — nothing is left out.
+          <strong>Release status:</strong> v0.5.0 is published on crates.io, GitHub Releases, Homebrew and the npm registry, with real installation tests completed for every channel.
         </div>
+
+        <div class="dl-grid reveal">
+          <div class="code-frame">
+            <div class="code-head"><span>Cargo</span><button class="term-copy" type="button" data-copy="cargo install arcthis --locked" data-copy-name="Cargo install command" aria-label="Copy Cargo install command"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><span data-copy-label>Copy</span></button></div>
+            <pre><span class="f">cargo install</span> arcthis --locked</pre>
+          </div>
+          <div class="code-frame">
+            <div class="code-head"><span>Homebrew</span><button class="term-copy" type="button" data-copy="brew install mkynyd/tap/arcthis" data-copy-name="Homebrew install command" aria-label="Copy Homebrew install command"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><span data-copy-label>Copy</span></button></div>
+            <pre><span class="f">brew install</span> mkynyd/tap/arcthis</pre>
+          </div>
+          <div class="code-frame">
+            <div class="code-head"><span>npm</span><button class="term-copy" type="button" data-copy="npm install -g arcthis" data-copy-name="npm install command" aria-label="Copy npm install command"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><span data-copy-label>Copy</span></button></div>
+            <pre><span class="f">npm install</span> -g arcthis</pre>
+          </div>
+          <div class="code-frame">
+            <div class="code-head"><span>pnpm</span><button class="term-copy" type="button" data-copy="pnpm add -g arcthis" data-copy-name="pnpm install command" aria-label="Copy pnpm install command"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><span data-copy-label>Copy</span></button></div>
+            <pre><span class="f">pnpm add</span> -g arcthis</pre>
+          </div>
+        </div>
+
+        <p class="reveal">You can also download Apple Silicon macOS, Intel macOS and x86_64 Linux archives plus SHA-256 checksums from <a href="https://github.com/mkynyd/arcthis/releases/tag/v0.5.0" rel="noopener">GitHub Release v0.5.0</a>. pnpm 11 holds packages published less than 24 hours ago; on release day, append <code>--config.minimumReleaseAge=0</code> if it reports <code>ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION</code>.</p>
+
+        <h2 class="section-title reveal" style="font-size:clamp(28px,4vw,48px);margin-top:var(--space-3xl);">Build from source <span class="tone-2">(optional)</span></h2>
 
         <ol class="step-list">
           <li class="step reveal">
@@ -120,7 +143,7 @@
             <span class="step-num" aria-hidden="true"></span>
             <div>
               <h3>Download the source and build</h3>
-              <p>The build produces the CLI at <code>target/release/arcthis</code>. A default build includes the CLI, library, and MCP so future Homebrew, npm, and pnpm installations expose the same commands.</p>
+              <p>The build produces the CLI at <code>target/release/arcthis</code>. A default build includes the CLI, library, and MCP so Cargo, Homebrew, npm and pnpm installations expose the same commands.</p>
               <div class="code-frame">
                 <div class="code-head">
                   <span>build — sh</span>
@@ -140,7 +163,7 @@
           <li class="step reveal">
             <span class="step-num" aria-hidden="true"></span>
             <div>
-              <h3>Put arcthis on your PATH (optional)</h3>
+              <h3>Put the source build on your PATH (optional)</h3>
               <p>Once installed, <code>arcthis</code> is on your <code>PATH</code>, so you can run it from any directory.</p>
               <div class="code-frame">
                 <div class="code-head">
@@ -165,13 +188,12 @@ arcthis <span class="f">--version</span>
               <div class="code-frame">
                 <div class="code-head">
                   <span>mcp — sh</span>
-                  <button class="term-copy" type="button" data-copy="cargo build --release --locked" data-copy-name="Build command" aria-label="Copy build command">
+                  <button class="term-copy" type="button" data-copy="arcthis mcp --allow-root ./archives --allow-output-root ./outputs" data-copy-name="MCP command" aria-label="Copy MCP command">
                     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
                     <span data-copy-label>Copy</span>
                   </button>
                 </div>
-                <pre><span class="f">cargo build</span> --release --locked
-arcthis <span class="f">mcp</span> --allow-root ./archives --allow-output-root ./outputs</pre>
+                <pre>arcthis <span class="f">mcp</span> --allow-root ./archives --allow-output-root ./outputs</pre>
               </div>
             </div>
           </li>

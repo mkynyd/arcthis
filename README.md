@@ -29,7 +29,7 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 ## Project status
 
-The repository contains the implemented and tested v0.5 foundation. Its GitHub, Homebrew, npm, pnpm, and crates.io release path is prepared, but no public package or prebuilt binary has been published yet.
+Arcthis v0.5.0 is publicly available from crates.io, GitHub Releases, Homebrew, npm, and pnpm. Every installation channel includes the CLI and the local MCP entry point by default.
 
 Current commands:
 
@@ -70,7 +70,22 @@ Detection is content-first for input archives; misleading input extensions do no
 
 The current ZIP build enables Stored/Deflate and AES decryption. Metadata listing can still identify a ZIP using another compression method, but reading or verifying that content returns `unsupported_operation` when the codec is unavailable. RAR is intentionally read-only; see [docs/RAR.md](./docs/RAR.md) for the underlying implementation, licensing, encryption, and native multipart limits.
 
-## Install from source
+## Install
+
+Choose one public installation channel:
+
+```sh
+cargo install arcthis --locked
+brew install mkynyd/tap/arcthis
+npm install -g arcthis
+pnpm add -g arcthis
+```
+
+pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
+
+Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0).
+
+### Build from source
 
 Rust 1.98.0 is pinned by `rust-toolchain.toml`.
 
@@ -81,7 +96,7 @@ cargo build --release --locked
 ./target/release/arcthis --help
 ```
 
-To install the current source into Cargo's binary directory:
+To install a local checkout into Cargo's binary directory:
 
 ```sh
 cargo install --path . --locked

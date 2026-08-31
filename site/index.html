@@ -144,15 +144,15 @@
       <div class="wrap quickstart-grid">
         <div class="reveal">
           <span class="section-index">01 — 快速开始</span>
-          <h2 class="section-title">三条命令, <span class="tone-2">从获取源码到查看压缩包。</span></h2>
-          <p class="quickstart-note">v0.5 目前只提供源码 —— 还没有 crates.io 安装包,也没有编译好的可执行文件。RAR 支持依赖 libarchive,各平台的安装方法见<a href="/download.html">下载页</a>。</p>
+          <h2 class="section-title">一条命令, <span class="tone-2">开始查看压缩包。</span></h2>
+          <p class="quickstart-note">v0.5.0 已通过 Cargo、Homebrew、npm 与 pnpm 发布,所有安装方式默认都包含 MCP。其他安装方法与编译成品见<a href="/download.html">下载页</a>。</p>
         </div>
         <div class="frame reveal">
           <div class="term">
             <div class="term-bar">
               <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
               <span class="term-title">install — zsh</span>
-              <button class="term-copy" type="button" data-copy="git clone https://github.com/mkynyd/arcthis.git &amp;&amp; cd arcthis &amp;&amp; cargo build --release --locked" data-copy-name="安装命令" aria-label="复制安装命令">
+              <button class="term-copy" type="button" data-copy="cargo install arcthis --locked" data-copy-name="安装命令" aria-label="复制安装命令">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
                   <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
                   <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/>
@@ -160,10 +160,8 @@
                 <span data-copy-label>复制</span>
               </button>
             </div>
-            <div class="term-body"><span class="tp">$ </span><span class="tc">git clone</span> https://github.com/mkynyd/arcthis.git
-<span class="tp">$ </span><span class="tc">cd</span> arcthis
-<span class="tp">$ </span><span class="tc">cargo build</span> <span class="tf">--release --locked</span>
-<span class="tp">$ </span><span class="tc">./target/release/arcthis</span> <span class="tf">--version</span>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">cargo install</span> arcthis <span class="tf">--locked</span>
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="tf">--version</span>
 <span class="to">arcthis 0.5.0</span></div>
           </div>
         </div>
@@ -489,11 +487,11 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
     <section class="cta">
       <div class="wrap">
         <h2 class="cta-title reveal">先访问,再解压。</h2>
-        <p class="cta-sub reveal">从源码编译 v0.5.0,一分钟内查看你的第一个压缩包。</p>
+        <p class="cta-sub reveal">安装 v0.5.0,一分钟内查看你的第一个压缩包。</p>
         <div class="reveal">
           <div class="install-chip">
-            <span><span class="tp">$ </span>cargo install --path . --locked</span>
-            <button type="button" data-copy="cargo install --path . --locked" data-copy-name="安装命令" aria-label="复制安装命令">
+            <span><span class="tp">$ </span>cargo install arcthis --locked</span>
+            <button type="button" data-copy="cargo install arcthis --locked" data-copy-name="安装命令" aria-label="复制安装命令">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
               <span data-copy-label>复制</span>
             </button>

@@ -29,7 +29,7 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 ## 当前状态
 
-仓库已经完成并测试 v0.5 基础实现，也已准备 GitHub、Homebrew、npm、pnpm 与 crates.io 发布流程，但尚未真正发布公开安装包或编译好的可执行文件。
+Arcthis v0.5.0 已在 crates.io、GitHub Releases、Homebrew、npm 与 pnpm 正式发布。所有安装渠道默认都包含命令行工具和本地 MCP 入口。
 
 当前正式命令包括：
 
@@ -70,7 +70,22 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 当前 ZIP 构建启用 Stored/Deflate 与 AES 解密。即使 ZIP 使用其他压缩方法，通常仍能列出文件；需要读取或验证对应内容时会返回 `unsupported_operation`。RAR 明确保持只读，底层实现、许可、加密和原生分卷边界见 [docs/RAR.md](./docs/RAR.md)。
 
-## 从源码安装
+## 安装
+
+任选一种公开安装方式：
+
+```sh
+cargo install arcthis --locked
+brew install mkynyd/tap/arcthis
+npm install -g arcthis
+pnpm add -g arcthis
+```
+
+pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
+
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从 [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0) 下载。
+
+### 从源码构建
 
 项目通过 `rust-toolchain.toml` 固定 Rust 1.98.0。
 
@@ -81,7 +96,7 @@ cargo build --release --locked
 ./target/release/arcthis --help
 ```
 
-把当前源码安装到 Cargo 二进制目录：
+把本地源码安装到 Cargo 二进制目录：
 
 ```sh
 cargo install --path . --locked

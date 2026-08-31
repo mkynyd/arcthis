@@ -996,6 +996,7 @@ table.data td.num { text-align: right; font-family: var(--mono); font-size: 12.5
   padding: 26px 0;
   border-bottom: 1px solid var(--border-subtle);
 }
+.step > * { min-width: 0; }
 .step:last-child { border-bottom: 0; }
 
 .step-num {

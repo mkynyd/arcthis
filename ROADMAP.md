@@ -48,7 +48,7 @@ RAR creation is not assumed. Capabilities distinguish read, extract, create, and
 - [x] Explicit input-root policy; capped UTF-8/base64 file windows; JSON formats; structured errors; clean stdout; subprocess cancellation.
 - [x] Opt-in extract, pack, and convert plan/execute tools protected by output roots, source/destination fingerprints, SHA-256 plan digests, all-or-nothing lifecycle rules, and disabled-by-default source deletion.
 - [x] Official MCP Inspector compatibility, independent JSON-RPC subprocess tests, macOS/Linux all-feature automated tests, and real multi-format archive smoke tests.
-- [x] Default-enabled MCP and a prepared three-platform GitHub/Homebrew/npm/pnpm release pipeline; public v0.5.0 publication remains a separate release operation.
+- [x] Default-enabled MCP and a three-platform release pipeline; v0.5.0 is published through crates.io, GitHub Releases, Homebrew, npm, and pnpm with the same default command set.
 
 The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) and the detailed [integration plan](./docs/V0.5-INTEGRATIONS-PLAN.md).
 

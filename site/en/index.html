@@ -144,15 +144,15 @@
       <div class="wrap quickstart-grid">
         <div class="reveal">
           <span class="section-index">01 — Quickstart</span>
-          <h2 class="section-title">From clone to first inspect <span class="tone-2">in three commands.</span></h2>
-          <p class="quickstart-note">v0.5 currently ships as source only — no crates.io package and no ready-made binaries yet. RAR support needs libarchive; see <a href="/en/download.html">Download</a> for platform dependencies.</p>
+          <h2 class="section-title">Install and inspect <span class="tone-2">in one command.</span></h2>
+          <p class="quickstart-note">v0.5.0 is available through Cargo, Homebrew, npm and pnpm, with MCP included by default. See <a href="/en/download.html">Download</a> for every install option and prebuilt archives.</p>
         </div>
         <div class="frame reveal">
           <div class="term">
             <div class="term-bar">
               <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
               <span class="term-title">install — zsh</span>
-              <button class="term-copy" type="button" data-copy="git clone https://github.com/mkynyd/arcthis.git &amp;&amp; cd arcthis &amp;&amp; cargo build --release --locked" data-copy-name="Install commands" aria-label="Copy install commands">
+              <button class="term-copy" type="button" data-copy="cargo install arcthis --locked" data-copy-name="Install command" aria-label="Copy install command">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
                   <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
                   <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/>
@@ -160,10 +160,8 @@
                 <span data-copy-label>Copy</span>
               </button>
             </div>
-            <div class="term-body"><span class="tp">$ </span><span class="tc">git clone</span> https://github.com/mkynyd/arcthis.git
-<span class="tp">$ </span><span class="tc">cd</span> arcthis
-<span class="tp">$ </span><span class="tc">cargo build</span> <span class="tf">--release --locked</span>
-<span class="tp">$ </span><span class="tc">./target/release/arcthis</span> <span class="tf">--version</span>
+            <div class="term-body"><span class="tp">$ </span><span class="tc">cargo install</span> arcthis <span class="tf">--locked</span>
+<span class="tp">$ </span><span class="tc">arcthis</span> <span class="tf">--version</span>
 <span class="to">arcthis 0.5.0</span></div>
           </div>
         </div>
@@ -489,11 +487,11 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
     <section class="cta">
       <div class="wrap">
         <h2 class="cta-title reveal">Access before extraction.</h2>
-        <p class="cta-sub reveal">Build v0.5.0 from source and look inside your first archive in under a minute.</p>
+        <p class="cta-sub reveal">Install v0.5.0 and look inside your first archive in under a minute.</p>
         <div class="reveal">
           <div class="install-chip">
-            <span><span class="tp">$ </span>cargo install --path . --locked</span>
-            <button type="button" data-copy="cargo install --path . --locked" data-copy-name="Install command" aria-label="Copy install command">
+            <span><span class="tp">$ </span>cargo install arcthis --locked</span>
+            <button type="button" data-copy="cargo install arcthis --locked" data-copy-name="Install command" aria-label="Copy install command">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
               <span data-copy-label>Copy</span>
             </button>

@@ -4,7 +4,22 @@
 
 本文说明截至 v0.5 已真实实现的命令行工具与内置本地 MCP 入口。产品目标和后续规划见 [docs/PRODUCT.md](./docs/PRODUCT.md) 与 [ROADMAP.md](./ROADMAP.md)。
 
-## 构建与安装
+## 安装
+
+任选一种公开安装方式。所有方式默认都包含 MCP：
+
+```sh
+cargo install arcthis --locked
+brew install mkynyd/tap/arcthis
+npm install -g arcthis
+pnpm add -g arcthis
+```
+
+pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
+
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0) 下载。
+
+### 从源码构建
 
 仓库固定 Rust 1.98.0。
 

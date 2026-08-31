@@ -4,7 +4,22 @@
 
 This guide describes the command-line tool and built-in local MCP entry point implemented through v0.5. For product goals and later commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
 
-## Build and install
+## Install
+
+Choose one public installation channel. Every option includes MCP by default:
+
+```sh
+cargo install arcthis --locked
+brew install mkynyd/tap/arcthis
+npm install -g arcthis
+pnpm add -g arcthis
+```
+
+pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
+
+Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0).
+
+### Build from source
 
 The repository pins Rust 1.98.0.
 
@@ -15,7 +30,7 @@ cargo build --release --locked
 ./target/release/arcthis --version
 ```
 
-Install the current source with:
+Install a local checkout with:
 
 ```sh
 cargo install --path . --locked
