@@ -88,6 +88,6 @@ This map lists important maintained files and their current responsibilities. Ge
 - `site/download.html` / `site/docs.html` — Chinese source-build install guide and CLI reference.
 - `site/en/` — English versions of all three pages. Language auto-detects from `navigator.language` on first visit and persists explicit choices via `localStorage`.
 - `site/assets/style.css` — Shared light/dark semantic-token design system (system-adaptive with manual toggle).
-- `site/assets/main.js` — Theme and language persistence, copy buttons, GSAP scroll reveals, and the window-scroll stacked-card effect.
+- `site/assets/main.js` — Theme and language persistence, accessible install-method tabs, copy buttons, GSAP scroll reveals, and the window-scroll stacked-card effect.
 - `site/assets/logo.svg` / `site/assets/favicon.svg` — Placeholder archive-tree logo mark.
-- Deployed as static files to https://arcthis.mkynstudio.top (`/www/wwwroot/arcthis.mkynstudio.top` on the `remoteDev` host) via rsync; no build step.
+- `site/deploy.sh` — Single deploy entry point: bumps the `?v=<timestamp>` cache-busting query on the shared assets in every page, then rsyncs to https://arcthis.mkynstudio.top (`/www/wwwroot/arcthis.mkynstudio.top` on the `remoteDev` host) and fixes ownership. No build step.

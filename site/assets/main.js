@@ -85,6 +85,65 @@
     });
   });
 
+  /* ---------- install method tabs ---------- */
+
+  var installMethods = {
+    brew: {
+      command: 'brew install mkynyd/tap/arcthis',
+      html: '<span class="tp">$ </span><span class="tc">brew install</span> mkynyd/tap/arcthis',
+      name: 'Homebrew'
+    },
+    npm: {
+      command: 'npm install -g arcthis',
+      html: '<span class="tp">$ </span><span class="tc">npm install</span> <span class="tf">-g</span> arcthis',
+      name: 'npm'
+    },
+    cargo: {
+      command: 'cargo install arcthis --locked',
+      html: '<span class="tp">$ </span><span class="tc">cargo install</span> arcthis <span class="tf">--locked</span>',
+      name: 'Cargo'
+    }
+  };
+
+  document.querySelectorAll('[data-install-tabs]').forEach(function (tablist) {
+    var term = tablist.closest('.term');
+    var command = term && term.querySelector('[data-install-command]');
+    var copy = term && term.querySelector('[data-install-copy]');
+    var tabs = Array.prototype.slice.call(tablist.querySelectorAll('[data-install-option]'));
+    if (!command || !copy || tabs.length === 0) return;
+
+    function selectInstallMethod(tab) {
+      var method = installMethods[tab.getAttribute('data-install-option')];
+      if (!method) return;
+      tabs.forEach(function (candidate) {
+        var selected = candidate === tab;
+        candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+        candidate.setAttribute('tabindex', selected ? '0' : '-1');
+      });
+      command.innerHTML = method.html;
+      copy.setAttribute('data-copy', method.command);
+      var zh = (document.documentElement.lang || '').toLowerCase().indexOf('zh') === 0;
+      copy.setAttribute('data-copy-name', method.name + (zh ? ' 安装命令' : ' install command'));
+      copy.setAttribute('aria-label', (zh ? '复制 ' : 'Copy ') + method.name + (zh ? ' 安装命令' : ' install command'));
+    }
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () { selectInstallMethod(tab); });
+      tab.addEventListener('keydown', function (event) {
+        var current = tabs.indexOf(tab);
+        var next = current;
+        if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        tabs[next].focus();
+        selectInstallMethod(tabs[next]);
+      });
+    });
+  });
+
   /* ---------- GSAP reveals ---------- */
 
   var hasGsap = typeof window.gsap !== 'undefined' && typeof window.ScrollTrigger !== 'undefined';
@@ -133,6 +192,8 @@
 
     var cardTops = [];
     var endTop = 0;
+    var cardHeight = 0;
+    var nextTop = 0;
     var lastTransforms = new Map();
     var ticking = false;
 
@@ -143,11 +204,16 @@
       cards.forEach(function (card) {
         maxH = Math.max(maxH, card.getBoundingClientRect().height);
       });
-      cards.forEach(function (card) { card.style.height = Math.ceil(maxH) + 'px'; });
+      cardHeight = Math.ceil(maxH);
+      cards.forEach(function (card) { card.style.height = cardHeight + 'px'; });
       cardTops = cards.map(function (card) {
         return card.getBoundingClientRect().top + window.scrollY;
       });
       endTop = endEl ? endEl.getBoundingClientRect().top + window.scrollY : 0;
+      // the section right after the stack decides when the pin releases
+      var stackSection = stackInner.closest('.stack-section');
+      var nextSection = stackSection ? stackSection.nextElementSibling : null;
+      nextTop = nextSection ? nextSection.getBoundingClientRect().top + window.scrollY : 0;
       lastTransforms.clear();
       update();
     }
@@ -164,7 +230,12 @@
       var vh = window.innerHeight;
       var stackPosPx = CFG.stackPosition * vh;
       var scaleEndPx = CFG.scaleEndPosition * vh;
-      var pinEnd = endTop - vh / 2;
+      // Release the pin exactly when the top edge of the next section reaches
+      // the bottom edge of the fully stacked pile. The settled pile therefore
+      // persists on screen for its whole pin duration, and following content
+      // can never slide under a pinned card — at any viewport height.
+      var slotBottom = stackPosPx + CFG.itemStackDistance * (cards.length - 1) + cardHeight;
+      var pinEnd = nextTop ? nextTop - slotBottom : endTop - vh * 0.75;
 
       cards.forEach(function (card, i) {
         var cardTop = cardTops[i];
@@ -180,7 +251,9 @@
         if (scrollTop >= pinStart && scrollTop <= pinEnd) {
           translateY = scrollTop - cardTop + stackPosPx + CFG.itemStackDistance * i;
         } else if (scrollTop > pinEnd) {
-          translateY = pinEnd - cardTop + stackPosPx + CFG.itemStackDistance * i;
+          // clamp at 0: on very tall viewports pinEnd can precede pinStart,
+          // and a negative offset would make the card jump upwards
+          translateY = Math.max(0, pinEnd - cardTop + stackPosPx + CFG.itemStackDistance * i);
         }
 
         var next = {

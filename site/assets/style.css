@@ -415,6 +415,40 @@ code, pre, kbd, .mono { font-family: var(--mono); }
 .term-copy svg { width: 13px; height: 13px; }
 .term-copy.copied { color: var(--ok); }
 
+.install-tabs {
+  display: flex;
+  gap: 28px;
+  min-height: 48px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.install-tabs button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 140ms ease;
+}
+
+.install-tabs button:hover { color: var(--text-primary); }
+.install-tabs button[aria-selected="true"] { color: var(--text-primary); }
+.install-tabs button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.install-command { min-height: 67px; }
+
 .term-body {
   padding: 20px 22px;
   font-family: var(--mono);
@@ -542,8 +576,10 @@ code, pre, kbd, .mono { font-family: var(--mono); }
 }
 
 @media (min-width: 1024px) {
-  /* trailing room so the section below never slides under the pinned cards */
-  .stack-inner { padding-bottom: 50vh; }
+  /* runway for the last card to settle into its stacked slot before the
+     next section scrolls into view (occlusion is handled by the early
+     pin release in main.js, not by this padding) */
+  .stack-inner { padding-bottom: 20vh; }
 }
 
 .stack-card {

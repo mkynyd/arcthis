@@ -30,7 +30,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/style.css?v=20260923101822">
 </head>
 <body>
   <a class="skip-link" href="#main">跳到主要内容</a>
@@ -152,7 +152,7 @@
             <div class="term-bar">
               <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
               <span class="term-title">install — zsh</span>
-              <button class="term-copy" type="button" data-copy="cargo install arcthis --locked" data-copy-name="安装命令" aria-label="复制安装命令">
+              <button class="term-copy" type="button" data-copy="brew install mkynyd/tap/arcthis" data-copy-name="Homebrew 安装命令" aria-label="复制 Homebrew 安装命令" data-install-copy>
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
                   <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
                   <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/>
@@ -160,9 +160,12 @@
                 <span data-copy-label>复制</span>
               </button>
             </div>
-            <div class="term-body"><span class="tp">$ </span><span class="tc">cargo install</span> arcthis <span class="tf">--locked</span>
-<span class="tp">$ </span><span class="tc">arcthis</span> <span class="tf">--version</span>
-<span class="to">arcthis 0.5.0</span></div>
+            <div class="install-tabs" role="tablist" aria-label="选择安装方式" data-install-tabs>
+              <button type="button" role="tab" aria-selected="true" aria-controls="install-command-zh" data-install-option="brew">Homebrew</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="install-command-zh" tabindex="-1" data-install-option="npm">npm</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="install-command-zh" tabindex="-1" data-install-option="cargo">Cargo</button>
+            </div>
+            <div class="term-body install-command" id="install-command-zh" role="tabpanel" tabindex="0" data-install-command><span class="tp">$ </span><span class="tc">brew install</span> mkynyd/tap/arcthis</div>
           </div>
         </div>
       </div>
@@ -490,8 +493,8 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
         <p class="cta-sub reveal">安装 v0.5.0,一分钟内查看你的第一个压缩包。</p>
         <div class="reveal">
           <div class="install-chip">
-            <span><span class="tp">$ </span>cargo install arcthis --locked</span>
-            <button type="button" data-copy="cargo install arcthis --locked" data-copy-name="安装命令" aria-label="复制安装命令">
+            <span><span class="tp">$ </span>brew install mkynyd/tap/arcthis</span>
+            <button type="button" data-copy="brew install mkynyd/tap/arcthis" data-copy-name="Homebrew 安装命令" aria-label="复制 Homebrew 安装命令">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
               <span data-copy-label>复制</span>
             </button>
@@ -565,6 +568,6 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
   <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" defer></script>
-  <script src="/assets/main.js" defer></script>
+  <script src="/assets/main.js?v=20260923101822" defer></script>
 </body>
 </html>
