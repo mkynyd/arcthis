@@ -188,7 +188,7 @@
             <div>
               <span class="stack-num">move / 01</span>
               <h3>不解压,先查文件</h3>
-              <p class="stack-desc"><code>find</code> 只对照压缩包的文件清单按通配符匹配路径,完全不读取文件内容 —— 哪怕是几个 GB 的压缩包,查找也一样快。</p>
+              <p class="stack-desc"><code>find</code> 按通配符匹配文件清单中的路径。顺序压缩格式需要先扫描清单,查询结果不会写出文件。</p>
             </div>
             <div class="term">
               <div class="term-bar">
@@ -209,7 +209,7 @@ dataset/train/data.csv</span></div>
             <div>
               <span class="stack-num">move / 02</span>
               <h3>原地搜索内容</h3>
-              <p class="stack-desc"><code>grep</code> 直接在压缩包里逐行扫描文本文件,对文件大小、行数、匹配数量和二进制文件都设有上限 —— 搜索全程不写入任何磁盘文件。</p>
+              <p class="stack-desc"><code>grep</code> 逐行搜索压缩包内的文本,限制文件大小、行长度、匹配数量和结果总量。默认跳过二进制文件。</p>
             </div>
             <div class="term">
               <div class="term-bar">
@@ -533,7 +533,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
             <li><a href="/download.html">下载</a></li>
             <li><a href="/docs.html">文档</a></li>
             <li><a href="/#formats">支持的格式</a></li>
-            <li><a href="/#mcp">MCP 前端</a></li>
+            <li><a href="/#mcp">MCP 服务</a></li>
           </ul>
         </div>
         <div class="footer-col">

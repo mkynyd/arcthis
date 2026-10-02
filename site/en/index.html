@@ -187,8 +187,8 @@
           <article class="stack-card">
             <div>
               <span class="stack-num">move / 01</span>
-              <h3>Find files without decompressing</h3>
-              <p class="stack-desc"><code>find</code> matches paths against the archive's file list using wildcards. File contents are never read, so finding files stays fast even on multi-gigabyte archives.</p>
+              <h3>Find matching paths</h3>
+              <p class="stack-desc"><code>find</code> matches paths in the file list using wildcards. Sequential formats scan to build that list; queries do not extract files.</p>
             </div>
             <div class="term">
               <div class="term-bar">
@@ -209,7 +209,7 @@ dataset/train/data.csv</span></div>
             <div>
               <span class="stack-num">move / 02</span>
               <h3>Search contents in place</h3>
-              <p class="stack-desc"><code>grep</code> scans text files directly inside the archive, with caps on file size, lines, matches and binary files. Nothing is written to disk while you search.</p>
+              <p class="stack-desc"><code>grep</code> searches text inside the archive with limits on file size, line length, matches and total results. Binary files are skipped by default.</p>
             </div>
             <div class="term">
               <div class="term-bar">
@@ -533,7 +533,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
             <li><a href="/en/download.html">Download</a></li>
             <li><a href="/en/docs.html">Documentation</a></li>
             <li><a href="/en/#formats">Supported formats</a></li>
-            <li><a href="/en/#mcp">MCP frontend</a></li>
+            <li><a href="/en/#mcp">MCP server</a></li>
           </ul>
         </div>
         <div class="footer-col">
