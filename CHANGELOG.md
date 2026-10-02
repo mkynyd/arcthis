@@ -2,7 +2,7 @@
 
 This file records user-visible changes to Arcthis. The project follows semantic versioning after the first public release.
 
-## 0.5.1-rc.1 - Unreleased
+## 0.5.1 - 2026-10-02
 
 ### Fixed
 

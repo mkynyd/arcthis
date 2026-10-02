@@ -52,7 +52,7 @@ RAR creation is not assumed. Capabilities distinguish read, extract, create, and
 
 The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) and the detailed [integration plan](./docs/V0.5-INTEGRATIONS-PLAN.md).
 
-## v0.5.1 — Safety and resource limits (release candidate)
+## v0.5.1 — Safety and resource limits
 
 - [x] Bidirectional write-path overlap checks and cross-archive batch conflict checks.
 - [x] Bounded iterative tree construction and reuse by CLI output.

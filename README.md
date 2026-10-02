@@ -29,7 +29,7 @@ ZIP can usually read a selected file directly. TAR and TAR.GZ scan in order. `in
 
 ## Project status
 
-Arcthis v0.5.1 is undergoing release validation. The current public version is v0.5.0. Every installation channel includes the CLI and local MCP server.
+Arcthis v0.5.1 includes the CLI and local MCP server. Every installation channel provides the same commands.
 
 ### Changes in v0.5.1
 
