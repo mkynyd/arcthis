@@ -11,8 +11,8 @@ use crate::archive::Archive;
 use crate::error::{ArcthisError, Result};
 use crate::lifecycle::{
     CollisionPolicy, OperationStatus, commit_staged_path, delete_source,
-    ensure_destination_survives_source_deletion, ensure_distinct_source_and_destination,
-    ensure_executable_resolution, resolve_destination,
+    ensure_executable_resolution, ensure_source_and_destination_do_not_overlap,
+    resolve_destination,
 };
 use crate::model::{ArchiveEntry, ArchiveFormat, EntryKind, EntryPathEncoding};
 use crate::security::{ExtractionLimits, validate_entry_path};
@@ -129,10 +129,7 @@ pub(crate) fn plan_extract_archive(
             )
         };
     let resolution = resolve_destination(&requested, options.collision_policy)?;
-    ensure_distinct_source_and_destination(archive.path(), &resolution.path)?;
-    if options.delete_source {
-        ensure_destination_survives_source_deletion(archive.path(), &resolution.path)?;
-    }
+    ensure_source_and_destination_do_not_overlap(archive.path(), &resolution.path)?;
     let warnings = archive
         .inspect()?
         .warnings
@@ -175,10 +172,7 @@ fn extract_single(
     }
     enforce_declared_size(&entry, &options.limits)?;
     let resolution = resolve_destination(&requested, options.collision_policy)?;
-    ensure_distinct_source_and_destination(archive.path(), &resolution.path)?;
-    if options.delete_source {
-        ensure_destination_survives_source_deletion(archive.path(), &resolution.path)?;
-    }
+    ensure_source_and_destination_do_not_overlap(archive.path(), &resolution.path)?;
     ensure_executable_resolution(&resolution, options.collision_policy)?;
     if resolution.skip {
         return Ok(ExtractResult {
@@ -249,10 +243,7 @@ fn extract_all(archive: &Archive, options: &ExtractOptions) -> Result<ExtractRes
         &validated,
     )?;
     let resolution = resolve_destination(&requested, options.collision_policy)?;
-    ensure_distinct_source_and_destination(archive.path(), &resolution.path)?;
-    if options.delete_source {
-        ensure_destination_survives_source_deletion(archive.path(), &resolution.path)?;
-    }
+    ensure_source_and_destination_do_not_overlap(archive.path(), &resolution.path)?;
     ensure_executable_resolution(&resolution, options.collision_policy)?;
     if resolution.skip {
         return Ok(ExtractResult {

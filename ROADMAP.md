@@ -52,6 +52,14 @@ RAR creation is not assumed. Capabilities distinguish read, extract, create, and
 
 The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) and the detailed [integration plan](./docs/V0.5-INTEGRATIONS-PLAN.md).
 
+## Post-v0.5 hardening (implemented in source, not yet published)
+
+- [x] Bidirectional write-path overlap checks and cross-archive batch conflict checks.
+- [x] Bounded iterative tree construction and reuse by CLI output.
+- [x] MCP mutation ceilings and bounded pack source enumeration.
+- [x] MCP active-request admission and serialized tool-response budgets.
+- [x] Cross-file grep match-byte limits and actual MCP decoded-scan accounting.
+
 ## v0.6+ — Further integrations
 
 1. **v0.6:** capped HTTP remote archive source with validated range/cache behavior.

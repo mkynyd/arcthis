@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::SCHEMA_VERSION;
-use crate::app::{TreeNode, build_tree};
+use crate::app::TreeNode;
 use crate::batch::{ExtractAllPlan, ExtractAllResult};
 use crate::convert::{ConvertPlan, ConvertResult};
 use crate::error::{ArcthisError, Result};
@@ -253,23 +253,22 @@ pub(crate) fn write_tree(
     writer: &mut impl Write,
     path: &Path,
     format: ArchiveFormat,
-    entries: &[ArchiveEntry],
+    tree: &[TreeNode],
     json: bool,
 ) -> Result<()> {
-    let tree = build_tree(entries);
     if json {
         write_json(
             writer,
             &TreeResponse {
                 schema_version: SCHEMA_VERSION,
                 archive: ArchiveReference::new(path, format),
-                tree: &tree,
+                tree,
             },
         )
     } else {
         writeln!(writer, "{}", path.display())
             .map_err(|error| ArcthisError::io("writing tree output", error))?;
-        write_human_tree(writer, &tree, "")
+        write_human_tree(writer, tree, "")
     }
 }
 
@@ -688,7 +687,7 @@ fn write_human_tree(writer: &mut impl Write, nodes: &[TreeNode], prefix: &str) -
 
 #[cfg(test)]
 mod tests {
-    use super::build_tree;
+    use crate::app::build_tree;
     use crate::model::{ArchiveEntry, EntryKind};
 
     fn entry(path: &str, kind: EntryKind) -> ArchiveEntry {
@@ -714,7 +713,7 @@ mod tests {
             entry("src/lib.rs", EntryKind::File),
             entry("src/", EntryKind::Directory),
         ];
-        let tree = build_tree(&entries);
+        let tree = build_tree(&entries).expect("build tree");
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].name, "src");
         assert!(tree[0].entry.is_some());
@@ -727,6 +726,6 @@ mod tests {
             entry("same.txt", EntryKind::File),
             entry("same.txt", EntryKind::File),
         ];
-        assert_eq!(build_tree(&entries).len(), 2);
+        assert_eq!(build_tree(&entries).expect("build tree").len(), 2);
     }
 }

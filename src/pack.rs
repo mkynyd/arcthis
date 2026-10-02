@@ -17,9 +17,11 @@ use crate::archive::Archive;
 use crate::error::{ArcthisError, Result};
 use crate::lifecycle::{
     CollisionPolicy, OperationStatus, commit_staged_path, delete_source,
-    ensure_destination_outside_source, ensure_executable_resolution, resolve_destination,
+    ensure_executable_resolution, ensure_source_and_destination_do_not_overlap,
+    resolve_destination,
 };
 use crate::model::{ArchiveFormat, VerificationResult};
+use crate::security::ExtractionLimits;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
@@ -40,6 +42,7 @@ pub struct PackOptions {
     pub delete_source: bool,
     /// Include the source basename as the first archive path component.
     pub include_source_root: bool,
+    pub limits: ExtractionLimits,
 }
 
 impl Default for PackOptions {
@@ -48,6 +51,12 @@ impl Default for PackOptions {
             collision_policy: CollisionPolicy::Refuse,
             delete_source: false,
             include_source_root: true,
+            limits: ExtractionLimits {
+                max_entries: u64::MAX,
+                max_total_size: u64::MAX,
+                max_entry_size: u64::MAX,
+                ..ExtractionLimits::default()
+            },
         }
     }
 }
@@ -81,6 +90,7 @@ struct SourceEntry {
     archive_path: PathBuf,
     kind: SourceKind,
     unix_mode: u32,
+    size: u64,
 }
 
 pub fn pack_source(source: &Path, output: &Path) -> Result<PackResult> {
@@ -92,18 +102,12 @@ pub fn plan_pack_source(source: &Path, output: &Path, options: &PackOptions) -> 
     let source = fs::canonicalize(source)
         .map_err(|error| ArcthisError::io("resolving pack source", error))?;
     let resolution = resolve_destination(output, options.collision_policy)?;
-    ensure_destination_outside_source(&source, &resolution.path)?;
-    let source_entries = collect_source_entries(&source, options.include_source_root)?;
+    ensure_source_and_destination_do_not_overlap(&source, &resolution.path)?;
+    let source_entries =
+        collect_source_entries(&source, options.include_source_root, &options.limits)?;
     let estimated_input_size = source_entries.iter().try_fold(0_u64, |total, entry| {
-        let size = if entry.kind == SourceKind::File {
-            fs::metadata(&entry.source_path)
-                .map_err(|error| ArcthisError::io("reading pack source size", error))?
-                .len()
-        } else {
-            0
-        };
         total
-            .checked_add(size)
+            .checked_add(entry.size)
             .ok_or_else(|| ArcthisError::ResourceLimit {
                 message: "pack input size overflows u64".to_owned(),
             })
@@ -133,8 +137,9 @@ pub fn pack_source_with_options(
     let source = fs::canonicalize(source)
         .map_err(|error| ArcthisError::io("resolving pack source", error))?;
     let resolution = resolve_destination(output, options.collision_policy)?;
-    ensure_destination_outside_source(&source, &resolution.path)?;
-    let source_entries = collect_source_entries(&source, options.include_source_root)?;
+    ensure_source_and_destination_do_not_overlap(&source, &resolution.path)?;
+    let source_entries =
+        collect_source_entries(&source, options.include_source_root, &options.limits)?;
     ensure_executable_resolution(&resolution, options.collision_policy)?;
     if resolution.skip {
         let existing = Archive::open(resolution.path.as_path())?;
@@ -272,7 +277,12 @@ pub(crate) fn output_format(output: &Path) -> Result<ArchiveFormat> {
     }
 }
 
-fn collect_source_entries(source: &Path, include_source_root: bool) -> Result<Vec<SourceEntry>> {
+#[allow(clippy::too_many_lines)] // One filesystem walk validates metadata and resource budgets before writing.
+fn collect_source_entries(
+    source: &Path,
+    include_source_root: bool,
+    limits: &ExtractionLimits,
+) -> Result<Vec<SourceEntry>> {
     let original_metadata = fs::symlink_metadata(source)
         .map_err(|error| ArcthisError::io("reading pack source metadata", error))?;
     if original_metadata.file_type().is_symlink() {
@@ -293,6 +303,7 @@ fn collect_source_entries(source: &Path, include_source_root: bool) -> Result<Ve
     };
 
     let mut result = Vec::new();
+    let mut total_size = 0_u64;
     for entry in WalkDir::new(&source)
         .follow_links(false)
         .sort_by_file_name()
@@ -331,11 +342,61 @@ fn collect_source_entries(source: &Path, include_source_root: bool) -> Result<Ve
                 message: format!("cannot derive archive path: {error}"),
             })?
             .to_path_buf();
+        let entry_count = u64::try_from(result.len())
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
+        if entry_count > limits.max_entries {
+            return Err(ArcthisError::ResourceLimit {
+                message: format!(
+                    "pack source contains more than {} entries",
+                    limits.max_entries
+                ),
+            });
+        }
+        let size = if kind == SourceKind::File {
+            metadata.len()
+        } else {
+            0
+        };
+        if size > limits.max_entry_size {
+            return Err(ArcthisError::ResourceLimit {
+                message: format!(
+                    "pack source entry {} uses {size} bytes, above limit {}",
+                    entry.path().display(),
+                    limits.max_entry_size
+                ),
+            });
+        }
+        total_size = total_size
+            .checked_add(size)
+            .ok_or_else(|| ArcthisError::ResourceLimit {
+                message: "pack source size overflows u64".to_owned(),
+            })?;
+        if total_size > limits.max_total_size {
+            return Err(ArcthisError::ResourceLimit {
+                message: format!(
+                    "pack source uses {total_size} bytes, above limit {}",
+                    limits.max_total_size
+                ),
+            });
+        }
+        let archive_path_text = archive_path.to_string_lossy();
+        if archive_path_text.len() > limits.max_path_bytes
+            || archive_path.components().count() > limits.max_components
+        {
+            return Err(ArcthisError::ResourceLimit {
+                message: format!(
+                    "pack source path exceeds configured limits: {}",
+                    archive_path.display()
+                ),
+            });
+        }
         result.push(SourceEntry {
             source_path: entry.path().to_path_buf(),
             archive_path,
             kind,
             unix_mode: unix_mode(&metadata, kind),
+            size,
         });
     }
     Ok(result)

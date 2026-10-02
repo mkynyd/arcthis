@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, mpsc};
 
@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 use crate::archive::{Archive, ArchiveOpenOptions};
 use crate::error::{ArcthisError, ErrorCode, Result};
 use crate::extract::{ExtractOptions, ExtractPlan, ExtractResult};
-use crate::lifecycle::OperationStatus;
+use crate::lifecycle::{OperationStatus, comparable_path};
 
 #[derive(Debug, Clone)]
 pub struct ExtractAllOptions {
@@ -54,22 +54,13 @@ pub fn plan_extract_all(root: &Path, options: &ExtractAllOptions) -> Result<Extr
     let paths = discover_archives(&root, options.recursive, &options.open)?;
     let workers = normalized_workers(options.workers);
     let mut archives = Vec::with_capacity(paths.len());
-    let mut destinations = HashMap::<PathBuf, PathBuf>::new();
-    let mut destination_conflicts = Vec::new();
     for path in paths {
         let archive = Archive::open_with_options(path.as_path(), &options.open)?;
         let extract_options = per_archive_options(&path, &options.extract);
         let plan = archive.plan_extract(None, &extract_options)?;
-        if let Some(previous) = destinations.insert(plan.destination.clone(), path.clone()) {
-            destination_conflicts.push(format!(
-                "{} and {} both resolve to {}",
-                previous.display(),
-                path.display(),
-                plan.destination.display()
-            ));
-        }
         archives.push(plan);
     }
+    let destination_conflicts = find_plan_path_conflicts(&archives)?;
     Ok(ExtractAllPlan {
         root,
         recursive: options.recursive,
@@ -77,6 +68,51 @@ pub fn plan_extract_all(root: &Path, options: &ExtractAllOptions) -> Result<Extr
         archives,
         destination_conflicts,
     })
+}
+
+fn find_plan_path_conflicts(archives: &[ExtractPlan]) -> Result<Vec<String>> {
+    let mut sources = BTreeMap::<PathBuf, PathBuf>::new();
+    for plan in archives {
+        sources.insert(comparable_path(&plan.source)?, plan.source.clone());
+    }
+
+    let mut destinations = BTreeMap::<PathBuf, PathBuf>::new();
+    let mut conflicts = Vec::new();
+    for plan in archives.iter().filter(|plan| !plan.will_skip) {
+        let destination = comparable_path(&plan.destination)?;
+        if let Some(source) = find_overlapping_path(&sources, &destination) {
+            conflicts.push(format!(
+                "destination {} overlaps archive source {}",
+                plan.destination.display(),
+                source.display()
+            ));
+        }
+        if let Some(previous) = find_overlapping_path(&destinations, &destination) {
+            conflicts.push(format!(
+                "destinations {} and {} overlap",
+                previous.display(),
+                plan.destination.display()
+            ));
+        }
+        destinations.insert(destination, plan.destination.clone());
+    }
+    Ok(conflicts)
+}
+
+fn find_overlapping_path<'a>(
+    paths: &'a BTreeMap<PathBuf, PathBuf>,
+    candidate: &Path,
+) -> Option<&'a PathBuf> {
+    for ancestor in candidate.ancestors() {
+        if let Some(original) = paths.get(ancestor) {
+            return Some(original);
+        }
+    }
+    paths
+        .range(candidate.to_path_buf()..)
+        .next()
+        .filter(|(path, _)| path.starts_with(candidate))
+        .map(|(_, original)| original)
 }
 
 pub fn extract_all(root: &Path, options: &ExtractAllOptions) -> Result<ExtractAllResult> {

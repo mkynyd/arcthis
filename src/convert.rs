@@ -8,8 +8,8 @@ use crate::archive::{Archive, ArchiveOpenOptions};
 use crate::error::{ArcthisError, Result};
 use crate::extract::{ExtractOptions, enforce_entry_count, validate_entries};
 use crate::lifecycle::{
-    CollisionPolicy, OperationStatus, delete_source, ensure_destination_survives_source_deletion,
-    ensure_distinct_source_and_destination, ensure_executable_resolution, resolve_destination,
+    CollisionPolicy, OperationStatus, delete_source, ensure_executable_resolution,
+    ensure_source_and_destination_do_not_overlap, resolve_destination,
 };
 use crate::model::{ArchiveFormat, VerificationResult};
 use crate::pack::{PackOptions, output_format, pack_source_with_options};
@@ -70,10 +70,6 @@ pub struct ConvertResult {
 pub fn plan_convert(source: &Path, output: &Path, options: &ConvertOptions) -> Result<ConvertPlan> {
     let source = fs::canonicalize(source)
         .map_err(|error| ArcthisError::io("resolving conversion source", error))?;
-    ensure_distinct_source_and_destination(&source, output)?;
-    if options.delete_source {
-        ensure_destination_survives_source_deletion(&source, output)?;
-    }
     let target_format = output_format(output)?;
     let archive = Archive::open_with_options(source.as_path(), &options.open)?;
     let entries = archive.entries()?;
@@ -88,6 +84,7 @@ pub fn plan_convert(source: &Path, output: &Path, options: &ConvertOptions) -> R
             })
     })?;
     let resolution = resolve_destination(output, options.collision_policy)?;
+    ensure_source_and_destination_do_not_overlap(&source, &resolution.path)?;
     Ok(ConvertPlan {
         source,
         destination: resolution.path,
@@ -191,6 +188,7 @@ pub fn convert_archive(
             collision_policy: options.collision_policy,
             delete_source: false,
             include_source_root: false,
+            limits: options.limits,
         },
     )?;
     let source_deleted = if options.delete_source {

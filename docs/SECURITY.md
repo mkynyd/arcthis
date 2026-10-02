@@ -41,7 +41,7 @@ Declared metadata is checked during planning. Actual bytes are counted while rea
 
 Nested query traversal is separately capped to depth 8 and 256 MiB decoded bytes per inner archive by default. `--max-nested-entry-size` can lower or raise the per-level cap. Allocation uses fallible reservation and actual read bytes are checked. Nested extraction and source deletion are not supported.
 
-`grep` defaults to 16 MiB per file, 10,000 matching lines, an 8 KiB binary probe, and at most 1 MiB retained per line. These are content-discovery limits, not extraction guarantees; extraction enforces its independent limits.
+`grep` defaults to 16 MiB per file, 10,000 matching lines, an 8 KiB binary probe, at most 1 MiB retained per line, and a 16 MiB serialized-match budget across all files. Path/JSON escaping and lossy UTF-8 expansion count toward that budget. Whole matches that do not fit are omitted and set `matches_truncated`. These are content-discovery limits, not extraction guarantees; extraction enforces its independent limits.
 
 ## Temporary files and saving
 
@@ -49,7 +49,7 @@ Full extraction creates a temporary sibling directory on the destination filesys
 
 Single-file extraction and packing use temporary sibling files and save only after reading/finishing succeeds. Packing additionally syncs, reopens, and verifies the temporary archive before saving.
 
-Existing paths are canonicalized for lifecycle comparison, and missing destinations are resolved through their nearest existing ancestor. Source and destination aliases are rejected. A pack destination must be outside a directory source. When source deletion is requested, neither source nor destination may contain the other, so post-save deletion cannot remove the result. These invariants are recorded in [ADR 0001](./ADR-0001-TRANSACTIONAL-LIFECYCLE.md).
+Existing paths are canonicalized for lifecycle comparison, and missing destinations are resolved through their nearest existing ancestor. Every write plan rejects source/destination aliases and ancestor/descendant overlap, regardless of whether source deletion was requested; overwrite therefore cannot replace an ancestor directory that contains its own source. These invariants are recorded in [ADR 0001](./ADR-0001-TRANSACTIONAL-LIFECYCLE.md).
 
 Destination collisions are refused by default. `--skip-existing` performs no write and never deletes the source. `--rename` selects the first available numbered sibling. `--overwrite` first moves the old destination to a unique sibling backup, saves the staged replacement, restores the backup if the save fails, and removes the backup after success. Concurrent external filesystem mutation remains a race boundary.
 
@@ -83,17 +83,20 @@ Dry-run computes and serializes the destination, collision action, estimated siz
 
 ## Local MCP policy
 
-The built-in stdio MCP server grants no implicit filesystem access. Every input is canonicalized and must remain within an explicit `--allow-root`; MCP client roots are informational only. Read requests have finite file, decoded-byte, result, and window limits. Binary windows are base64-encoded only after the raw byte limit is enforced. Passwords are not accepted as tool arguments.
+The built-in stdio MCP server grants no implicit filesystem access. Every input is canonicalized and must remain within an explicit `--allow-root`; MCP client roots are informational only. Read requests have finite file, decoded-byte, result, and window limits. Mutation requests may lower but cannot raise the server entry/decoded-byte ceilings; packing checks source entry count, per-file size, total size, and path shape before writing. Binary windows are base64-encoded only after the raw byte limit is enforced. Passwords are not accepted as tool arguments.
 
 Mutation tools are not advertised without an explicit `--allow-output-root`. Output paths must be descendants, not the root itself; `..`, symlink traversal below the allowed root, and destinations resolving outside it are rejected. Planning is non-mutating. Execute requires a SHA-256 digest over the exact request and plan plus source and destination fingerprints, then recomputes it before entering the normal staged process. A mismatch preserves source and destination state. Source deletion is a double opt-in: server policy plus request intent, and still occurs only after a verified save.
 
 MCP cancellation is bridged into application-service checkpoints. Cancellation before mutation perform prevents writes; once a synchronous codec/process operation is running, the same non-preemptible decoder-call limitation applies as for CLI duration enforcement. See [RFC 0003](./RFC-0003-MCP-INTEGRATION.md).
+
+MCP tool execution defaults to four active blocking workers; excess calls are rejected with `resource_limit` rather than queued without a bound. A cancelled protocol request keeps its slot occupied until the actual worker ends. Tool responses default to a 16 MiB serialized budget counting both text and structured JSON. Allocation-free accounting rejects oversized domain results before MCP builds those copies, reserving 256 bytes for the result envelope. Minimum response budgets are 1 KiB in read-only mode and 128 KiB with output roots, preserving room to acknowledge committed mutations. Grep shares an actual cross-file decoded-byte budget and clamps retained matches to one quarter of the response ceiling.
 
 ## Known limits of v0.5
 
 - Duration enforcement is checked during output writes; a codec that blocks inside one decoder call cannot be preempted safely.
 - No sandbox around codec crates.
 - Metadata listing of compressed TAR and single-file formats requires sequential decompression.
+- Response limits apply after backend metadata/domain results are built; they do not cap backend metadata allocation, codec working memory, or the transport's pending output queue.
 - Nested traversal currently buffers one selected inner archive in memory so its implementation can reopen it; it does not yet provide range-backed nested seeking.
 - Literal `grep` still decodes complete selected files even after binary classification or match truncation when an underlying integrity stream must be consumed.
 - The current implementation rejects non-UTF-8 file names instead of preserving raw filesystem bytes, and does not perform full Unicode normalization collision analysis.

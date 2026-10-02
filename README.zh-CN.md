@@ -114,6 +114,8 @@ arcthis mcp --allow-root ./archives --allow-output-root ./outputs
 
 stdio 服务固定使用 MCP `2025-06-18` 协议版本。`archive_read` 强制提供 offset/length（偏移量和长度），并受单次窗口上限约束。删除 source 还必须同时满足服务的 `--allow-source-deletion` 与 plan/execute 请求里的 `delete_source: true`。完整规则见 [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md)。
 
+MCP 默认最多同时运行 4 个调用，每次工具响应最多 16 MiB，计入结构化 JSON 和文本副本；并发超额或响应超限会返回 `resource_limit`。`grep --max-result-bytes` 默认限制跨文件的匹配结果为 16 MiB，MCP 还会按服务响应预算收紧此上限，省略的匹配通过 `matches_truncated` 报告。
+
 ## 快速开始
 
 ```sh
@@ -165,7 +167,7 @@ arcthis convert project.zip --output project.tar.zst --dry-run --json
 
 ## 安全模型
 
-完整解压会先完成文件信息提前检查和路径检查，拒绝链接和特殊文件，执行声明大小、真实写入、时间和压缩比限制，然后只写入同文件系统的临时目录；所有文件都成功后才会保存为最终结果。已有目标默认拒绝覆盖，`--overwrite`、`--skip-existing` 与 `--rename` 是互斥的显式处理方式。
+完整解压会先完成文件信息提前检查和路径检查，拒绝链接和特殊文件，执行声明大小、真实写入、时间和压缩比限制，然后只写入同文件系统的临时目录；所有文件都成功后才会保存为最终结果。所有写操作都会先拒绝 source/destination 的祖先或后代重叠，递归批处理还会保护每个已发现的压缩包源。已有目标默认拒绝覆盖，`--overwrite`、`--skip-existing` 与 `--rename` 是互斥的显式处理方式。
 
 创建压缩包会先写入同目录临时文件，完成收尾后，再通过统一的压缩包接口重新打开并逐文件验证，最后才保存到目标路径。输出位置位于源目录内部、或源与目标指向同一位置时都会被拒绝；`--delete-source` 只在保存后、且确认删除源文件不会删掉目标文件时才执行。dry-run 永远不会写入或删除。
 

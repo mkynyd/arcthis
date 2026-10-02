@@ -19,7 +19,8 @@ fn create_zip(workspace: &TempDir, source_name: &str, archive_name: &str) {
         .expect("run pack");
     assert!(
         output.status.success(),
-        "stderr: {}",
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -244,6 +245,74 @@ fn destructive_lifecycle_rejects_source_destination_overlap() {
 }
 
 #[test]
+fn overwrite_rejects_destination_ancestors_without_delete_source() {
+    let workspace = TempDir::new().expect("create test directory");
+
+    let extract_parent = workspace.path().join("extract-parent");
+    std::fs::create_dir(&extract_parent).expect("create extract parent");
+    create_zip(&workspace, "extract-source", "extract-parent/source.zip");
+    let extract_source = extract_parent.join("source.zip");
+    let extract = cargo_bin_cmd!("arcthis")
+        .args([
+            "extract",
+            extract_source.to_str().expect("extract source path"),
+            "--output",
+            extract_parent.to_str().expect("extract destination path"),
+            "--overwrite",
+            "--json",
+        ])
+        .output()
+        .expect("run overlapping extraction");
+    assert_eq!(extract.status.code(), Some(9));
+    assert!(extract_source.is_file());
+
+    let pack_parent = workspace.path().join("pack-parent.zip");
+    let pack_source = pack_parent.join("source");
+    std::fs::create_dir_all(&pack_source).expect("create nested pack source");
+    std::fs::write(pack_source.join("data.txt"), b"pack payload").expect("write pack source");
+    let pack = cargo_bin_cmd!("arcthis")
+        .args([
+            "pack",
+            pack_source.to_str().expect("pack source path"),
+            "--output",
+            pack_parent.to_str().expect("pack destination path"),
+            "--overwrite",
+            "--json",
+        ])
+        .output()
+        .expect("run overlapping pack");
+    assert_eq!(pack.status.code(), Some(9));
+    assert!(pack_source.join("data.txt").is_file());
+
+    let convert_parent = workspace.path().join("convert-parent.tar");
+    std::fs::create_dir(&convert_parent).expect("create convert parent");
+    create_zip(
+        &workspace,
+        "convert-source",
+        "convert-parent.tar/source.zip",
+    );
+    let convert_source = convert_parent.join("source.zip");
+    let convert = cargo_bin_cmd!("arcthis")
+        .args([
+            "convert",
+            convert_source.to_str().expect("convert source path"),
+            "--output",
+            convert_parent.to_str().expect("convert destination path"),
+            "--overwrite",
+            "--json",
+        ])
+        .output()
+        .expect("run overlapping conversion");
+    assert_eq!(
+        convert.status.code(),
+        Some(9),
+        "stderr: {}",
+        String::from_utf8_lossy(&convert.stderr)
+    );
+    assert!(convert_source.is_file());
+}
+
+#[test]
 fn selected_extract_verifies_entire_archive_before_deleting_source() {
     let workspace = TempDir::new().expect("create test directory");
     let archive = workspace.path().join("corrupted.zip");
@@ -325,4 +394,43 @@ fn extract_all_honors_recursive_workers_and_delete_source() {
     assert!(!workspace.path().join("nested/beta.zip").exists());
     assert!(workspace.path().join("alpha/data.txt").is_file());
     assert!(workspace.path().join("nested/beta/data.txt").is_file());
+}
+
+#[test]
+fn extract_all_rejects_cross_archive_source_destination_overlap() {
+    let workspace = TempDir::new().expect("create test directory");
+    create_zip(&workspace, "outer", "outer.zip");
+    std::fs::remove_dir_all(workspace.path().join("outer")).expect("remove outer pack source");
+
+    let outer_destination = workspace.path().join("outer");
+    std::fs::create_dir(&outer_destination).expect("create outer destination");
+    create_zip(&workspace, "inner", "inner.zip");
+    std::fs::remove_dir_all(workspace.path().join("inner")).expect("remove inner pack source");
+    let inner_archive = outer_destination.join("inner.zip");
+    std::fs::rename(workspace.path().join("inner.zip"), &inner_archive)
+        .expect("move inner archive into outer destination");
+
+    let output = cargo_bin_cmd!("arcthis")
+        .current_dir(workspace.path())
+        .args([
+            "extract-all",
+            ".",
+            "--recursive",
+            "--overwrite",
+            "--workers",
+            "2",
+            "--json",
+        ])
+        .output()
+        .expect("run overlapping batch extraction");
+
+    assert_eq!(
+        output.status.code(),
+        Some(9),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(workspace.path().join("outer.zip").is_file());
+    assert!(inner_archive.is_file());
 }

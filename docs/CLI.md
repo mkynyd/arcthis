@@ -12,6 +12,8 @@ Commands are format-independent. There are no ZIP-specific or TAR-specific top-l
 
 The default build includes the local stdio MCP entry point. `arcthis mcp --allow-root <path>` starts it. This transport is a separate protocol surface rather than a versioned CLI result: stdout contains JSON-RPC only and stderr contains diagnostics. Nine read-only tools are always available. Six extract/pack/convert `_plan`/`_execute` tools are advertised only when an explicit `--allow-output-root` policy exists. Library-only builds can disable it with `--no-default-features`. See [RFC 0003](./RFC-0003-MCP-INTEGRATION.md) for the input/output formats and safety rules.
 
+The MCP server defaults to `--max-concurrent-requests 4` (allowed range 1–64) and `--max-response-bytes 16777216`. Excess concurrent calls return `resource_limit`; clients may retry after an active request completes. The response budget counts both structured and text JSON, including escaping, with 256 bytes reserved for the tool-result envelope. It must be at least 1024 bytes for read-only servers or 131072 bytes when output roots are enabled. Oversized results return an error, not a partial list/tree. These limits apply to tool results, not discovery metadata or the outer JSON-RPC envelope.
+
 ## Implemented commands
 
 ```text
@@ -46,7 +48,7 @@ arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 
 `extract`, `pack`, and `convert` accept `--dry-run`, `--delete-source`, and one of `--overwrite`, `--skip-existing`, or `--rename`. `extract-all` accepts the same lifecycle flags plus capped workers and optional filesystem recursion. `index` has its own create/refresh/delete dry-run lifecycle.
 
-Lifecycle planning rejects source/destination aliases. `pack` also rejects an output inside a directory source. With `--delete-source`, any source/destination ancestor overlap that could remove the saved destination is a `collision`.
+Lifecycle planning rejects source/destination aliases and ancestor/descendant overlap for every write, even without `--delete-source`. Recursive `extract-all` also rejects a planned destination that overlaps another destination or discovered archive source.
 
 ## Human and machine output
 
@@ -106,6 +108,8 @@ Adds `entries`, preserving archive order and duplicates.
 
 Adds `tree`, an array of recursive nodes:
 
+Tree paths are limited to 4096 bytes and 256 non-empty components. Larger paths return `resource_limit` instead of constructing an unbounded recursive result.
+
 ```json
 {
   "name": "train",
@@ -140,6 +144,8 @@ Adds `find` with the requested `glob`, `matched` count, and complete matching fi
 ### `grep`
 
 Adds `grep` with the literal pattern, optional glob, scan/skip counters, byte count, truncation flag, and matching line objects (`path`, `line_number`, `text`, `line_truncated`). It defaults to a 16 MiB file limit and 10,000 matches, probes the first 8 KiB for NUL bytes, and skips binary files unless `--binary` is set. Individual line retention is capped at 1 MiB.
+
+`--max-result-bytes` defaults to 16777216 and counts serialized matching-line objects plus a comma allowance across all files, including paths, JSON escaping, and UTF-8 replacement bytes. A match that does not fit is omitted as a whole and sets the existing `matches_truncated` flag. Zero retains no matches. MCP accepts the same `max_result_bytes` input but clamps it to at most one quarter of the server response budget (and the service result ceiling), leaving room for both JSON copies and metadata. Actual grep scan bytes across all files also share the MCP decoded-byte ceiling; exceeding it returns `resource_limit`.
 
 ### `hash`
 

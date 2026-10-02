@@ -51,6 +51,10 @@ pub struct GrepOptions {
     pub max_entry_size: u64,
     pub max_matches: u64,
     pub scan_binary: bool,
+    /// Maximum serialized matching-line bytes retained across all files.
+    pub max_result_bytes: u64,
+    /// Maximum actual decoded bytes scanned across all files.
+    pub max_total_size: u64,
 }
 
 impl Default for GrepOptions {
@@ -60,6 +64,8 @@ impl Default for GrepOptions {
             max_entry_size: 16 * 1024 * 1024,
             max_matches: 10_000,
             scan_binary: false,
+            max_result_bytes: 16 * 1024 * 1024,
+            max_total_size: u64::MAX,
         }
     }
 }
@@ -130,6 +136,7 @@ pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<G
         matches_truncated: false,
         matches: Vec::new(),
     };
+    let mut result_bytes = 0_u64;
     for entry in candidates {
         if entry.size > options.max_entry_size {
             result.oversized_files_skipped += 1;
@@ -142,9 +149,25 @@ pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<G
             result.matches_truncated = true;
             break;
         }
-        let mut scanner = GrepWriter::new(&entry.path, pattern, remaining, options.scan_binary);
-        archive.copy_entry_to(&entry.path, &mut scanner)?;
+        let mut scanner = GrepWriter::new(
+            &entry.path,
+            pattern,
+            remaining,
+            options,
+            options.max_result_bytes.saturating_sub(result_bytes),
+            options.max_total_size.saturating_sub(result.bytes_scanned),
+        );
+        if let Err(error) = archive.copy_entry_to(&entry.path, &mut scanner) {
+            if scanner.limit_exceeded {
+                return Err(ArcthisError::ResourceLimit {
+                    message: "grep decoded bytes exceed the per-entry or total scan budget"
+                        .to_owned(),
+                });
+            }
+            return Err(error);
+        }
         let scan = scanner.finish();
+        result_bytes = result_bytes.saturating_add(scan.result_bytes);
         result.files_scanned += 1;
         result.bytes_scanned = result.bytes_scanned.saturating_add(scan.bytes);
         if scan.binary_skipped {
@@ -215,6 +238,7 @@ struct GrepScan {
     binary_skipped: bool,
     truncated: bool,
     matches: Vec<GrepMatch>,
+    result_bytes: u64,
 }
 
 #[allow(clippy::struct_excessive_bools)] // Independent streaming scan facts are clearer than an artificial state enum.
@@ -232,14 +256,25 @@ struct GrepWriter<'a> {
     truncated: bool,
     matches: Vec<GrepMatch>,
     bytes: u64,
+    result_bytes: u64,
+    max_result_bytes: u64,
+    max_scan_bytes: u64,
+    limit_exceeded: bool,
 }
 
 impl<'a> GrepWriter<'a> {
-    fn new(path: &'a str, pattern: &'a str, max_matches: u64, scan_binary: bool) -> Self {
+    fn new(
+        path: &'a str,
+        pattern: &'a str,
+        max_matches: u64,
+        options: &GrepOptions,
+        max_result_bytes: u64,
+        max_total_size: u64,
+    ) -> Self {
         Self {
             path,
             pattern: pattern.as_bytes(),
-            scan_binary,
+            scan_binary: options.scan_binary,
             binary: false,
             probe_complete: false,
             pending: Vec::new(),
@@ -250,16 +285,23 @@ impl<'a> GrepWriter<'a> {
             truncated: false,
             matches: Vec::new(),
             bytes: 0,
+            result_bytes: 0,
+            max_result_bytes,
+            max_scan_bytes: max_total_size.min(options.max_entry_size),
+            limit_exceeded: false,
         }
     }
 
     fn consume(&mut self, bytes: &[u8]) {
-        if self.binary && !self.scan_binary {
+        if self.truncated || self.binary && !self.scan_binary {
             return;
         }
         for byte in bytes {
             if *byte == b'\n' {
                 self.finish_line();
+                if self.truncated {
+                    break;
+                }
             } else if self.line.len() < MAX_LINE_BYTES {
                 self.line.push(*byte);
             } else {
@@ -270,12 +312,23 @@ impl<'a> GrepWriter<'a> {
 
     fn finish_line(&mut self) {
         if !self.truncated && contains_bytes(&self.line, self.pattern) {
-            self.matches.push(GrepMatch {
+            let matched = GrepMatch {
                 path: self.path.to_owned(),
                 line_number: self.line_number,
                 text: String::from_utf8_lossy(&self.line).into_owned(),
                 line_truncated: self.line_truncated,
-            });
+            };
+            // Count escaped UTF-8 JSON and path overhead, not just raw line bytes.
+            let remaining = self.max_result_bytes.saturating_sub(self.result_bytes);
+            match crate::budget::json_bytes(&matched, remaining.saturating_sub(1)) {
+                Ok(size) if size < remaining => {
+                    self.result_bytes += size + 1; // Reserve the array comma too.
+                    self.matches.push(matched);
+                }
+                _ => {
+                    self.truncated = true;
+                }
+            }
             if u64::try_from(self.matches.len()).unwrap_or(u64::MAX) >= self.max_matches {
                 self.truncated = true;
             }
@@ -299,23 +352,31 @@ impl<'a> GrepWriter<'a> {
             binary_skipped: self.binary && !self.scan_binary,
             truncated: self.truncated,
             matches: self.matches,
+            result_bytes: self.result_bytes,
         }
     }
 }
 
 impl Write for GrepWriter<'_> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        self.bytes = self.bytes.saturating_add(buffer.len() as u64);
+        let bytes = u64::try_from(buffer.len()).unwrap_or(u64::MAX);
+        if bytes > self.max_scan_bytes.saturating_sub(self.bytes) {
+            self.limit_exceeded = true;
+            return Err(io::Error::other("grep scan budget exceeded"));
+        }
+        self.bytes += bytes;
         if self.probe_complete {
             self.consume(buffer);
             return Ok(buffer.len());
         }
-        self.pending.extend_from_slice(buffer);
+        let probe_bytes = (BINARY_PROBE_BYTES - self.pending.len()).min(buffer.len());
+        self.pending.extend_from_slice(&buffer[..probe_bytes]);
         if self.pending.len() >= BINARY_PROBE_BYTES {
             self.binary = self.pending[..BINARY_PROBE_BYTES].contains(&0);
             self.probe_complete = true;
             let pending = std::mem::take(&mut self.pending);
             self.consume(&pending);
+            self.consume(&buffer[probe_bytes..]);
         }
         Ok(buffer.len())
     }

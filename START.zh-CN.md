@@ -53,6 +53,8 @@ Extract、pack 与 convert 分别使用独立的 `_plan`（计划）和 `_execut
 
 授权、JSON 格式、取消与二进制传输规则见 [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md)。
 
+MCP 默认同时运行最多 4 个工具，单次工具响应最多 16 MiB，包含结构化 JSON 与文本副本。可用 `--max-concurrent-requests`（1–64）和 `--max-response-bytes` 调整；后者只读模式至少 1024 字节，启用输出根时至少 131072 字节。并发超额或响应超限返回 `resource_limit`。并发繁忙时可等已有调用完成后重试，大查询可缩小范围或使用读取窗口。grep 保留的匹配结果最多占响应预算的四分之一，跨文件的实际扫描字节共用 `--max-decoded-bytes`。
+
 ## 核心工作流
 
 先访问，再提取：
@@ -142,7 +144,7 @@ arcthis tree source.tar
 arcthis tree source.tar --json
 ```
 
-普通模式使用树状字符。JSON node 包含 `name`、逻辑 `path`、`kind`、可选源文件 `entry` 和 `children`。隐式目录的 `entry` 为 `null`，重复文件叶节点会保留。
+普通模式使用树状字符。JSON node 包含 `name`、逻辑 `path`、`kind`、可选源文件 `entry` 和 `children`。隐式目录的 `entry` 为 `null`，重复文件叶节点会保留。树路径最多 4096 字节、256 个非空组件；超限会返回 `resource_limit`，不会继续构造无界深度的结果。
 
 ## `stat`：查看一个指定文件
 
@@ -184,6 +186,8 @@ arcthis grep papers.zip transformer --glob '**/*.md' --json
 ```
 
 匹配内容是一段原始字节序列，不是正则表达式。超过 `--max-entry-size` 的文件会跳过（默认 16 MiB），达到 `--max-matches` 后停止收集（默认 10,000），单行最多保留 1 MiB。前 8 KiB 出现 NUL 会判定为二进制文件；默认跳过，只有显式 `--binary` 才扫描。JSON 会报告扫描、跳过、字节和截断计数。
+
+`--max-result-bytes` 限制跨文件累计的匹配行 JSON 大小，默认 16 MiB，计入路径、转义和 UTF-8 替换字节。完整匹配行放不下时会省略该行，并设置 `matches_truncated: true`；设为 0 则不保留匹配。如需更多输出，可以显式提高此上限。
 
 ## `hash`：计算一个文件的校验值
 
@@ -314,7 +318,7 @@ arcthis extract archive.tar.zst --dry-run --delete-source --json
 - `--skip-existing`：报告成功跳过，且绝不删除 source；
 - `--rename`：选择第一个可用的同目录编号名称，例如 `bundle.1`。
 
-`--delete-source` 只会在解压完整写入临时文件、验证整个源压缩包并成功保存后执行。即使只解压一个文件，删除 source 前也会验证未选中的文件，因此可能需要额外解码。计划、解码、验证、写入或保存中的任何失败都会保留源压缩包。可能导致 destination 被删除的源/目标指向同一位置或祖先/后代重叠会在写入前以 `collision` 拒绝。
+`--delete-source` 只会在解压完整写入临时文件、验证整个源压缩包并成功保存后执行。即使只解压一个文件，删除 source 前也会验证未选中的文件，因此可能需要额外解码。计划、解码、验证、写入或保存中的任何失败都会保留源压缩包。无论是否请求删除 source，源/目标指向同一位置或存在任意祖先/后代重叠，都会在写入前以 `collision` 拒绝。
 
 ### 解压安全
 
@@ -330,7 +334,7 @@ arcthis extract-all ./downloads --recursive --delete-source
 
 发现过程按内容而不是后缀识别支持的压缩包。默认只扫描指定目录；`--recursive` 递归文件系统目录，但不会进入压缩包内继续发现嵌套压缩包。`--workers` 将独立压缩包的并发数限制在 1 到 64。
 
-命令会先为全部压缩包生成计划，并在写入前拒绝批次内目标冲突。每个压缩包使用与 `extract` 相同的资源限制和冲突处理方式。混合结果返回 `partial_failure`；JSON 按路径稳定排序并报告每个已发现压缩包的结果。
+命令会先为全部压缩包生成计划，并在写入前拒绝批次内相同或嵌套的目标冲突，也拒绝目标覆盖另一个已发现压缩包源。每个压缩包使用与 `extract` 相同的资源限制和冲突处理方式。混合结果返回 `partial_failure`；JSON 按路径稳定排序并报告每个已发现压缩包的结果。
 
 ## `pack`：创建并验证压缩包
 

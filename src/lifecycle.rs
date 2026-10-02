@@ -135,47 +135,22 @@ pub(crate) fn delete_source(path: &Path) -> Result<()> {
     remove_path(path).map_err(|error| ArcthisError::io("deleting source after success", error))
 }
 
-pub(crate) fn ensure_distinct_source_and_destination(
+pub(crate) fn ensure_source_and_destination_do_not_overlap(
     source: &Path,
     destination: &Path,
 ) -> Result<()> {
     let source = comparable_path(source)?;
     let destination = comparable_path(destination)?;
-    if source == destination {
-        return Err(ArcthisError::Collision {
-            message: "source and destination must be different paths".to_owned(),
-        });
-    }
-    Ok(())
-}
-
-pub(crate) fn ensure_destination_outside_source(source: &Path, destination: &Path) -> Result<()> {
-    let source = comparable_path(source)?;
-    let destination = comparable_path(destination)?;
-    if destination == source || destination.starts_with(&source) {
-        return Err(ArcthisError::Collision {
-            message: "archive destination must be outside the pack source".to_owned(),
-        });
-    }
-    Ok(())
-}
-
-pub(crate) fn ensure_destination_survives_source_deletion(
-    source: &Path,
-    destination: &Path,
-) -> Result<()> {
-    let source = comparable_path(source)?;
-    let destination = comparable_path(destination)?;
-    if destination == source || destination.starts_with(&source) || source.starts_with(&destination)
+    if source == destination || source.starts_with(&destination) || destination.starts_with(&source)
     {
         return Err(ArcthisError::Collision {
-            message: "source deletion would remove or replace the destination".to_owned(),
+            message: "source and destination paths must not overlap".to_owned(),
         });
     }
     Ok(())
 }
 
-fn comparable_path(path: &Path) -> Result<PathBuf> {
+pub(crate) fn comparable_path(path: &Path) -> Result<PathBuf> {
     if path
         .try_exists()
         .map_err(|error| ArcthisError::io("checking lifecycle path", error))?
@@ -292,9 +267,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        CollisionPolicy, ensure_destination_outside_source,
-        ensure_destination_survives_source_deletion, ensure_distinct_source_and_destination,
-        resolve_destination,
+        CollisionPolicy, ensure_source_and_destination_do_not_overlap, resolve_destination,
     };
 
     #[test]
@@ -323,11 +296,10 @@ mod tests {
             .join("source/backup.zip");
         let sibling = directory.path().join("backup.zip");
 
-        assert!(ensure_distinct_source_and_destination(&source, &source).is_err());
-        assert!(ensure_destination_outside_source(&source, &nested).is_err());
-        assert!(ensure_destination_outside_source(&source, &lexical_nested).is_err());
-        assert!(ensure_destination_outside_source(&source, &sibling).is_ok());
-        assert!(ensure_destination_survives_source_deletion(&source, &nested).is_err());
-        assert!(ensure_destination_survives_source_deletion(&source, &sibling).is_ok());
+        assert!(ensure_source_and_destination_do_not_overlap(&source, &source).is_err());
+        assert!(ensure_source_and_destination_do_not_overlap(&source, &nested).is_err());
+        assert!(ensure_source_and_destination_do_not_overlap(&source, &lexical_nested).is_err());
+        assert!(ensure_source_and_destination_do_not_overlap(&source, &sibling).is_ok());
+        assert!(ensure_source_and_destination_do_not_overlap(&nested, &source).is_err());
     }
 }

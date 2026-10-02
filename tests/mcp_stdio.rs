@@ -203,6 +203,126 @@ fn bounded_read_and_root_policy_return_structured_results() {
 }
 
 #[test]
+fn concurrent_requests_are_bounded_and_slots_are_reusable() {
+    let (temporary, archive) = cancellation_fixture();
+    let mut client = Client::start(temporary.path(), &["--max-concurrent-requests", "1"]);
+    client.initialize();
+    for id in 2..22 {
+        client.send(&json!({
+            "jsonrpc":"2.0", "id":id, "method":"tools/call", "params":{
+                "name":"archive_read", "arguments":{
+                    "path":archive, "entry":"large.bin",
+                    "offset":63 * 1024 * 1024, "length":1
+                }
+            }
+        }));
+    }
+    let mut succeeded = 0;
+    let mut rejected = 0;
+    let mut ids = std::collections::BTreeSet::new();
+    for _ in 2..22 {
+        let response = client.response();
+        assert!(ids.insert(response["id"].as_u64().expect("response id")));
+        if response["result"]["isError"] == true {
+            assert!(
+                response["result"]["content"][0]["text"]
+                    .as_str()
+                    .expect("limit error")
+                    .contains("resource_limit")
+            );
+            rejected += 1;
+        } else {
+            assert_eq!(response["result"]["structuredContent"]["raw_size"], 1);
+            succeeded += 1;
+        }
+    }
+    assert!(succeeded > 0);
+    assert!(rejected > 0);
+    let reused = client.call_tool(22, "archive_inspect", json!({"path":archive}));
+    assert_eq!(reused["result"]["isError"], false);
+    client.finish();
+}
+
+#[test]
+fn response_budget_rejects_large_results_without_partial_success() {
+    let temporary = TempDir::new().expect("response budget fixture");
+    let archive = temporary.path().join("many.zip");
+    let mut writer = ZipWriter::new(File::create(&archive).expect("create response ZIP"));
+    for index in 0..64 {
+        writer
+            .start_file(format!("entry-{index}.txt"), SimpleFileOptions::default())
+            .expect("start response entry");
+        writer
+            .write_all(b"quote\"\\unicode\n")
+            .expect("write entry");
+    }
+    writer.finish().expect("finish response ZIP");
+    let mut client = Client::start(temporary.path(), &["--max-response-bytes", "4096"]);
+    client.initialize();
+    for (id, tool) in [
+        (2, "archive_list"),
+        (3, "archive_tree"),
+        (4, "archive_find"),
+    ] {
+        let response = client.call_tool(id, tool, json!({"path":archive,"glob":"*"}));
+        assert_eq!(response["result"]["isError"], true, "{response}");
+        assert!(
+            response["result"]["content"][0]["text"]
+                .as_str()
+                .expect("response error")
+                .contains("resource_limit")
+        );
+        assert!(response["result"].get("structuredContent").is_none());
+        assert!(
+            serde_json::to_vec(&response["result"])
+                .expect("serialize response")
+                .len()
+                <= 4096
+        );
+    }
+    let small = client.call_tool(
+        5,
+        "archive_read",
+        json!({
+            "path":archive,"entry":"entry-0.txt","offset":0,"length":32
+        }),
+    );
+    assert_eq!(small["result"]["isError"], false);
+    assert_eq!(
+        small["result"]["structuredContent"]["data"],
+        "quote\"\\unicode\n"
+    );
+    assert!(
+        serde_json::to_vec(&small["result"])
+            .expect("serialize result")
+            .len()
+            <= 4096
+    );
+    client.finish();
+}
+
+#[test]
+fn invalid_server_budgets_fail_before_serving() {
+    let (temporary, _) = fixture();
+    let root = temporary.path().to_str().expect("root path");
+    for extra in [
+        vec!["--max-concurrent-requests", "0"],
+        vec!["--max-concurrent-requests", "65"],
+        vec!["--max-response-bytes", "1023"],
+        vec!["--allow-output-root", root, "--max-response-bytes", "1024"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_arcthis"))
+            .args(["mcp", "--allow-root", root])
+            .args(extra)
+            .output()
+            .expect("start invalid config");
+        assert_eq!(output.status.code(), Some(8));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("resource limit"));
+    }
+}
+
+#[test]
 fn malformed_message_does_not_contaminate_or_stop_stdio() {
     let (temporary, _archive) = fixture();
     let mut client = Client::start(temporary.path(), &[]);
@@ -212,6 +332,90 @@ fn malformed_message_does_not_contaminate_or_stop_stdio() {
     let response = client.response();
     assert_eq!(response["id"], 2);
     assert!(response["result"]["tools"].is_array());
+    client.finish();
+}
+
+#[test]
+fn grep_result_override_cannot_raise_server_response_budget() {
+    let temporary = TempDir::new().expect("grep response fixture");
+    let archive = temporary.path().join("grep.zip");
+    let mut writer = ZipWriter::new(File::create(&archive).expect("create grep ZIP"));
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        writer
+            .start_file(name, SimpleFileOptions::default())
+            .expect("start grep entry");
+        writer
+            .write_all(&vec![b'x'; 500])
+            .expect("write long match");
+        writer.write_all(b"\n").expect("write newline");
+    }
+    writer.finish().expect("finish grep ZIP");
+    let mut client = Client::start(temporary.path(), &["--max-response-bytes", "4096"]);
+    client.initialize();
+    let response = client.call_tool(
+        2,
+        "archive_grep",
+        json!({
+            "path":archive, "pattern":"x", "max_result_bytes":1_000_000
+        }),
+    );
+    assert_eq!(response["result"]["isError"], false, "{response}");
+    assert_eq!(
+        response["result"]["structuredContent"]["grep"]["matches_truncated"],
+        true
+    );
+    assert_eq!(
+        response["result"]["structuredContent"]["grep"]["matches"]
+            .as_array()
+            .expect("matches")
+            .len(),
+        1
+    );
+    assert!(
+        serde_json::to_vec(&response["result"])
+            .expect("serialize response")
+            .len()
+            <= 4096
+    );
+    client.finish();
+}
+
+#[test]
+fn grep_decoded_budget_is_shared_across_files() {
+    let temporary = TempDir::new().expect("grep decoded fixture");
+    let archive = temporary.path().join("grep.zip");
+    let mut writer = ZipWriter::new(File::create(&archive).expect("create grep ZIP"));
+    for name in ["a.txt", "b.txt"] {
+        writer
+            .start_file(name, SimpleFileOptions::default())
+            .expect("start grep entry");
+        writer.write_all(b"hit\n").expect("write grep entry");
+    }
+    writer.finish().expect("finish grep ZIP");
+    let mut client = Client::start(temporary.path(), &["--max-decoded-bytes", "6"]);
+    client.initialize();
+    let response = client.call_tool(
+        2,
+        "archive_grep",
+        json!({
+            "path":archive, "pattern":"hit", "max_entry_size":4
+        }),
+    );
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    assert!(
+        response["result"]["content"][0]["text"]
+            .as_str()
+            .expect("decoded error")
+            .contains("resource_limit")
+    );
+    let recovered = client.call_tool(
+        3,
+        "archive_read",
+        json!({
+            "path":archive, "entry":"a.txt", "offset":0,"length":4
+        }),
+    );
+    assert_eq!(recovered["result"]["isError"], false);
     client.finish();
 }
 
@@ -247,7 +451,15 @@ fn mutation_tools_are_policy_gated_and_pack_plan_executes() {
     std::fs::write(source.join("payload.txt"), b"mutation payload").expect("write pack source");
     let output = temporary.path().join("packed.zip");
     let output_root = temporary.path().to_str().expect("UTF-8 temp path");
-    let mut client = Client::start(temporary.path(), &["--allow-output-root", output_root]);
+    let mut client = Client::start(
+        temporary.path(),
+        &[
+            "--allow-output-root",
+            output_root,
+            "--max-response-bytes",
+            "131072",
+        ],
+    );
     client.initialize();
 
     client.send(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}));
@@ -410,6 +622,75 @@ fn output_roots_and_source_deletion_require_explicit_policy() {
     assert!(!source.exists());
     assert!(output.exists());
     allowed_client.finish();
+}
+
+#[test]
+fn mutation_plans_cannot_exceed_server_resource_limits() {
+    let temporary = TempDir::new().expect("mutation limit temp directory");
+    let archive = temporary.path().join("input.zip");
+    let file = File::create(&archive).expect("create bounded ZIP");
+    let mut writer = ZipWriter::new(file);
+    writer
+        .start_file("payload.txt", SimpleFileOptions::default())
+        .expect("start bounded entry");
+    writer.write_all(b"too large").expect("write bounded entry");
+    writer.finish().expect("finish bounded ZIP");
+    let pack_source = temporary.path().join("pack-source.txt");
+    std::fs::write(&pack_source, b"too large").expect("write bounded pack source");
+    let output_root = temporary.path().to_str().expect("UTF-8 temp path");
+
+    let mut client = Client::start(
+        temporary.path(),
+        &[
+            "--allow-output-root",
+            output_root,
+            "--max-decoded-bytes",
+            "4",
+        ],
+    );
+    client.initialize();
+
+    let extract = client.call_tool(
+        2,
+        "archive_extract_plan",
+        json!({
+            "path": archive,
+            "output": temporary.path().join("extract-output"),
+            "max_total_size": 1024,
+            "max_entry_size": 1024
+        }),
+    );
+    assert_eq!(extract["result"]["isError"], true);
+    assert!(
+        extract["result"]["content"][0]["text"]
+            .as_str()
+            .expect("extract error text")
+            .contains("resource_limit")
+    );
+
+    let convert = client.call_tool(
+        3,
+        "archive_convert_plan",
+        json!({
+            "path": archive,
+            "output": temporary.path().join("converted.tar"),
+            "max_total_size": 1024,
+            "max_entry_size": 1024
+        }),
+    );
+    assert_eq!(convert["result"]["isError"], true);
+
+    let pack = client.call_tool(
+        4,
+        "archive_pack_plan",
+        json!({
+            "path": pack_source,
+            "output": temporary.path().join("packed.zip")
+        }),
+    );
+    assert_eq!(pack["result"]["isError"], true);
+    assert!(pack_source.is_file());
+    client.finish();
 }
 
 #[test]

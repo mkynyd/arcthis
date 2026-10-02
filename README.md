@@ -114,6 +114,8 @@ Library users who deliberately do not need MCP can disable default features with
 
 The stdio server pins MCP revision `2025-06-18`. `archive_read` requires an offset and length and returns at most the configured window. Source deletion additionally requires both `--allow-source-deletion` and `delete_source: true` in a plan/execute request. See [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) for the full rules.
 
+MCP defaults to four active calls and 16 MiB per tool response, counting structured and text JSON copies. Oversized or excess concurrent calls return `resource_limit`. `grep --max-result-bytes` defaults to 16 MiB across files; MCP clamps this further to its response budget and reports omitted matches with `matches_truncated`.
+
 ## Quick start
 
 ```sh
@@ -165,7 +167,7 @@ See [START.md](./START.md) for destination rules, resource limits, JSON formats,
 
 ## Safety model
 
-Extraction first checks metadata and paths, rejects links and special files, enforces declared and actual byte/time/ratio limits, writes into a temporary folder on the same filesystem, and saves the result only after every file succeeds. Existing destinations are refused by default; `--overwrite`, `--skip-existing`, and `--rename` are mutually exclusive explicit choices.
+Extraction first checks metadata and paths, rejects links and special files, enforces declared and actual byte/time/ratio limits, writes into a temporary folder on the same filesystem, and saves the result only after every file succeeds. Every write rejects source/destination ancestor overlap before collision handling; recursive batches also protect every discovered archive source. Existing destinations are refused by default; `--overwrite`, `--skip-existing`, and `--rename` are mutually exclusive explicit choices.
 
 Packing writes a temporary sibling archive, finishes it, reopens it through the normal archive interface, verifies every file, and only then saves the requested output. An output inside a directory source, or any source/destination that points to the same place, is rejected. `--delete-source` runs only after that save, and only when deleting the source cannot remove the destination; dry-runs never write or delete.
 

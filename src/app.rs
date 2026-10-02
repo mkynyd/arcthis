@@ -15,6 +15,7 @@ use crate::model::{
     ArchiveEntry, ArchiveFormat, ArchiveInspection, EntryCopyResult, EntryKind, VerificationResult,
 };
 use crate::query::{FindResult, GrepOptions, GrepResult, HashAlgorithm, HashResult};
+use crate::security::ExtractionLimits;
 
 /// Explicit source description shared by non-CLI frontends.
 #[derive(Debug, Default)]
@@ -43,6 +44,7 @@ pub struct ServiceLimits {
     pub max_decoded_bytes: u64,
     pub max_results: u64,
     pub max_read_window: u64,
+    pub max_result_bytes: u64,
 }
 
 impl Default for ServiceLimits {
@@ -52,6 +54,7 @@ impl Default for ServiceLimits {
             max_decoded_bytes: 1024 * 1024 * 1024,
             max_results: 10_000,
             max_read_window: 1024 * 1024,
+            max_result_bytes: 16 * 1024 * 1024,
         }
     }
 }
@@ -64,6 +67,7 @@ impl ServiceLimits {
             max_decoded_bytes: u64::MAX,
             max_results: u64::MAX,
             max_read_window: u64::MAX,
+            max_result_bytes: u64::MAX,
         }
     }
 }
@@ -233,7 +237,7 @@ impl ApplicationService {
     pub fn tree(&self, source: &ArchiveSourceRequest) -> Result<TreeResult> {
         let archive = self.open(source)?;
         let entries = self.entries(&archive)?;
-        let tree = build_tree(&entries);
+        let tree = build_tree(&entries)?;
         Ok(TreeResult {
             archive: reference(&archive),
             entries,
@@ -361,7 +365,10 @@ impl ApplicationService {
         let archive = self.open(source)?;
         self.ensure_entries_within_limits(&archive)?;
         self.cancellation.checkpoint()?;
-        let grep = crate::query::grep(&archive, pattern, options)?;
+        let mut options = options.clone();
+        options.max_result_bytes = options.max_result_bytes.min(self.limits.max_result_bytes);
+        options.max_total_size = options.max_total_size.min(self.limits.max_decoded_bytes);
+        let grep = crate::query::grep(&archive, pattern, &options)?;
         self.cancellation.checkpoint()?;
         Ok(GrepServiceResult {
             archive: reference(&archive),
@@ -446,9 +453,28 @@ impl ApplicationService {
     }
 }
 
-pub(crate) fn build_tree(entries: &[ArchiveEntry]) -> Vec<TreeNode> {
-    let mut roots = Vec::new();
+#[allow(clippy::too_many_lines)] // One iterative arena pass avoids recursion and duplicate tree construction.
+pub(crate) fn build_tree(entries: &[ArchiveEntry]) -> Result<Vec<TreeNode>> {
+    #[derive(Debug)]
+    struct ArenaNode {
+        name: String,
+        path: String,
+        kind: EntryKind,
+        entry: Option<ArchiveEntry>,
+        children: Vec<usize>,
+    }
+
+    let limits = ExtractionLimits::default();
+    let mut arena = Vec::<ArenaNode>::new();
+    let mut roots = Vec::<usize>::new();
     for entry in entries {
+        if entry.path.len() > limits.max_path_bytes {
+            return Err(limit_error(
+                "tree entry path bytes",
+                u64::try_from(entry.path.len()).unwrap_or(u64::MAX),
+                u64::try_from(limits.max_path_bytes).unwrap_or(u64::MAX),
+            ));
+        }
         let components = entry
             .path
             .split('/')
@@ -457,68 +483,110 @@ pub(crate) fn build_tree(entries: &[ArchiveEntry]) -> Vec<TreeNode> {
         if components.is_empty() {
             continue;
         }
-        insert_tree_entry(&mut roots, &components, entry, "");
-    }
-    sort_tree(&mut roots);
-    roots
-}
-
-fn insert_tree_entry(
-    nodes: &mut Vec<TreeNode>,
-    components: &[&str],
-    entry: &ArchiveEntry,
-    parent: &str,
-) {
-    let name = components[0];
-    let path = if parent.is_empty() {
-        name.to_owned()
-    } else {
-        format!("{parent}/{name}")
-    };
-    if components.len() == 1 {
-        if entry.kind == EntryKind::Directory
-            && let Some(node) = nodes
-                .iter_mut()
-                .find(|node| node.name == name && node.kind == EntryKind::Directory)
-        {
-            node.entry = Some(entry.clone());
-            return;
+        if components.len() > limits.max_components {
+            return Err(limit_error(
+                "tree entry path components",
+                u64::try_from(components.len()).unwrap_or(u64::MAX),
+                u64::try_from(limits.max_components).unwrap_or(u64::MAX),
+            ));
         }
-        nodes.push(TreeNode {
-            name: name.to_owned(),
-            path,
-            kind: entry.kind,
-            entry: Some(entry.clone()),
-            children: Vec::new(),
-        });
-        return;
-    }
-    let directory_index = nodes
-        .iter()
-        .position(|node| node.name == name && node.kind == EntryKind::Directory)
-        .unwrap_or_else(|| {
-            nodes.push(TreeNode {
-                name: name.to_owned(),
-                path: path.clone(),
-                kind: EntryKind::Directory,
-                entry: None,
-                children: Vec::new(),
-            });
-            nodes.len() - 1
-        });
-    insert_tree_entry(
-        &mut nodes[directory_index].children,
-        &components[1..],
-        entry,
-        &path,
-    );
-}
 
-fn sort_tree(nodes: &mut [TreeNode]) {
-    nodes.sort_by(|left, right| left.name.cmp(&right.name));
-    for node in nodes {
-        sort_tree(&mut node.children);
+        let mut parent: Option<usize> = None;
+        let mut path = String::new();
+        for (position, name) in components.iter().enumerate() {
+            if !path.is_empty() {
+                path.push('/');
+            }
+            path.push_str(name);
+            let last = position + 1 == components.len();
+            let siblings =
+                parent.map_or(roots.as_slice(), |index| arena[index].children.as_slice());
+            let existing_directory = siblings.iter().copied().find(|index| {
+                arena[*index].name == *name && arena[*index].kind == EntryKind::Directory
+            });
+
+            if last {
+                if entry.kind == EntryKind::Directory
+                    && let Some(index) = existing_directory
+                {
+                    arena[index].entry = Some(entry.clone());
+                    break;
+                }
+                let index = arena.len();
+                arena.push(ArenaNode {
+                    name: (*name).to_owned(),
+                    path: path.clone(),
+                    kind: entry.kind,
+                    entry: Some(entry.clone()),
+                    children: Vec::new(),
+                });
+                if let Some(parent) = parent {
+                    arena[parent].children.push(index);
+                } else {
+                    roots.push(index);
+                }
+                break;
+            }
+
+            let index = existing_directory.unwrap_or_else(|| {
+                let index = arena.len();
+                arena.push(ArenaNode {
+                    name: (*name).to_owned(),
+                    path: path.clone(),
+                    kind: EntryKind::Directory,
+                    entry: None,
+                    children: Vec::new(),
+                });
+                if let Some(parent) = parent {
+                    arena[parent].children.push(index);
+                } else {
+                    roots.push(index);
+                }
+                index
+            });
+            parent = Some(index);
+        }
     }
+
+    roots.sort_by(|left, right| arena[*left].name.cmp(&arena[*right].name));
+    for index in 0..arena.len() {
+        let mut children = std::mem::take(&mut arena[index].children);
+        children.sort_by(|left, right| arena[*left].name.cmp(&arena[*right].name));
+        arena[index].children = children;
+    }
+    let mut built = std::iter::repeat_with(|| None)
+        .take(arena.len())
+        .collect::<Vec<Option<TreeNode>>>();
+    for index in (0..arena.len()).rev() {
+        let children = arena[index]
+            .children
+            .iter()
+            .map(|child| {
+                built[*child]
+                    .take()
+                    .ok_or_else(|| ArcthisError::InvalidArchive {
+                        message: "tree construction order is invalid".to_owned(),
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        built[index] = Some(TreeNode {
+            name: std::mem::take(&mut arena[index].name),
+            path: std::mem::take(&mut arena[index].path),
+            kind: arena[index].kind,
+            entry: arena[index].entry.take(),
+            children,
+        });
+    }
+    roots
+        .into_iter()
+        .map(|root| {
+            built[root]
+                .take()
+                .ok_or_else(|| ArcthisError::InvalidArchive {
+                    message: "tree root construction is invalid".to_owned(),
+                })
+        })
+        .collect()
 }
 
 fn reference(archive: &Archive) -> ArchiveReference {

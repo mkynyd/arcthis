@@ -8,7 +8,10 @@ use base64::Engine as _;
 use rmcp::handler::server::{
     common::FromContextPart, router::tool::ToolRouter, tool::ToolCallContext, wrapper::Parameters,
 };
-use rmcp::model::{Implementation, ProtocolVersion, ServerCapabilities, ServerInfo};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
+    ProtocolVersion, ServerCapabilities, ServerInfo,
+};
 use rmcp::{Json, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -42,6 +45,8 @@ pub struct McpConfig {
     pub allowed_output_roots: Vec<PathBuf>,
     pub allow_source_deletion: bool,
     pub limits: ServiceLimits,
+    pub max_concurrent_requests: usize,
+    pub max_response_bytes: u64,
 }
 
 impl McpConfig {
@@ -51,6 +56,8 @@ impl McpConfig {
             allowed_output_roots: Vec::new(),
             allow_source_deletion: false,
             limits: ServiceLimits::default(),
+            max_concurrent_requests: 4,
+            max_response_bytes: 16 * 1024 * 1024,
         }
     }
 }
@@ -102,6 +109,9 @@ struct GrepInput {
     max_matches: u64,
     #[serde(default)]
     binary: bool,
+    /// Serialized matching-line byte budget; cannot raise the server response ceiling.
+    #[serde(default = "default_grep_result_bytes")]
+    max_result_bytes: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
@@ -157,6 +167,8 @@ pub struct McpServer {
     allow_source_deletion: bool,
     limits: ServiceLimits,
     tool_router: ToolRouter<Self>,
+    request_slots: Arc<tokio::sync::Semaphore>,
+    max_response_bytes: u64,
 }
 
 impl McpServer {
@@ -166,7 +178,26 @@ impl McpServer {
             allowed_output_roots,
             allow_source_deletion,
             limits,
+            max_concurrent_requests,
+            max_response_bytes,
         } = config;
+        // Mutation completion contains bounded filesystem paths; keep enough room
+        // to report committed writes even at the smallest allowed response budget.
+        let minimum_response = if allowed_output_roots.is_empty() {
+            1024
+        } else {
+            128 * 1024
+        };
+        if max_response_bytes < minimum_response {
+            return Err(ArcthisError::ResourceLimit {
+                message: format!("MCP response budget must be at least {minimum_response} bytes"),
+            });
+        }
+        if !(1..=64).contains(&max_concurrent_requests) {
+            return Err(ArcthisError::ResourceLimit {
+                message: "MCP concurrency must be between 1 and 64".to_owned(),
+            });
+        }
         if allowed_input_roots.is_empty() {
             return Err(ArcthisError::PermissionDenied {
                 context: "starting MCP without an allowed input root".to_owned(),
@@ -211,6 +242,8 @@ impl McpServer {
             allow_source_deletion,
             limits,
             tool_router,
+            request_slots: Arc::new(tokio::sync::Semaphore::new(max_concurrent_requests)),
+            max_response_bytes,
         })
     }
 
@@ -229,8 +262,18 @@ impl McpServer {
         Ok(source)
     }
 
-    const fn service(&self, cancellation: CancellationToken) -> ApplicationService {
-        ApplicationService::new(self.limits, cancellation)
+    fn service(&self, cancellation: CancellationToken) -> ApplicationService {
+        let mut limits = self.limits;
+        // Leave room for two JSON copies, escaping, and the remaining result envelope.
+        limits.max_result_bytes = limits.max_result_bytes.min(self.max_response_bytes / 4);
+        ApplicationService::new(limits, cancellation)
+    }
+
+    fn bounded_json<T: Serialize>(&self, value: T) -> std::result::Result<Json<T>, String> {
+        // Reserve the tool-result envelope before native MCP creates JSON/text copies.
+        crate::budget::mcp_payload_bytes(&value, self.max_response_bytes - 256)
+            .map_err(tool_error)?;
+        Ok(Json(value))
     }
 
     fn authorize_input(&self, path: &str, allow_directory: bool) -> ArcthisResult<PathBuf> {
@@ -373,8 +416,8 @@ impl McpServer {
         let source = self.source(input).map_err(tool_error)?;
         self.service(cancellation)
             .inspect(&source)
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -395,8 +438,8 @@ impl McpServer {
         let source = self.source(input).map_err(tool_error)?;
         self.service(cancellation)
             .list(&source)
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -417,8 +460,8 @@ impl McpServer {
         let source = self.source(input).map_err(tool_error)?;
         self.service(cancellation)
             .tree(&source)
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -439,8 +482,8 @@ impl McpServer {
         let source = self.source(input.source).map_err(tool_error)?;
         self.service(cancellation)
             .stat(&source, &input.entry)
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -476,7 +519,7 @@ impl McpServer {
                 base64::engine::general_purpose::STANDARD.encode(&result.data),
             ),
         };
-        Ok(Json(ReadToolResult {
+        self.bounded_json(ReadToolResult {
             schema_version: SCHEMA_VERSION,
             archive: result.archive,
             entry: result.entry,
@@ -485,7 +528,7 @@ impl McpServer {
             eof: result.eof,
             encoding,
             data,
-        }))
+        })
     }
 
     #[tool(
@@ -506,8 +549,8 @@ impl McpServer {
         let source = self.source(input.source).map_err(tool_error)?;
         self.service(cancellation)
             .find(&source, &input.glob)
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -535,10 +578,12 @@ impl McpServer {
                     max_entry_size: input.max_entry_size,
                     max_matches: input.max_matches,
                     scan_binary: input.binary,
+                    max_result_bytes: input.max_result_bytes,
+                    max_total_size: self.limits.max_decoded_bytes,
                 },
             )
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -563,8 +608,8 @@ impl McpServer {
         };
         self.service(cancellation)
             .hash(&source, &input.entry, algorithm)
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -585,8 +630,8 @@ impl McpServer {
         let source = self.source(input).map_err(tool_error)?;
         self.service(cancellation)
             .verify(&source)
-            .map(Json)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -611,9 +656,9 @@ impl McpServer {
         self.authorize_deletion(input.delete_source, &source)
             .map_err(tool_error)?;
         cancellation.checkpoint().map_err(tool_error)?;
-        crate::mcp_mutation::plan_extract(&source, &output, &input)
-            .map(Json)
+        crate::mcp_mutation::plan_extract(&source, &output, &input, &self.limits)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -640,9 +685,9 @@ impl McpServer {
         self.authorize_deletion(input.request.delete_source, &source)
             .map_err(tool_error)?;
         cancellation.checkpoint().map_err(tool_error)?;
-        crate::mcp_mutation::execute_extract(&source, &output, &input, &cancellation)
-            .map(Json)
+        crate::mcp_mutation::execute_extract(&source, &output, &input, &cancellation, &self.limits)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -667,9 +712,9 @@ impl McpServer {
         self.authorize_deletion(input.delete_source, &source)
             .map_err(tool_error)?;
         cancellation.checkpoint().map_err(tool_error)?;
-        crate::mcp_mutation::plan_pack(&source, &output, &input)
-            .map(Json)
+        crate::mcp_mutation::plan_pack(&source, &output, &input, &self.limits)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -696,9 +741,9 @@ impl McpServer {
         self.authorize_deletion(input.request.delete_source, &source)
             .map_err(tool_error)?;
         cancellation.checkpoint().map_err(tool_error)?;
-        crate::mcp_mutation::execute_pack(&source, &output, &input, &cancellation)
-            .map(Json)
+        crate::mcp_mutation::execute_pack(&source, &output, &input, &cancellation, &self.limits)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -723,9 +768,9 @@ impl McpServer {
         self.authorize_deletion(input.delete_source, &source)
             .map_err(tool_error)?;
         cancellation.checkpoint().map_err(tool_error)?;
-        crate::mcp_mutation::plan_convert(&source, &output, &input)
-            .map(Json)
+        crate::mcp_mutation::plan_convert(&source, &output, &input, &self.limits)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 
     #[tool(
@@ -752,15 +797,53 @@ impl McpServer {
         self.authorize_deletion(input.request.delete_source, &source)
             .map_err(tool_error)?;
         cancellation.checkpoint().map_err(tool_error)?;
-        crate::mcp_mutation::execute_convert(&source, &output, &input, &cancellation)
-            .map(Json)
+        crate::mcp_mutation::execute_convert(&source, &output, &input, &cancellation, &self.limits)
             .map_err(tool_error)
+            .and_then(|value| self.bounded_json(value))
     }
 }
 
 #[tool_handler(router = self.tool_router)]
 #[allow(clippy::unused_async_trait_impl)]
 impl ServerHandler for McpServer {
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> std::result::Result<CallToolResponse, rmcp::ErrorData> {
+        let Ok(permit) = Arc::clone(&self.request_slots).try_acquire_owned() else {
+            return Ok(CallToolResult::error(vec![ContentBlock::text(tool_error(
+                ArcthisError::ResourceLimit {
+                    message: "MCP concurrent request limit reached; retry after an active request completes".to_owned(),
+                },
+            ))]).into());
+        };
+        let server = self.clone();
+        let runtime = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            // The worker owns the slot even if its awaiting protocol request is cancelled.
+            let _permit = permit;
+            runtime.block_on(async {
+                let context = ToolCallContext::new(&server, request, context);
+                let response = server.tool_router.call(context).await?;
+                // Include tool errors too, which can quote an untrusted path/input.
+                if let CallToolResponse::Complete(result) = &response
+                    && crate::budget::json_bytes(result, server.max_response_bytes).is_err()
+                {
+                    return Ok(CallToolResult::error(vec![ContentBlock::text(tool_error(
+                        ArcthisError::ResourceLimit {
+                            message: "MCP response exceeds the serialized byte budget".to_owned(),
+                        },
+                    ))])
+                    .into());
+                }
+                Ok(response)
+            })
+        })
+        .await
+        .map_err(|_| rmcp::ErrorData::internal_error("MCP worker failed", None))?
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_protocol_version(ProtocolVersion::V_2025_06_18)
@@ -825,4 +908,8 @@ const fn default_grep_entry_size() -> u64 {
 
 const fn default_grep_matches() -> u64 {
     10_000
+}
+
+const fn default_grep_result_bytes() -> u64 {
+    16 * 1024 * 1024
 }

@@ -76,6 +76,12 @@ enum Command {
         /// Maximum bytes returned by one `archive_read` window.
         #[arg(long, default_value_t = 1024 * 1024_u64)]
         max_read_window: u64,
+        /// Maximum simultaneously running tools; excess calls return `resource_limit`.
+        #[arg(long, default_value_t = 4)]
+        max_concurrent_requests: usize,
+        /// Maximum serialized tool-result bytes (including text/structured copies).
+        #[arg(long, default_value_t = 16 * 1024 * 1024_u64)]
+        max_response_bytes: u64,
     },
     /// List archive entries in archive order.
     List { archive: PathBuf },
@@ -107,6 +113,9 @@ enum Command {
         /// Stop collecting results after this many matching lines.
         #[arg(long, default_value_t = 10_000)]
         max_matches: u64,
+        /// Maximum serialized matching-line bytes retained across files.
+        #[arg(long, default_value_t = 16 * 1024 * 1024_u64)]
+        max_result_bytes: u64,
         /// Scan files containing NUL bytes instead of treating them as binary.
         #[arg(long)]
         binary: bool,
@@ -327,6 +336,8 @@ fn run(cli: &Cli) -> Result<()> {
             max_decoded_bytes,
             max_results,
             max_read_window,
+            max_concurrent_requests,
+            max_response_bytes,
         } => {
             if !cli.within.is_empty()
                 || !cli.volume.is_empty()
@@ -342,11 +353,14 @@ fn run(cli: &Cli) -> Result<()> {
                 allowed_input_roots: allow_roots.clone(),
                 allowed_output_roots: allow_output_roots.clone(),
                 allow_source_deletion: *allow_source_deletion,
+                max_concurrent_requests: *max_concurrent_requests,
+                max_response_bytes: *max_response_bytes,
                 limits: ServiceLimits {
                     max_entries: *max_entries,
                     max_decoded_bytes: *max_decoded_bytes,
                     max_results: *max_results,
                     max_read_window: *max_read_window,
+                    ..ServiceLimits::default()
                 },
             })
         }
@@ -366,7 +380,7 @@ fn run(cli: &Cli) -> Result<()> {
                 &mut stdout,
                 &result.archive.path,
                 result.archive.format,
-                &result.entries,
+                &result.tree,
                 cli.json,
             )
         }
@@ -418,6 +432,7 @@ fn run(cli: &Cli) -> Result<()> {
             glob,
             max_entry_size,
             max_matches,
+            max_result_bytes,
             binary,
         } => {
             let result = service.grep(
@@ -428,6 +443,8 @@ fn run(cli: &Cli) -> Result<()> {
                     max_entry_size: *max_entry_size,
                     max_matches: *max_matches,
                     scan_binary: *binary,
+                    max_result_bytes: *max_result_bytes,
+                    ..crate::query::GrepOptions::default()
                 },
             )?;
             output::write_grep(
@@ -618,6 +635,7 @@ fn run(cli: &Cli) -> Result<()> {
                 collision_policy: collision_policy(*overwrite, *skip_existing, *rename),
                 delete_source: *delete_source,
                 include_source_root: true,
+                ..crate::pack::PackOptions::default()
             };
             if *dry_run {
                 let plan = crate::pack::plan_pack_source(source, destination, &options)?;

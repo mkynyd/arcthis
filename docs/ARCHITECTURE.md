@@ -31,9 +31,11 @@ The backend seam is real because ZIP, 7z, TAR-family, and single-stream formats 
 
 ## Application service and MCP frontend
 
-`src/app.rs` is synchronous and frontend-neutral. It accepts typed requests for inspect/list/tree/stat/read/find/grep/hash/verify and returns owned domain results. It centralizes cancellation checkpoints, finite decoded-byte and result budgets, and bounded read windows without depending on Clap, terminal rendering, MCP, or Tokio. The CLI uses a compatibility limit profile so existing JSON and raw-byte behavior remains stable.
+`src/app.rs` is synchronous and frontend-neutral. It accepts typed requests for inspect/list/tree/stat/read/find/grep/hash/verify and returns owned domain results. It centralizes cancellation checkpoints, finite decoded-byte and result budgets, and bounded read windows without depending on Clap, terminal rendering, MCP, or Tokio. Tree construction uses a bounded iterative arena (4096 path bytes and 256 components), and the CLI renders that result directly instead of rebuilding it. The CLI uses a compatibility limit profile so existing JSON and raw-byte behavior remains stable.
 
 `src/mcp.rs` adapts that service to feature-gated stdio MCP using protocol revision `2025-06-18`. It owns transport schemas, tool annotations, canonical input/output-root authorization, cancellation bridging, and UTF-8/base64 window encoding. `src/mcp_mutation.rs` composes the existing extraction, packing, conversion, and lifecycle modules for controlled plan/execute tools. A SHA-256 digest binds the exact request, plan, source fingerprint, destination state, resource limits, collision policy, and deletion intent; execute replans and rejects stale state before mutation.
+
+MCP dispatch admits at most four tools by default using a shared semaphore and runs synchronous router work in the blocking pool. The permit lives in the worker, so protocol cancellation cannot admit replacement work while a codec is still running. `src/budget.rs` measures serialized JSON without allocating it; MCP checks both structured and mirrored text sizes before conversion and checks completed error results too. Query scanning reuses this counter to bound retained grep matches across files, while the application service clamps result and actual decoded-byte budgets.
 
 ## Public library interface
 
@@ -117,7 +119,7 @@ Full extraction is plan-driven:
 
 An existing destination is refused by default. Explicit overwrite moves the prior destination to a sibling backup, commits the staged replacement, restores on commit failure, and removes the backup only after success. Skip never deletes the source; rename resolves a new numbered destination before writing.
 
-Lifecycle planning canonicalizes existing paths and resolves missing destinations through their nearest existing ancestor. Source and destination aliases are rejected. A pack destination cannot be inside a directory source, and source deletion is rejected whenever either path contains the other. Selected-entry extraction verifies the complete archive before commit when source deletion is requested. The accepted invariants and tradeoffs are recorded in [ADR 0001](./ADR-0001-TRANSACTIONAL-LIFECYCLE.md).
+Lifecycle planning canonicalizes existing paths and resolves missing destinations through their nearest existing ancestor. Every pack, extract, and convert write rejects source/destination aliases and ancestor/descendant overlap before collision handling can replace either side. Selected-entry extraction verifies the complete archive before commit when source deletion is requested. The accepted invariants and tradeoffs are recorded in [ADR 0001](./ADR-0001-TRANSACTIONAL-LIFECYCLE.md).
 
 Single-entry extraction writes a temporary sibling file and commits it only after the stream completes. Directory entries are not accepted as single-file output targets.
 
@@ -134,7 +136,7 @@ For `arcthis extract archive.ext`:
 
 ## Transactional packing
 
-Packing determines the output format from the requested output suffix, rejects source links/special files, writes to a temporary sibling file, finalizes and syncs the encoder, reopens and verifies the result through the normal `Archive` interface, and only then applies the collision policy and commits. Source deletion occurs strictly after commit.
+Packing determines the output format from the requested output suffix, rejects source links/special files, enforces configured source entry/count/path byte budgets during its filesystem scan, writes to a temporary sibling file, finalizes and syncs the encoder, reopens and verifies the result through the normal `Archive` interface, and only then applies the collision policy and commits. Source deletion occurs strictly after commit.
 
 ## Verified conversion
 
@@ -144,7 +146,7 @@ Single-stream targets require one root-level regular entry. Nested conversion an
 
 ## Batch orchestration
 
-`extract-all` discovers supported archives by opening content rather than trusting extensions. It completes per-archive planning before execution, rejects duplicate planned destinations, and processes independent archives with a bounded synchronous worker pool. Each worker calls the same `Archive::extract` path used by the single-archive command. Results are sorted for deterministic machine output; partial failures use the stable `partial_failure` category.
+`extract-all` discovers supported archives by opening content rather than trusting extensions. It completes per-archive planning before execution and rejects equal or nested destination conflicts, including a destination that would replace another discovered archive source. Independent plans then run through a bounded synchronous worker pool. Each worker calls the same `Archive::extract` path used by the single-archive command. Results are sorted for deterministic machine output; partial failures use the stable `partial_failure` category.
 
 ## Error model
 

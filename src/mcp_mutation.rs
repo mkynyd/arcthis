@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
-use crate::CancellationToken;
 use crate::archive::{Archive, ArchiveOpenOptions};
 use crate::convert::{ConvertOptions, ConvertPlan, ConvertResult};
 use crate::error::{ArcthisError, Result};
@@ -18,6 +17,7 @@ use crate::extract::{ExtractOptions, ExtractPlan, ExtractResult};
 use crate::lifecycle::CollisionPolicy;
 use crate::pack::{PackOptions, PackPlan, PackResult};
 use crate::security::ExtractionLimits;
+use crate::{CancellationToken, ServiceLimits};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -149,9 +149,10 @@ pub(crate) fn plan_extract(
     source: &Path,
     output: &Path,
     request: &ExtractionMutationInput,
+    server_limits: &ServiceLimits,
 ) -> Result<ExtractPlanOutput> {
     let archive = Archive::open(source)?;
-    let options = extract_options(output, request);
+    let options = extract_options(output, request, server_limits);
     let plan = archive.plan_extract(request.entry.as_deref(), &options)?;
     let plan_digest = plan_digest("extract", request, &plan, &plan.source, &plan.destination)?;
     Ok(ExtractPlanOutput { plan_digest, plan })
@@ -162,15 +163,16 @@ pub(crate) fn execute_extract(
     output: &Path,
     input: &ExtractExecuteInput,
     cancellation: &CancellationToken,
+    server_limits: &ServiceLimits,
 ) -> Result<ExtractExecuteOutput> {
     cancellation.checkpoint()?;
-    let prepared = plan_extract(source, output, &input.request)?;
+    let prepared = plan_extract(source, output, &input.request, server_limits)?;
     cancellation.checkpoint()?;
     ensure_digest(&input.plan_digest, &prepared.plan_digest)?;
     let archive = Archive::open(source)?;
     let result = archive.extract(
         input.request.entry.as_deref(),
-        &extract_options(output, &input.request),
+        &extract_options(output, &input.request, server_limits),
     )?;
     Ok(ExtractExecuteOutput {
         plan_digest: prepared.plan_digest,
@@ -182,8 +184,9 @@ pub(crate) fn plan_pack(
     source: &Path,
     output: &Path,
     request: &PackMutationInput,
+    server_limits: &ServiceLimits,
 ) -> Result<PackPlanOutput> {
-    let options = pack_options(request);
+    let options = pack_options(request, server_limits);
     let plan = crate::pack::plan_pack_source(source, output, &options)?;
     let plan_digest = plan_digest("pack", request, &plan, &plan.source, &plan.destination)?;
     Ok(PackPlanOutput { plan_digest, plan })
@@ -194,13 +197,17 @@ pub(crate) fn execute_pack(
     output: &Path,
     input: &PackExecuteInput,
     cancellation: &CancellationToken,
+    server_limits: &ServiceLimits,
 ) -> Result<PackExecuteOutput> {
     cancellation.checkpoint()?;
-    let prepared = plan_pack(source, output, &input.request)?;
+    let prepared = plan_pack(source, output, &input.request, server_limits)?;
     cancellation.checkpoint()?;
     ensure_digest(&input.plan_digest, &prepared.plan_digest)?;
-    let result =
-        crate::pack::pack_source_with_options(source, output, &pack_options(&input.request))?;
+    let result = crate::pack::pack_source_with_options(
+        source,
+        output,
+        &pack_options(&input.request, server_limits),
+    )?;
     Ok(PackExecuteOutput {
         plan_digest: prepared.plan_digest,
         result,
@@ -211,8 +218,9 @@ pub(crate) fn plan_convert(
     source: &Path,
     output: &Path,
     request: &ConvertMutationInput,
+    server_limits: &ServiceLimits,
 ) -> Result<ConvertPlanOutput> {
-    let options = convert_options(request);
+    let options = convert_options(request, server_limits);
     let plan = crate::convert::plan_convert(source, output, &options)?;
     let plan_digest = plan_digest("convert", request, &plan, &plan.source, &plan.destination)?;
     Ok(ConvertPlanOutput { plan_digest, plan })
@@ -223,26 +231,35 @@ pub(crate) fn execute_convert(
     output: &Path,
     input: &ConvertExecuteInput,
     cancellation: &CancellationToken,
+    server_limits: &ServiceLimits,
 ) -> Result<ConvertExecuteOutput> {
     cancellation.checkpoint()?;
-    let prepared = plan_convert(source, output, &input.request)?;
+    let prepared = plan_convert(source, output, &input.request, server_limits)?;
     cancellation.checkpoint()?;
     ensure_digest(&input.plan_digest, &prepared.plan_digest)?;
-    let result = crate::convert::convert_archive(source, output, &convert_options(&input.request))?;
+    let result = crate::convert::convert_archive(
+        source,
+        output,
+        &convert_options(&input.request, server_limits),
+    )?;
     Ok(ConvertExecuteOutput {
         plan_digest: prepared.plan_digest,
         result,
     })
 }
 
-fn extract_options(output: &Path, request: &ExtractionMutationInput) -> ExtractOptions {
+fn extract_options(
+    output: &Path,
+    request: &ExtractionMutationInput,
+    server_limits: &ServiceLimits,
+) -> ExtractOptions {
     ExtractOptions {
         output: Some(output.to_path_buf()),
         base_directory: None,
         limits: extraction_limits(
-            request.max_entries,
-            request.max_total_size,
-            request.max_entry_size,
+            request.max_entries.min(server_limits.max_entries),
+            request.max_total_size.min(server_limits.max_decoded_bytes),
+            request.max_entry_size.min(server_limits.max_decoded_bytes),
             request.max_compression_ratio,
         ),
         collision_policy: request.collision.into(),
@@ -250,21 +267,30 @@ fn extract_options(output: &Path, request: &ExtractionMutationInput) -> ExtractO
     }
 }
 
-fn pack_options(request: &PackMutationInput) -> PackOptions {
+fn pack_options(request: &PackMutationInput, server_limits: &ServiceLimits) -> PackOptions {
     PackOptions {
         collision_policy: request.collision.into(),
         delete_source: request.delete_source,
         include_source_root: true,
+        limits: ExtractionLimits {
+            max_entries: server_limits.max_entries,
+            max_total_size: server_limits.max_decoded_bytes,
+            max_entry_size: server_limits.max_decoded_bytes,
+            ..ExtractionLimits::default()
+        },
     }
 }
 
-fn convert_options(request: &ConvertMutationInput) -> ConvertOptions {
+fn convert_options(
+    request: &ConvertMutationInput,
+    server_limits: &ServiceLimits,
+) -> ConvertOptions {
     ConvertOptions {
         open: ArchiveOpenOptions::default(),
         limits: extraction_limits(
-            request.max_entries,
-            request.max_total_size,
-            request.max_entry_size,
+            request.max_entries.min(server_limits.max_entries),
+            request.max_total_size.min(server_limits.max_decoded_bytes),
+            request.max_entry_size.min(server_limits.max_decoded_bytes),
             request.max_compression_ratio,
         ),
         collision_policy: request.collision.into(),

@@ -58,6 +58,8 @@ Extract, pack, and convert each use separate `_plan` and `_execute` tools. They 
 
 See [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) for authorization, JSON formats, cancellation, and binary transport details.
 
+MCP defaults to four active tools and a 16 MiB tool-response budget. Configure these with `--max-concurrent-requests` (1–64) and `--max-response-bytes` (at least 1024; at least 131072 with output roots). The budget includes structured and text JSON copies. Excess concurrent calls or oversized responses return `resource_limit`; retry busy calls after an active call completes, and narrow large queries or use read windows. Grep's retained-match budget is at most one quarter of the response ceiling, and scan bytes across files share `--max-decoded-bytes`.
+
 ## Core workflow
 
 Use access operations before extraction:
@@ -192,6 +194,8 @@ arcthis grep papers.zip transformer --glob '**/*.md' --json
 
 The pattern is a raw byte sequence, not a regular expression. Files above `--max-entry-size` are skipped (16 MiB default), collection stops at `--max-matches` (10,000 default), and retained lines are capped at 1 MiB. A NUL in the first 8 KiB classifies a file as binary; binary files are skipped unless `--binary` is set. JSON reports scan, skip, byte, and truncation counters.
 
+`--max-result-bytes` caps serialized matching-line objects across files (16 MiB default), including path overhead, escaping, and UTF-8 replacements. If a complete match cannot fit, it is omitted and `matches_truncated` becomes `true`; zero collects no matches. Increase this limit explicitly when more output is needed.
+
 ## `hash` — checksum one file
 
 ```sh
@@ -323,7 +327,7 @@ The default collision handling refuses an existing destination. Select exactly o
 - `--skip-existing` reports a successful skipped operation and never deletes the source;
 - `--rename` chooses the first available numbered sibling such as `bundle.1`.
 
-`--delete-source` runs only after extraction has fully written the temporary file, verified the complete source archive, and saved the result. This complete verification also applies when extracting one selected file, so deleting the source can require decoding unselected files. Any planning, decoding, verification, write, or save failure preserves the source archive. Source/destination aliases and ancestor/descendant overlaps that could remove the destination are rejected as `collision` before writing.
+`--delete-source` runs only after extraction has fully written the temporary file, verified the complete source archive, and saved the result. This complete verification also applies when extracting one selected file, so deleting the source can require decoding unselected files. Any planning, decoding, verification, write, or save failure preserves the source archive. Source/destination aliases and every ancestor/descendant overlap are rejected as `collision` before writing, even when source deletion is not requested.
 
 ### Extraction safety
 
@@ -339,7 +343,7 @@ arcthis extract-all ./downloads --recursive --delete-source
 
 Discovery identifies supported archives by content rather than suffix. The default scans only the named directory; `--recursive` descends through filesystem directories, not archives nested inside archives. `--workers` caps concurrent independent archive operations from 1 to 64.
 
-The command plans every archive before execution and rejects destination conflicts across the batch. Each archive receives the same resource limits and collision handling as `extract`. A mixed outcome returns `partial_failure`; JSON reports a deterministic, path-sorted item result for every discovered archive.
+The command plans every archive before execution and rejects equal or nested destination conflicts across the batch, including a destination that contains another discovered archive source. Each archive receives the same resource limits and collision handling as `extract`. A mixed outcome returns `partial_failure`; JSON reports a deterministic, path-sorted item result for every discovered archive.
 
 ## `pack` — create and verify an archive
 

@@ -60,6 +60,37 @@ fn create_large_zip(path: &Path) {
     archive.finish().expect("finish large ZIP fixture");
 }
 
+fn create_deep_zip(path: &Path) {
+    let file = File::create(path).expect("create deep ZIP fixture");
+    let mut archive = ZipWriter::new(file);
+    let entry = format!("{}payload.txt", "d/".repeat(300));
+    archive
+        .start_file(entry, SimpleFileOptions::default())
+        .expect("add deep ZIP file");
+    archive.write_all(b"deep").expect("write deep ZIP file");
+    archive.finish().expect("finish deep ZIP fixture");
+}
+
+#[test]
+fn tree_rejects_paths_above_the_component_limit() {
+    let workspace = TempDir::new().expect("create test directory");
+    let archive_path = workspace.path().join("deep.zip");
+    create_deep_zip(&archive_path);
+
+    let output = cargo_bin_cmd!("arcthis")
+        .args([
+            "tree",
+            archive_path.to_str().expect("UTF-8 test path"),
+            "--json",
+        ])
+        .output()
+        .expect("run arcthis tree");
+
+    assert_eq!(output.status.code(), Some(8));
+    let value: Value = serde_json::from_slice(&output.stderr).expect("parse resource error");
+    assert_eq!(value["error"]["code"], "resource_limit");
+}
+
 #[test]
 fn list_uses_magic_bytes_and_emits_structured_json() {
     let workspace = TempDir::new().expect("create test directory");

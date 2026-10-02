@@ -23,7 +23,7 @@ This map lists important maintained files and their current responsibilities. Ge
 ## Library and CLI
 
 - `src/lib.rs` — Public library exports and machine format version.
-- `src/app.rs` — Interface-independent structured application service, request limits, cancellation, capped reads, and recursive tree results.
+- `src/app.rs` — Interface-independent structured application service, request limits, cancellation, capped reads, and bounded iterative tree construction.
 - `src/main.rs` — Thin binary entry point and process exit handoff.
 - `src/cli.rs` — Clap syntax, command dispatch, BrokenPipe handling, JSON errors, and exit-code mapping.
 - `src/mcp.rs` — Feature-gated stdio MCP server, tool formats, root authorization, cancellation bridge, and transport handling.
@@ -31,7 +31,8 @@ This map lists important maintained files and their current responsibilities. Ge
 - `src/model.rs` — Shared serialized archive, file, capability, inspection, copy, and verification models.
 - `src/error.rs` — Typed library errors and stable public error categories.
 - `src/output.rs` — Human renderers and structured versioned JSON output.
-- `src/query.rs` — Glob find, capped literal grep, and checksum operations.
+- `src/query.rs` — Glob find, literal grep with cross-file result/decoded byte budgets, and checksum operations.
+- `src/budget.rs` — Allocation-free serialized JSON accounting, including MCP text/structured duplication and escaping.
 - `src/index.rs` — Persistent file metadata index with fingerprint invalidation and cache management.
 - `src/convert.rs` — Temporary-then-save conversion through safe extraction and verified packing with shared collision behavior.
 
@@ -53,8 +54,8 @@ This map lists important maintained files and their current responsibilities. Ge
 - `src/security.rs` — Extraction path safety check and default resource-limit policy.
 - `src/lifecycle.rs` — Shared path-overlap checks, collision resolution, temporary-then-save, rollback, and post-save source deletion.
 - `src/extract.rs` — Extraction planning, intelligent destinations, temporary-file writers, enforced limits, and save.
-- `src/batch.rs` — Content-based archive discovery and capped deterministic `extract-all` execution.
-- `src/pack.rs` — Multi-format source scan, temporary-file creation, reopen verification, save, and lifecycle planning.
+- `src/batch.rs` — Content-based archive discovery, cross-plan path-conflict checks, and capped deterministic `extract-all` execution.
+- `src/pack.rs` — Resource-bounded multi-format source scan, temporary-file creation, reopen verification, save, and lifecycle planning.
 
 ## Tests
 

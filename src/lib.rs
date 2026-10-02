@@ -3,6 +3,7 @@
 pub mod app;
 pub mod archive;
 pub mod batch;
+mod budget;
 pub mod cli;
 pub mod convert;
 pub mod error;

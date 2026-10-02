@@ -157,6 +157,54 @@ fn hash_streams_sha256_and_sha512() {
 }
 
 #[test]
+fn grep_byte_budget_counts_escaped_lossy_text_across_files() {
+    let workspace = TempDir::new().expect("grep budget directory");
+    let archive = workspace.path().join("bounded.zip");
+    let mut writer = ZipWriter::new(File::create(&archive).expect("create grep budget ZIP"));
+    for name in ["a.txt", "b.txt"] {
+        writer
+            .start_file(name, SimpleFileOptions::default())
+            .expect("start grep entry");
+        writer
+            .write_all(b"hit \xff\"\\\n")
+            .expect("write grep text");
+    }
+    writer.finish().expect("finish grep budget ZIP");
+    let first = serde_json::json!({
+        "path":"a.txt", "line_number":1, "text":"hit \u{fffd}\"\\", "line_truncated":false
+    });
+    let first_bytes = serde_json::to_vec(&first).expect("measure match").len() + 1;
+    for (budget, count) in [(first_bytes, 1), (first_bytes - 1, 0), (0, 0)] {
+        let output = cargo_bin_cmd!("arcthis")
+            .args([
+                "grep",
+                archive.to_str().expect("archive path"),
+                "hit",
+                "--max-result-bytes",
+                &budget.to_string(),
+                "--json",
+            ])
+            .output()
+            .expect("run byte-bounded grep");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let value: Value = serde_json::from_slice(&output.stdout).expect("grep result");
+        assert_eq!(value["schema_version"], "1");
+        assert_eq!(value["grep"]["matches_truncated"], true);
+        assert_eq!(
+            value["grep"]["matches"].as_array().expect("matches").len(),
+            count
+        );
+        if count == 1 {
+            assert_eq!(value["grep"]["matches"][0], first);
+        }
+    }
+}
+
+#[test]
 fn within_traverses_inner_archive_in_memory() {
     let workspace = TempDir::new().expect("create test directory");
     let archive = workspace.path().join("outer.zip");
