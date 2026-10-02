@@ -21,7 +21,7 @@ pnpm add -g arcthis
 
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
-Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1) 下载。
+当前公开版本为 v0.5.0。测试本文的 v0.5.1 命令时，可从 [v0.5.1 候选版](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1-rc.1)下载 Apple Silicon macOS、Intel macOS 与 Linux x86_64 编译成品。
 
 ### 从源码构建
 

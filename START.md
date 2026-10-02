@@ -21,7 +21,7 @@ pnpm add -g arcthis
 
 pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
-Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1).
+The current public version is v0.5.0. To test the v0.5.1 commands described here, download a prebuilt archive for Apple Silicon macOS, Intel macOS, or x86_64 Linux from the [v0.5.1 release candidate](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1-rc.1).
 
 ### Build from source
 

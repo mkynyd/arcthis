@@ -29,7 +29,7 @@ ZIP 通常可以直接读取目标文件；TAR 和 TAR.GZ 按顺序扫描。`ins
 
 ## 当前状态
 
-Arcthis v0.5.1 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。
+Arcthis v0.5.1 已完成发布验证，尚待正式发布。当前公开版本为 v0.5.0，v0.5.1-rc.1 可供测试。所有安装渠道都包含命令行工具和本地 MCP 服务。
 
 ### v0.5.1 更新
 
@@ -87,7 +87,7 @@ pnpm add -g arcthis
 
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
-Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从 [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1) 下载。
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从[当前正式版](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0)或 [v0.5.1 候选版](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1-rc.1)下载。
 
 ### 从源码构建
 

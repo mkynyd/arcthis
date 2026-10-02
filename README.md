@@ -29,7 +29,7 @@ ZIP can usually read a selected file directly. TAR and TAR.GZ scan in order. `in
 
 ## Project status
 
-Arcthis v0.5.1 includes the CLI and local MCP server. Every installation channel provides the same commands.
+Arcthis v0.5.1 is ready for release. The current public version is v0.5.0; v0.5.1-rc.1 is available for testing. Every installation channel includes the CLI and local MCP server.
 
 ### Changes in v0.5.1
 
@@ -87,7 +87,7 @@ pnpm add -g arcthis
 
 pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
-Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1).
+Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [stable release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0) and the [v0.5.1 release candidate](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1-rc.1).
 
 ### Build from source
 
