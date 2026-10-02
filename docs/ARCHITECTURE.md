@@ -68,7 +68,7 @@ Detection is content-first:
 1. Read the required prefix/header bytes.
 2. Match ZIP, 7z, RAR/RAR5, Gzip, Bzip2, XZ, or Zstandard signatures and validate the selected decoder.
 3. For compressed streams, inspect the decoded prefix and distinguish TAR containers from one-payload streams.
-4. Validate TAR header structure/checksum rather than relying only on `.tar`.
+4. Validate TAR headers and checksums. Compressed zero blocks need an explicit TAR suffix to distinguish empty containers from ordinary binary streams.
 5. Use extensions only for output format selection during `pack`, or as diagnostic context.
 
 A misleading input extension does not override valid magic bytes. A non-TAR compressed stream is exposed as one implicit entry derived from its filename. Because these formats have no entry table, size enumeration requires a sequential decode and `inspect` reports that cost.

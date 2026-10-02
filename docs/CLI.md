@@ -2,6 +2,8 @@
 
 ## Command syntax
 
+v0.5.1 adds MCP concurrent-call and response-size options, `grep --max-result-bytes`, and write-path overlap checks. The JSON result version remains `1`. Empty compressed TAR archives require a matching TAR suffix; zero-prefixed single-file streams retain their content.
+
 The preferred syntax is:
 
 ```text

@@ -2,6 +2,8 @@
 
 Status: accepted and implemented in v0.5
 
+v0.5.1 adds the concurrent-call and response-byte limits below. Initialization describes the active read-only or authorized plan/execute mode.
+
 ## Decision
 
 `arcthis` will expose MCP through a feature-gated `arcthis mcp` stdio frontend over the frontend-neutral application service. The core archive and application modules remain synchronous and have no dependency on MCP, Clap, terminal formatting, or an async runtime.

@@ -52,13 +52,16 @@ RAR creation is not assumed. Capabilities distinguish read, extract, create, and
 
 The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) and the detailed [integration plan](./docs/V0.5-INTEGRATIONS-PLAN.md).
 
-## Post-v0.5 hardening (implemented in source, not yet published)
+## v0.5.1 — Safety and resource limits (release candidate)
 
 - [x] Bidirectional write-path overlap checks and cross-archive batch conflict checks.
 - [x] Bounded iterative tree construction and reuse by CLI output.
 - [x] MCP mutation ceilings and bounded pack source enumeration.
 - [x] MCP active-request admission and serialized tool-response budgets.
 - [x] Cross-file grep match-byte limits and actual MCP decoded-scan accounting.
+- [x] Zero-prefixed single-stream access and explicit empty compressed-TAR detection.
+
+Further performance work remains planned: wide-directory tree lookup, metadata reuse, and fewer sequential scans. Remote sources remain part of v0.6+.
 
 ## v0.6+ — Further integrations
 

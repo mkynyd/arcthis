@@ -2,7 +2,7 @@
 
 ## Positioning
 
-**An agent-native command-line tool for accessing and changing compressed files.**
+**A command-line tool for reading and managing compressed files.**
 
 `arcthis` is one unified tool for AI agents and humans. It lets callers inspect, list, read, verify, and selectively extract archive contents through filesystem-like operations that work the same way across formats.
 
@@ -18,7 +18,7 @@ Agents commonly handle an archive by extracting everything into a temporary dire
 inspect -> tree/list -> stat/read -> extract only when needed
 ```
 
-"Not unpacking the whole archive" does not mean "without decoding." ZIP can usually decode one selected file. TAR.GZ must often be decoded from start to finish. A solid 7z archive may require decoding a larger compression block. `arcthis` exposes these differences as capabilities and warnings rather than pretending every format has the same cost.
+ZIP can usually decode one selected file. TAR.GZ reads in order, and solid 7z may decode a larger block. `inspect` reports supported operations and access costs.
 
 ## Product principles
 
@@ -104,6 +104,14 @@ v0.5 makes the same archive behavior directly usable by local agent runtimes:
 - Controlled change: opt-in output roots and plan/execute tools for extract, pack, and convert; stale source/destination state invalidates a SHA-256 plan digest before any change.
 - Destructive policy: source deletion remains disabled by default, requires two explicit opt-ins, and still runs only after a verified save.
 - Compatibility: public installation channels include MCP by default so they expose the same commands; library-only builds may use `--no-default-features`. The server is covered by subprocess clients, official Inspector validation, and macOS/Linux automated tests.
+
+## v0.5.1 maintenance release
+
+- Source/destination separation for every write, including conflicts across recursive batches.
+- Iterative tree construction with path-length and depth limits.
+- MCP limits for concurrent calls, response bytes, and write operations.
+- Cross-file grep result-byte and MCP decoded-byte limits.
+- Correct single-file access for zero-prefixed compressed content; explicit suffixes identify ambiguous empty compressed TAR files.
 
 ## Current non-goals
 

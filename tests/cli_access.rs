@@ -92,6 +92,97 @@ fn tree_rejects_paths_above_the_component_limit() {
 }
 
 #[test]
+fn zero_prefixed_streams_preserve_content_and_empty_tar_uses_explicit_suffix() {
+    let workspace = TempDir::new().expect("test directory");
+    let source = workspace.path().join("payload.bin");
+    let mut content = vec![0; 1024];
+    content.extend_from_slice(b"payload after zero blocks");
+    for payload in [&content[..], &[0_u8; 1024][..]] {
+        std::fs::write(&source, payload).expect("write zero-prefixed source");
+        for (suffix, format) in [
+            ("gz", "gzip"),
+            ("bz2", "bzip2"),
+            ("xz", "xz"),
+            ("zst", "zstd"),
+        ] {
+            let output_path = workspace.path().join(format!("payload.bin.{suffix}"));
+            cargo_bin_cmd!("arcthis")
+                .arg("pack")
+                .arg(&source)
+                .arg("--output")
+                .arg(&output_path)
+                .arg("--overwrite")
+                .assert()
+                .success();
+            let inspected = cargo_bin_cmd!("arcthis")
+                .arg("inspect")
+                .arg(&output_path)
+                .arg("--json")
+                .output()
+                .expect("inspect stream");
+            assert!(inspected.status.success());
+            let value: Value = serde_json::from_slice(&inspected.stdout).expect("inspect JSON");
+            assert_eq!(value["archive"]["format"], format);
+            cargo_bin_cmd!("arcthis")
+                .arg("read")
+                .arg(&output_path)
+                .arg("payload.bin")
+                .assert()
+                .success()
+                .stdout(payload.to_vec());
+            cargo_bin_cmd!("arcthis")
+                .arg("verify")
+                .arg(&output_path)
+                .assert()
+                .success();
+        }
+    }
+    for (suffix, format) in [
+        ("tar.gz", "tar_gzip"),
+        ("tar.bz2", "tar_bzip2"),
+        ("tar.xz", "tar_xz"),
+        ("tar.zst", "tar_zstd"),
+    ] {
+        let archive = workspace.path().join(format!("empty.{suffix}"));
+        // Canonical empty TAR consists only of its end-of-archive zero blocks.
+        let file = File::create(&archive).expect("empty TAR fixture");
+        match suffix {
+            "tar.gz" => {
+                let mut writer = GzEncoder::new(file, Compression::default());
+                writer.write_all(&[0; 1024]).expect("zero TAR blocks");
+                writer.finish().expect("finish Gzip");
+            }
+            "tar.bz2" => {
+                let mut writer = bzip2::write::BzEncoder::new(file, bzip2::Compression::default());
+                writer.write_all(&[0; 1024]).expect("zero TAR blocks");
+                writer.finish().expect("finish Bzip2");
+            }
+            "tar.xz" => {
+                let mut writer =
+                    lzma_rust2::XzWriter::new(file, lzma_rust2::XzOptions::default()).expect("XZ");
+                writer.write_all(&[0; 1024]).expect("zero TAR blocks");
+                writer.finish().expect("finish XZ");
+            }
+            _ => {
+                let mut writer = zstd::stream::write::Encoder::new(file, 3).expect("Zstandard");
+                writer.write_all(&[0; 1024]).expect("zero TAR blocks");
+                writer.finish().expect("finish Zstandard");
+            }
+        }
+        let output = cargo_bin_cmd!("arcthis")
+            .arg("list")
+            .arg(&archive)
+            .arg("--json")
+            .output()
+            .expect("list empty TAR");
+        assert!(output.status.success());
+        let value: Value = serde_json::from_slice(&output.stdout).expect("list JSON");
+        assert_eq!(value["archive"]["format"], format);
+        assert_eq!(value["entries"].as_array().expect("entries array").len(), 0);
+    }
+}
+
+#[test]
 fn list_uses_magic_bytes_and_emits_structured_json() {
     let workspace = TempDir::new().expect("create test directory");
     let archive_path = workspace.path().join("misleading.bin");

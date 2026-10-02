@@ -1,14 +1,14 @@
 # arcthis
 
-**面向 AI Agent 的压缩文件命令行工具。**
+**读取和管理压缩文件的命令行工具。**
 
-`arcthis` 是一个统一的压缩文件访问工具，让人类和 AI Agent 不必先把整个压缩包解压出来，就能查看、列出、查找、搜索、计算校验值、直接读取、解压、创建和验证压缩文件内容。
+`arcthis` 用于查看、读取、搜索、解压、创建、转换和验证压缩文件。支持十二种格式、JSON 输出、命令行管道，以及通过 MCP 接入本地 AI Agent。
 
 [English](./README.md)
 
-## 为什么需要 arcthis？
+## 读取压缩包内容
 
-Agent 不应该为了找到一个 `README.md`，先把数 GB 数据集完整解压到临时目录。`arcthis` 把压缩包当成一棵可以浏览的文件树：
+浏览文件树、查找路径，再读取选中的文件：
 
 ```sh
 arcthis inspect dataset.tar.gz --json
@@ -25,11 +25,15 @@ arcthis read source.zip src/lib.rs | rg unsafe
 arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 ```
 
-“不必解压整个压缩包”并不等于所有格式都能瞬间定位到某个文件。ZIP 通常可以直接读取目标文件；TAR 和 TAR.GZ 需要从头按顺序扫描。`inspect --json` 会明确报告当前格式实际支持的能力和访问成本。
+ZIP 通常可以直接读取目标文件；TAR 和 TAR.GZ 按顺序扫描。`inspect --json` 会报告当前格式支持的操作和访问成本。
 
 ## 当前状态
 
-Arcthis v0.5.0 已在 crates.io、GitHub Releases、Homebrew、npm 与 pnpm 正式发布。所有安装渠道默认都包含命令行工具和本地 MCP 入口。
+Arcthis v0.5.1 正在进行发布验证，当前公开版本为 v0.5.0。所有安装渠道都包含命令行工具和本地 MCP 服务。
+
+### v0.5.1 更新
+
+写入前检查源和目标的路径重叠，递归批处理同时检查不同压缩包之间的冲突。文件树限制路径长度和层数。MCP 增加并发、响应大小和写入限额；grep 限制跨文件保留的匹配内容总量。详见 [CHANGELOG.md](./CHANGELOG.md)。
 
 当前正式命令包括：
 
@@ -66,7 +70,7 @@ Arcthis v0.5.0 已在 crates.io、GitHub Releases、Homebrew、npm 与 pnpm 正�
 | XZ | 文件特征，非 TAR 内容 | 一个隐式文件 | 支持 | 按顺序解压 |
 | Zstandard | 文件特征，非 TAR 内容 | 一个隐式文件 | 支持 | 按顺序解压 |
 
-输入压缩包以内容识别为主，伪装扩展名不会覆盖有效格式特征。`pack` 则根据用户指定的输出后缀选择新压缩格式。
+输入格式以内容识别为主。空的压缩 TAR 通过 TAR 后缀区分全零块与普通二进制内容。`pack` 根据输出后缀选择新压缩格式。
 
 当前 ZIP 构建启用 Stored/Deflate 与 AES 解密。即使 ZIP 使用其他压缩方法，通常仍能列出文件；需要读取或验证对应内容时会返回 `unsupported_operation`。RAR 明确保持只读，底层实现、许可、加密和原生分卷边界见 [docs/RAR.md](./docs/RAR.md)。
 
@@ -83,7 +87,7 @@ pnpm add -g arcthis
 
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
-Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从 [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0) 下载。
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从 [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1) 下载。
 
 ### 从源码构建
 

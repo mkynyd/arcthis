@@ -2,7 +2,11 @@
 
 [English](./START.md)
 
-本文说明截至 v0.5 已真实实现的命令行工具与内置本地 MCP 入口。产品目标和后续规划见 [docs/PRODUCT.md](./docs/PRODUCT.md) 与 [ROADMAP.md](./ROADMAP.md)。
+本文说明 v0.5.1 的命令行工具与本地 MCP 服务。产品目标和后续规划见 [docs/PRODUCT.md](./docs/PRODUCT.md) 与 [ROADMAP.md](./ROADMAP.md)。
+
+v0.5.1 增加写入路径重叠检查、文件树层数限制、MCP 并发与响应大小限制，以及 `grep --max-result-bytes`。命令名称和 JSON 结果字段保持不变。
+
+格式识别以内容为主。空的压缩 TAR 只有全零块，需要保留 `.tar.gz`、`.tar.bz2`、`.tar.xz`、`.tar.zst` 或对应缩写后缀。其他以零字节开头的压缩文件保持单文件读取。
 
 ## 安装
 
@@ -17,7 +21,7 @@ pnpm add -g arcthis
 
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
-Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0) 下载。
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1) 下载。
 
 ### 从源码构建
 

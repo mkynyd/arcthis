@@ -75,9 +75,9 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div>
-          <p class="eyebrow">v0.5.0 <span class="sep">·</span> MIT <span class="sep">·</span> Rust</p>
+          <p class="eyebrow">v0.5.1 <span class="sep">·</span> MIT <span class="sep">·</span> Rust</p>
           <h1 class="hero-title">压缩包就是文件树。<span class="tone-2">不必全部解压。</span></h1>
-          <p class="hero-sub">面向 AI Agent 与人类的统一压缩文件工具。先查看内容、按需读取需要的文件,再决定是否解压。</p>
+          <p class="hero-sub">查看、读取、搜索、创建和转换压缩文件。支持命令行、JSON 输出和本地 AI Agent。</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/download.html">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -145,7 +145,7 @@
         <div class="reveal">
           <span class="section-index">01 — 快速开始</span>
           <h2 class="section-title">一条命令, <span class="tone-2">开始查看压缩包。</span></h2>
-          <p class="quickstart-note">v0.5.0 已通过 Cargo、Homebrew、npm 与 pnpm 发布,所有安装方式默认都包含 MCP。其他安装方法与编译成品见<a href="/download.html">下载页</a>。</p>
+          <p class="quickstart-note">v0.5.1 已通过 Cargo、Homebrew、npm 与 pnpm 发布,所有安装方式默认都包含 MCP。其他安装方法与编译成品见<a href="/download.html">下载页</a>。</p>
         </div>
         <div class="frame reveal">
           <div class="term">
@@ -179,7 +179,7 @@
             <span class="section-index">02 — 招牌功能</span>
             <h2 class="section-title">一套语法。 <span class="tone-2">全部格式。默认不解压。</span></h2>
           </div>
-          <p class="section-note">统一的 <code class="mono" style="font-size:13px;">arcthis &lt;command&gt; &lt;archive&gt; [entry]</code> 语法适用于 ZIP、7z、RAR、TAR 和单文件压缩格式。以下所有会话都是 Arcthis 0.5.0 的真实输出。</p>
+          <p class="section-note">使用 <code class="mono" style="font-size:13px;">arcthis &lt;command&gt; &lt;archive&gt; [entry]</code> 查看、读取和管理 ZIP、7z、RAR、TAR 及单文件压缩格式。</p>
         </div>
 
         <div class="stack-inner">
@@ -424,7 +424,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
             <span class="section-index">05 — 安全模型</span>
             <h2 class="section-title">默认 <span class="tone-2">安全优先于方便。</span></h2>
           </div>
-          <p class="section-note">来源不明的压缩包可能是恶意的。每一次写入都谨慎、可验证,要么全部成功要么不生效 —— 图省事的选项也有,但必须明确指定。</p>
+          <p class="section-note">写入前检查路径、冲突和资源限制。输出先写入临时位置,成功后保存。</p>
         </div>
         <div class="def-grid reveal-stagger">
           <div class="def-item">
@@ -440,7 +440,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
           <div class="def-item">
             <span class="def-k">冲突</span>
             <h3>默认拒绝</h3>
-            <p>已存在的目标默认拒绝;<code class="mono" style="font-size:12px;">--overwrite</code>、<code class="mono" style="font-size:12px;">--skip-existing</code>、<code class="mono" style="font-size:12px;">--rename</code> 三选一,且必须明确指定。</p>
+            <p>目标已存在时需明确选择覆盖、跳过或改名。源和目标互相包含时拒绝写入;批处理也会检查不同压缩包之间的路径冲突。</p>
           </div>
           <div class="def-item">
             <span class="def-k">删除</span>
@@ -458,10 +458,11 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
           <span class="section-index">06 — MCP</span>
           <h2 class="section-title">同样的能力, <span class="tone-2">直接接入你的 AI Agent。</span></h2>
           <ul class="fact-list">
-            <li><strong>内置 MCP 服务。</strong>默认构建已包含,协议版本固定 <code>2025-06-18</code>,stdout 只输出数据,资源占用有上限。</li>
+            <li><strong>内置 MCP 服务。</strong>通过本地标准输入输出与 AI Agent 连接,所有安装方式均包含。</li>
             <li><strong>九个只读工具</strong>:inspect、list、tree、stat、read、find、grep、hash、verify —— 用 <code>--allow-root</code> 明确授权目录后始终可用。</li>
             <li><strong>六个修改类工具</strong>(extract/pack/convert,先出计划再执行)只有用 <code>--allow-output-root</code> 明确授权输出目录后才会出现。</li>
-            <li><strong>过期的计划会被拒绝。</strong>计划生成后,只要源文件或目标位置有变化,计划的 SHA-256 指纹就会失效。</li>
+            <li><strong>计划后再执行。</strong>源文件或目标位置改变时拒绝旧计划。客户端只能收紧服务端的文件数和解码上限。</li>
+            <li><strong>可配置的调用限制。</strong>默认同时处理 4 个调用,每次工具响应最多 16 MiB。grep 默认最多保留 16 MiB 匹配结果。</li>
           </ul>
         </div>
         <div class="frame reveal">
@@ -490,7 +491,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
     <section class="cta">
       <div class="wrap">
         <h2 class="cta-title reveal">先访问,再解压。</h2>
-        <p class="cta-sub reveal">安装 v0.5.0,一分钟内查看你的第一个压缩包。</p>
+        <p class="cta-sub reveal">安装 v0.5.1,开始查看和管理压缩文件。</p>
         <div class="reveal">
           <div class="install-chip">
             <span><span class="tp">$ </span>brew install mkynyd/tap/arcthis</span>
@@ -555,7 +556,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
         </div>
       </div>
       <div class="footer-bottom">
-        <span>Arcthis v0.5.0</span>
+        <span>Arcthis v0.5.1</span>
         <span class="sep">·</span>
         <span>MIT</span>
         <span class="sep">·</span>

@@ -49,7 +49,7 @@ dist plan
 
 ## 候选版本验证
 
-正式版之前先把 `Cargo.toml` 与 `Cargo.lock` 中的项目版本改为 `0.5.0-rc.1` 之类的候选版本，提交并等待 main 的 CI 全绿，再创建完全一致的 `v0.5.0-rc.1` Tag。cargo-dist 不接受 Tag 与包版本不一致。默认配置不会把候选版本发布到 npm 或覆盖 Homebrew Formula。
+正式版之前先把 `Cargo.toml` 与 `Cargo.lock` 中的项目版本改为 `0.5.1-rc.1` 之类的候选版本，提交并等待 main 的 CI 全绿，再创建完全一致的 `v0.5.1-rc.1` Tag。cargo-dist 不接受 Tag 与包版本不一致。默认配置不会把候选版本发布到 npm 或覆盖 Homebrew Formula。
 
 候选产物必须实际完成：
 
@@ -59,14 +59,14 @@ dist plan
 - 检查 macOS `otool -L` 与 Linux `ldd`；
 - 检查生成的 npm 包与 Homebrew Formula 指向同一 GitHub Release。
 
-候选验证结束后，把项目版本改回正式的 `0.5.0`，再进入正式发布步骤；不得移动、删除或复用已经推送的候选 Tag。
+候选验证结束后，把项目版本改回正式的 `0.5.1`，再进入正式发布步骤；不得移动、删除或复用已经推送的候选 Tag。
 
 ## 正式发布
 
 1. 把 `CHANGELOG.md` 的 `Unreleased` 改为发布日期，提交并等待 main 的 CI 全绿。
 2. 在干净且与 `origin/main` 一致的 main 上再次运行全部发布前命令。
 3. 首次发布人工执行 `cargo publish --locked`，确认 crates.io 页面与 `cargo install arcthis --locked` 可用。
-4. 创建签名 Tag `v0.5.0` 并只推送该 Tag；cargo-dist workflow 随后创建 GitHub Release，并发布 npm 包与 Homebrew Formula。
+4. 创建签名 Tag `v0.5.1` 并只推送该 Tag；cargo-dist workflow 随后创建 GitHub Release，并发布 npm 包与 Homebrew Formula。
 5. 等待 Release workflow 全部成功，不以 GitHub Release 已出现代替 npm/Homebrew Job 成功。
 6. 在干净环境分别执行 Cargo、Homebrew、npm、pnpm 安装，并重复版本、MCP 和归档 smoke test。
 7. 更新中英文 README 与网站，把“尚未发布”替换为已经真实验证的安装命令，再部署网站。

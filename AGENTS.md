@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-`arcthis` 是面向 AI Agent 与人类的统一压缩文件访问层，英文定位为“An agent-native CLI for accessing and manipulating compressed files.”。项目的核心不是复制一个 zip/unzip 工具，而是让 archive 像可访问的文件树一样被发现、查询、流式读取、验证和按需物化。
+`arcthis` 是面向 AI Agent 与人类的统一压缩文件访问层，英文介绍为“A command-line tool for reading and managing compressed files.”。压缩包像文件树一样可以浏览、查询、读取、验证，并按需解压。
 
 ## 长期原则
 
@@ -26,6 +26,7 @@
 - `src/lifecycle.rs` 统一管理 collision policy、staged commit、rollback 与 post-commit source deletion；pack/extract/batch 不得各自发明生命周期语义。
 - `src/batch.rs` 只编排独立 archive，必须复用单 archive 的 planning/extraction 路径，并保持有界 worker 与确定性结果顺序。
 - `src/query.rs` 管理 find/grep/hash 的格式无关 streaming 语义；内容扫描必须具备 entry、line、match 与 binary 限制。
+- `src/budget.rs` 统一计算结果 JSON 字节；MCP 同时限制活跃请求、工具响应与服务端资源上限。
 - Nested archive 必须通过显式 `--within` 与受限 reader/source abstraction 实现，不得使用歧义 path grammar，也不得静默创建具名临时 inner archive。
 - `tests/` 使用动态 fixture 和 CLI 集成测试验证公开行为。
 - `docs/` 保存产品、架构、CLI 契约与安全设计；未实现能力必须标记为 planned。

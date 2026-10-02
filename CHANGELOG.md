@@ -2,6 +2,28 @@
 
 This file records user-visible changes to Arcthis. The project follows semantic versioning after the first public release.
 
+## 0.5.1-rc.1 - Unreleased
+
+### Fixed
+
+- Reject overlapping source and destination paths before writes, including conflicts between archives in recursive batches.
+- Build deep file trees without recursion and reject paths above the supported depth or length.
+- Apply MCP server file-count and decoded-byte limits to extract, pack, and convert requests.
+- Report the enabled read-only or plan/execute mode correctly in MCP initialization.
+- Preserve zero-prefixed content in Gzip, Bzip2, XZ, and Zstandard files. Empty compressed TAR archives use their explicit TAR suffix to resolve ambiguous zero blocks.
+
+### Added
+
+- MCP concurrent-call limit: four active calls by default, configurable with `--max-concurrent-requests`.
+- MCP tool-response limit: 16 MiB by default, configurable with `--max-response-bytes`.
+- `grep --max-result-bytes`: a 16 MiB default limit across matching lines. Omitted matches use the existing `matches_truncated` field.
+
+### Compatibility
+
+- Command names, result fields, and JSON schema version remain unchanged.
+- Calls above a configured MCP limit return `resource_limit`; clients can retry when a concurrent call finishes.
+- Rust callers using complete `ServiceLimits`, `GrepOptions`, or `McpConfig` struct literals must supply the new budget fields or use `..Default::default()`.
+
 ## 0.5.0 - 2026-08-31
 
 First public release.
