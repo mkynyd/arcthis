@@ -1,14 +1,14 @@
 # arcthis
 
-**An agent-native command-line tool for accessing and changing compressed files.**
+**A command-line tool for reading and managing compressed files.**
 
-`arcthis` is one unified tool that lets humans and AI agents inspect, list, find, search, hash, read, extract, pack, and verify the contents of compressed files without first unpacking the whole thing.
+`arcthis` inspects, reads, searches, extracts, creates, converts, and verifies compressed files. It supports twelve formats, JSON output, Unix pipelines, and local AI agents through MCP.
 
 [简体中文](./README.zh-CN.md)
 
-## Why arcthis?
+## Read archive contents
 
-An agent should not have to fully extract a multi-gigabyte dataset just to find and read one `README.md`. `arcthis` treats an archive like a browsable file tree:
+Browse an archive, find a path, and read the selected file:
 
 ```sh
 arcthis inspect dataset.tar.gz --json
@@ -25,11 +25,15 @@ arcthis read source.zip src/lib.rs | rg unsafe
 arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 ```
 
-"Not unpacking the whole archive" does not mean every format can jump to any file instantly. ZIP can usually read a single file directly; TAR and TAR.GZ must scan from start to finish. `inspect --json` reports what each format actually supports, so agents can plan around that cost.
+ZIP can usually read a selected file directly. TAR and TAR.GZ scan in order. `inspect --json` reports the format's supported operations and access costs.
 
 ## Project status
 
-Arcthis v0.5.0 is publicly available from crates.io, GitHub Releases, Homebrew, npm, and pnpm. Every installation channel includes the CLI and the local MCP entry point by default.
+Arcthis v0.5.1 is undergoing release validation. The current public version is v0.5.0. Every installation channel includes the CLI and local MCP server.
+
+### Changes in v0.5.1
+
+Writes reject overlapping source and destination paths, including recursive batch conflicts. File trees have depth and path-length limits. MCP limits concurrent calls, response size, and write operations; grep limits the total matching text retained across files. See [CHANGELOG.md](./CHANGELOG.md) for details.
 
 Current commands:
 
@@ -66,7 +70,7 @@ Planned commands and formats are kept in [ROADMAP.md](./ROADMAP.md) and are not 
 | XZ | File signature, non-TAR content | One implicit file | Yes | Decompress in order |
 | Zstandard | File signature, non-TAR content | One implicit file | Yes | Decompress in order |
 
-Detection is content-first for input archives; misleading input extensions do not override valid signatures. `pack` uses the output suffix you ask for to choose the new archive format.
+Detection uses file content. Empty compressed TAR archives use a TAR suffix to distinguish their zero blocks from ordinary binary content. `pack` uses the output suffix to select the new format.
 
 The current ZIP build enables Stored/Deflate and AES decryption. Metadata listing can still identify a ZIP using another compression method, but reading or verifying that content returns `unsupported_operation` when the codec is unavailable. RAR is intentionally read-only; see [docs/RAR.md](./docs/RAR.md) for the underlying implementation, licensing, encryption, and native multipart limits.
 
@@ -83,7 +87,7 @@ pnpm add -g arcthis
 
 pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
-Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0).
+Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1).
 
 ### Build from source
 

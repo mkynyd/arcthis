@@ -59,6 +59,8 @@ Automatic destination selection occurs only after complete metadata listing and 
 
 ## Verification
 
+Zero-prefixed compressed content is treated as a single file unless an explicit compressed-TAR suffix identifies the ambiguous empty TAR case. Non-empty TAR headers are still checked by content and checksum.
+
 ZIP, 7z, and RAR verification reads every readable file so the underlying integrity checks run. TAR-family verification parses every header and reads every content. Gzip, Bzip2, XZ, and Zstandard single files are read to completion. Verification does not claim cryptographic authenticity.
 
 ## Encryption and passwords

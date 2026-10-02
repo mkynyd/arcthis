@@ -845,15 +845,18 @@ impl ServerHandler for McpServer {
     }
 
     fn get_info(&self) -> ServerInfo {
+        let instructions = if self.allowed_output_roots.is_empty() {
+            "Read-only local archive access. Every path must be inside a configured allowed root; archive_read is always bounded."
+        } else {
+            "Local archive access with authorized plan/execute writes. Inputs and outputs must stay within their configured roots. Execute requires the current plan digest; source deletion requires explicit server and request permission."
+        };
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_protocol_version(ProtocolVersion::V_2025_06_18)
             .with_server_info(
                 Implementation::new("arcthis", env!("CARGO_PKG_VERSION"))
                     .with_title("arcthis local archive access"),
             )
-            .with_instructions(
-                "Read-only local archive access. Every path must be inside a configured allowed root; archive_read is always bounded.",
-            )
+            .with_instructions(instructions)
     }
 }
 

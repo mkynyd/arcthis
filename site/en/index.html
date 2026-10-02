@@ -75,9 +75,9 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div>
-          <p class="eyebrow">v0.5.0 <span class="sep">·</span> MIT <span class="sep">·</span> Rust</p>
-          <h1 class="hero-title">Archives are file trees. <span class="tone-2">Stop extracting to look inside.</span></h1>
-          <p class="hero-sub">One CLI for AI agents and humans to work with compressed files. Look inside, read what you need, then decide whether to extract anything.</p>
+          <p class="eyebrow">v0.5.1 <span class="sep">·</span> MIT <span class="sep">·</span> Rust</p>
+          <h1 class="hero-title">Browse compressed files. <span class="tone-2">Read what you need.</span></h1>
+          <p class="hero-sub">Inspect, read, search, create and convert compressed files. Use the command line, JSON output or a local AI agent.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/en/download.html">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -145,7 +145,7 @@
         <div class="reveal">
           <span class="section-index">01 — Quickstart</span>
           <h2 class="section-title">Install and inspect <span class="tone-2">in one command.</span></h2>
-          <p class="quickstart-note">v0.5.0 is available through Cargo, Homebrew, npm and pnpm, with MCP included by default. See <a href="/en/download.html">Download</a> for every install option and prebuilt archives.</p>
+          <p class="quickstart-note">v0.5.1 is available through Cargo, Homebrew, npm and pnpm, with MCP included by default. See <a href="/en/download.html">Download</a> for every install option and prebuilt archives.</p>
         </div>
         <div class="frame reveal">
           <div class="term">
@@ -179,7 +179,7 @@
             <span class="section-index">02 — Signature moves</span>
             <h2 class="section-title">One command style. <span class="tone-2">Every format. Nothing extracted unless you ask.</span></h2>
           </div>
-          <p class="section-note">The same <code class="mono" style="font-size:13px;">arcthis &lt;command&gt; &lt;archive&gt; [entry]</code> shape works with ZIP, 7z, RAR, TAR and single-file compression formats. Every session below is real output from Arcthis 0.5.0.</p>
+          <p class="section-note">Use <code class="mono" style="font-size:13px;">arcthis &lt;command&gt; &lt;archive&gt; [entry]</code> to read and manage ZIP, 7z, RAR, TAR and single-file compression formats.</p>
         </div>
 
         <div class="stack-inner">
@@ -187,8 +187,8 @@
           <article class="stack-card">
             <div>
               <span class="stack-num">move / 01</span>
-              <h3>Find files without decompressing</h3>
-              <p class="stack-desc"><code>find</code> matches paths against the archive's file list using wildcards. File contents are never read, so finding files stays fast even on multi-gigabyte archives.</p>
+              <h3>Find matching paths</h3>
+              <p class="stack-desc"><code>find</code> matches paths in the file list using wildcards. Sequential formats scan to build that list; queries do not extract files.</p>
             </div>
             <div class="term">
               <div class="term-bar">
@@ -209,7 +209,7 @@ dataset/train/data.csv</span></div>
             <div>
               <span class="stack-num">move / 02</span>
               <h3>Search contents in place</h3>
-              <p class="stack-desc"><code>grep</code> scans text files directly inside the archive, with caps on file size, lines, matches and binary files. Nothing is written to disk while you search.</p>
+              <p class="stack-desc"><code>grep</code> searches text inside the archive with limits on file size, line length, matches and total results. Binary files are skipped by default.</p>
             </div>
             <div class="term">
               <div class="term-bar">
@@ -424,7 +424,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
             <span class="section-index">05 — Safety model</span>
             <h2 class="section-title">Safe before convenient, <span class="tone-2">by default.</span></h2>
           </div>
-          <p class="section-note">An archive from an untrusted source can be malicious. Every write is careful, verified and all-or-nothing — shortcuts exist, but you always have to ask for them explicitly.</p>
+          <p class="section-note">Writes check paths, conflicts and resource limits. Output is saved from a temporary location after success.</p>
         </div>
         <div class="def-grid reveal-stagger">
           <div class="def-item">
@@ -440,7 +440,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
           <div class="def-item">
             <span class="def-k">collisions</span>
             <h3>Refuse by default</h3>
-            <p>Existing destinations are refused unless you pass exactly one explicit policy: <code class="mono" style="font-size:12px;">--overwrite</code>, <code class="mono" style="font-size:12px;">--skip-existing</code> or <code class="mono" style="font-size:12px;">--rename</code>.</p>
+            <p>Choose overwrite, skip or rename for existing destinations. Writes reject overlapping source and destination paths, including conflicts between archives in a batch.</p>
           </div>
           <div class="def-item">
             <span class="def-k">deletion</span>
@@ -458,10 +458,11 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
           <span class="section-index">06 — MCP</span>
           <h2 class="section-title">The same commands, <span class="tone-2">straight into your AI agent.</span></h2>
           <ul class="fact-list">
-            <li><strong>A built-in MCP server.</strong> Included by default, pinned to protocol revision <code>2025-06-18</code>, with capped resource use and nothing but data on stdout.</li>
+            <li><strong>A built-in MCP server.</strong> Connect local AI agents over standard input and output. Included in every installation channel.</li>
             <li><strong>Nine read-only tools</strong> for inspect, list, tree, stat, read, find, grep, hash and verify — available once you explicitly grant a directory with <code>--allow-root</code>.</li>
             <li><strong>Six write tools</strong> (plan + execute for extract/pack/convert) appear only after you grant an output directory with <code>--allow-output-root</code>.</li>
-            <li><strong>Outdated plans are refused.</strong> If the source or destination changes after a plan is made, the plan's SHA-256 fingerprint no longer matches and it won't run.</li>
+            <li><strong>Plan before execution.</strong> Changes to the source or destination invalidate the plan. Clients can only lower the server's file-count and decoded-byte limits.</li>
+            <li><strong>Configurable call limits.</strong> Four active calls and 16 MiB per tool response by default. Grep retains up to 16 MiB of matches.</li>
           </ul>
         </div>
         <div class="frame reveal">
@@ -490,7 +491,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
     <section class="cta">
       <div class="wrap">
         <h2 class="cta-title reveal">Access before extraction.</h2>
-        <p class="cta-sub reveal">Install v0.5.0 and look inside your first archive in under a minute.</p>
+        <p class="cta-sub reveal">Install v0.5.1 to read and manage your compressed files.</p>
         <div class="reveal">
           <div class="install-chip">
             <span><span class="tp">$ </span>brew install mkynyd/tap/arcthis</span>
@@ -532,7 +533,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
             <li><a href="/en/download.html">Download</a></li>
             <li><a href="/en/docs.html">Documentation</a></li>
             <li><a href="/en/#formats">Supported formats</a></li>
-            <li><a href="/en/#mcp">MCP frontend</a></li>
+            <li><a href="/en/#mcp">MCP server</a></li>
           </ul>
         </div>
         <div class="footer-col">
@@ -555,7 +556,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
         </div>
       </div>
       <div class="footer-bottom">
-        <span>Arcthis v0.5.0</span>
+        <span>Arcthis v0.5.1</span>
         <span class="sep">·</span>
         <span>MIT</span>
         <span class="sep">·</span>

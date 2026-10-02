@@ -26,7 +26,7 @@ This map lists important maintained files and their current responsibilities. Ge
 - `src/app.rs` — Interface-independent structured application service, request limits, cancellation, capped reads, and bounded iterative tree construction.
 - `src/main.rs` — Thin binary entry point and process exit handoff.
 - `src/cli.rs` — Clap syntax, command dispatch, BrokenPipe handling, JSON errors, and exit-code mapping.
-- `src/mcp.rs` — Feature-gated stdio MCP server, tool formats, root authorization, cancellation bridge, and transport handling.
+- `src/mcp.rs` — Feature-gated stdio MCP server, root authorization, concurrent-call admission, response budgets, and cancellation bridge.
 - `src/mcp_mutation.rs` — Extract/pack/convert plan digests, source/destination fingerprints, and controlled execution handlers.
 - `src/model.rs` — Shared serialized archive, file, capability, inspection, copy, and verification models.
 - `src/error.rs` — Typed library errors and stable public error categories.
@@ -85,7 +85,7 @@ This map lists important maintained files and their current responsibilities. Ge
 
 ## Website
 
-- `site/index.html` — Chinese (default) landing page with real v0.5.0 command output, quickstart, and scroll-stacked signature-command cards.
+- `site/index.html` — Chinese landing page with command examples, installation tabs, resource-limit overview, and scroll-stacked command cards.
 - `site/download.html` / `site/docs.html` — Chinese source-build install guide and CLI reference.
 - `site/en/` — English versions of all three pages. Language auto-detects from `navigator.language` on first visit and persists explicit choices via `localStorage`.
 - `site/assets/style.css` — Shared light/dark semantic-token design system (system-adaptive with manual toggle).

@@ -2,7 +2,11 @@
 
 [简体中文](./START.zh-CN.md)
 
-This guide describes the command-line tool and built-in local MCP entry point implemented through v0.5. For product goals and later commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
+This guide describes the command-line tool and local MCP server in v0.5.1. For product goals and planned commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
+
+v0.5.1 adds write-path overlap checks, file-tree depth limits, MCP concurrent-call and response limits, and `grep --max-result-bytes`. Command names and JSON result fields remain unchanged.
+
+Detection uses file content. Empty compressed TAR files have only zero blocks, so keep their `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst` or shorthand suffix. Other zero-prefixed compressed files remain single-file streams.
 
 ## Install
 
@@ -17,7 +21,7 @@ pnpm add -g arcthis
 
 pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
-Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [v0.5.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.0).
+Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1).
 
 ### Build from source
 

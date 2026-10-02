@@ -73,7 +73,21 @@ fn detect_compressed(
         read_prefix(&mut reader, &mut header).map_err(|error| ArcthisError::InvalidArchive {
             message: format!("invalid compressed stream: {error}"),
         })?;
-    let is_tar = decompressed == header.len() && is_tar_header(&header);
+    // A zero block has no TAR checksum and is also ordinary binary content.
+    // Only explicit TAR names identify this ambiguous empty-container case.
+    let empty_tar_name = source.name().to_string_lossy().to_ascii_lowercase();
+    let empty_tar_suffixes: &[&str] = match compression {
+        StreamCompression::Gzip => &[".tar.gz", ".tgz"],
+        StreamCompression::Bzip2 => &[".tar.bz2", ".tbz2"],
+        StreamCompression::Xz => &[".tar.xz", ".txz"],
+        StreamCompression::Zstd => &[".tar.zst", ".tzst"],
+    };
+    let has_tar_hint = empty_tar_suffixes
+        .iter()
+        .any(|suffix| empty_tar_name.ends_with(suffix));
+    let is_tar = decompressed == header.len()
+        && is_tar_header(&header)
+        && (header.iter().any(|byte| *byte != 0) || has_tar_hint);
     Ok(match (compression, is_tar) {
         (StreamCompression::Gzip, true) => ArchiveFormat::TarGzip,
         (StreamCompression::Bzip2, true) => ArchiveFormat::TarBzip2,

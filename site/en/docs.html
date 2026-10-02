@@ -72,9 +72,9 @@
   <main id="main">
     <section class="page-head">
       <div class="wrap">
-        <p class="eyebrow">Documentation <span class="sep">·</span> v0.5.0 <span class="sep">·</span> schema_version "1"</p>
+        <p class="eyebrow">Documentation <span class="sep">·</span> v0.5.1 <span class="sep">·</span> schema_version "1"</p>
         <h1 class="page-title">The CLI reference, <span class="tone-2">as implemented.</span></h1>
-        <p class="page-sub">Everything on this page describes implemented, tested behavior of Arcthis 0.5.0. Features that are still planned are marked <span class="pill planned">planned</span>. The full long-form guide is <a href="https://github.com/mkynyd/arcthis/blob/main/START.md" rel="noopener">START.md</a> in the repository.</p>
+        <p class="page-sub">Everything on this page describes implemented, tested behavior of Arcthis 0.5.1. Features that are still planned are marked <span class="pill planned">planned</span>. The full long-form guide is <a href="https://github.com/mkynyd/arcthis/blob/main/START.md" rel="noopener">START.md</a> in the repository.</p>
       </div>
     </section>
 
@@ -184,7 +184,7 @@
           <div class="cmd" id="cmd-tree">
             <div class="cmd-head"><span class="cmd-name">tree</span><span class="cmd-sig">arcthis tree &lt;archive&gt; [--json]</span></div>
             <div class="cmd-body">
-              <p>Display the archive's contents as a file tree. JSON output is a nested <code>tree</code> array; directories that only exist as part of a path carry <code>entry: null</code>.</p>
+              <p>Display archive contents as a file tree. JSON output is a nested <code>tree</code> array. Paths are limited to 4096 bytes and 256 components; larger paths return <code>resource_limit</code>.</p>
             </div>
           </div>
 
@@ -213,7 +213,7 @@
           <div class="cmd" id="cmd-grep">
             <div class="cmd-head"><span class="cmd-name">grep</span><span class="cmd-sig">arcthis grep &lt;archive&gt; &lt;literal&gt; [--glob &lt;pattern&gt;] [--json]</span></div>
             <div class="cmd-body">
-              <p>Search file contents without extracting them. Matches literal text (no regular expressions), entirely in memory, with caps: 16 MiB per file, 10,000 matches, 1 MiB per retained line. Binary files are skipped unless you pass <code>--binary</code>.</p>
+              <p>Search literal text directly. Defaults: 16 MiB per file, 10,000 matches and 1 MiB per retained line. <code>--max-result-bytes</code> limits total match output across files to 16 MiB; omitted matches set <code>matches_truncated</code>. Binary files are skipped unless you pass <code>--binary</code>.</p>
             </div>
           </div>
 
@@ -269,7 +269,8 @@
           <div class="cmd" id="cmd-mcp">
             <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
             <div class="cmd-body">
-              <p>The default build serves a local MCP (Model Context Protocol) server over stdio, with capped resource use and protocol revision <code>2025-06-18</code>. Nine read-only tools are always available; the six extract/pack/convert plan-and-execute tools appear only after you explicitly grant an output directory. Source deletion requires both <code>--allow-source-deletion</code> and <code>delete_source: true</code>.</p>
+              <p>Serve local MCP clients using protocol revision <code>2025-06-18</code>. Input roots enable nine read-only tools. Output roots enable six plan-and-execute tools for extract, pack and convert. Source deletion requires both server and request permission.</p>
+              <p><code>--max-concurrent-requests</code> defaults to 4 (range 1–64). <code>--max-response-bytes</code> defaults to 16 MiB, counting the tool result's JSON and text copies. Excess calls or oversized results return <code>resource_limit</code>. Clients cannot raise server limits; MCP grep also fits within the response limit.</p>
             </div>
           </div>
         </section>
@@ -370,6 +371,9 @@
                   <tr><td>--max-entry-size</td><td class="num">4 GiB</td></tr>
                   <tr><td>--max-compression-ratio</td><td>Disabled unless specified</td></tr>
                   <tr><td>--max-entry-duration-seconds</td><td>Disabled unless specified</td></tr>
+                  <tr><td>grep --max-result-bytes</td><td class="num">16 MiB</td></tr>
+                  <tr><td>mcp --max-concurrent-requests</td><td class="num">4</td></tr>
+                  <tr><td>mcp --max-response-bytes</td><td class="num">16 MiB</td></tr>
                 </tbody>
               </table>
             </div>
@@ -384,7 +388,7 @@
             <li><strong>Path checks.</strong> One unified check rejects <code>..</code>, absolute paths, Windows drive/UNC prefixes, NUL bytes, and links that could escape the destination.</li>
             <li><strong>No automatic links or special files.</strong> Symlinks, hardlinks and special files are not restored by default.</li>
             <li><strong>All-or-nothing writes.</strong> Output is staged in a temporary location and saved only when complete; pack reopens and verifies the new archive before it appears where you asked.</li>
-            <li><strong>Overlap checks.</strong> Operations that delete or overwrite first verify the source and destination aren't the same file and don't contain each other.</li>
+            <li><strong>Overlap checks.</strong> All writes reject equal or nested source and destination paths. Batches also check path conflicts between archives.</li>
             <li><strong>Delete-source last.</strong> <code>--delete-source</code> runs only after the new files are written, verified and saved; errors, interruptions and failed checks keep the source. Dry-runs never write or delete.</li>
             <li><strong>No passwords on the command line.</strong> Passwords come from <code>--password-file</code> only and are hidden from debug output.</li>
           </ul>
@@ -393,12 +397,12 @@
         <!-- planned -->
         <section class="doc-block" id="planned">
           <h2>Planned<a class="anchor" href="#planned" aria-hidden="true">#</a></h2>
-          <p class="lead">These are not implemented in v0.5.0 — listed here so agents never have to guess. Each one ships only after it has matching code, JSON output, tests and documentation. See <a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">ROADMAP.md</a>.</p>
+          <p class="lead">These are not implemented in v0.5.1 — listed here so agents never have to guess. Each one ships only after it has matching code, JSON output, tests and documentation. See <a href="https://github.com/mkynyd/arcthis/blob/main/ROADMAP.md" rel="noopener">ROADMAP.md</a>.</p>
           <div class="chip-row">
             <span class="chip">preview <span style="color:var(--warn);">· planned</span></span>
             <span class="chip">recursive cross-archive search <span style="color:var(--warn);">· planned</span></span>
             <span class="chip">native RAR multi-volume archives <span style="color:var(--warn);">· planned</span></span>
-            <span class="chip">interactive passwords / secret managers <span style="color:var(--warn);">· planned</span></span>
+            <span class="chip">password input / providers <span style="color:var(--warn);">· planned</span></span>
             <span class="chip">remote archives <span style="color:var(--warn);">· planned</span></span>
           </div>
         </section>
@@ -430,7 +434,7 @@
             <li><a href="/en/download.html">Download</a></li>
             <li><a href="/en/docs.html">Documentation</a></li>
             <li><a href="/en/#formats">Supported formats</a></li>
-            <li><a href="/en/#mcp">MCP frontend</a></li>
+            <li><a href="/en/#mcp">MCP server</a></li>
           </ul>
         </div>
         <div class="footer-col">
@@ -453,7 +457,7 @@
         </div>
       </div>
       <div class="footer-bottom">
-        <span>Arcthis v0.5.0</span>
+        <span>Arcthis v0.5.1</span>
         <span class="sep">·</span>
         <span>MIT</span>
         <span class="sep">·</span>

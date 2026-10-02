@@ -20,7 +20,8 @@ The following invariants are enforced before writing:
 
 - source and destination must not resolve to the same filesystem path;
 - a pack destination must be outside a directory source, even without `--delete-source`, so an archive cannot include or replace its own output;
-- when `--delete-source` is requested, neither path may contain the other;
+- neither source nor destination may contain the other, regardless of `--delete-source`;
+- batch destinations must not overlap each other or any discovered archive source;
 - `--skip-existing` never deletes the source;
 - single-entry extraction verifies the complete source archive before commit when source deletion is requested;
 - failures before commit leave no final destination, and failures before source deletion preserve the source.

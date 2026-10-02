@@ -13,6 +13,7 @@ struct Client {
     child: Child,
     input: Option<ChildStdin>,
     output: BufReader<ChildStdout>,
+    writes_enabled: bool,
 }
 
 impl Client {
@@ -33,6 +34,7 @@ impl Client {
             child,
             input: Some(input),
             output,
+            writes_enabled: extra.contains(&"--allow-output-root"),
         }
     }
 
@@ -71,6 +73,13 @@ impl Client {
         let initialized = self.response();
         assert_eq!(initialized["id"], 1);
         assert_eq!(initialized["result"]["protocolVersion"], "2025-06-18");
+        let instructions = initialized["result"]["instructions"]
+            .as_str()
+            .expect("server instructions");
+        assert_eq!(instructions.starts_with("Read-only"), !self.writes_enabled);
+        if self.writes_enabled {
+            assert!(instructions.contains("plan/execute writes"));
+        }
         self.send(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}));
     }
 
