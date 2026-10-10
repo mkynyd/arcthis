@@ -118,7 +118,7 @@ Library users who deliberately do not need MCP can disable default features with
 
 The stdio server pins MCP revision `2025-06-18`. `archive_read` requires an offset and length and returns at most the configured window. Source deletion additionally requires both `--allow-source-deletion` and `delete_source: true` in a plan/execute request. See [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md) for the full rules.
 
-MCP defaults to four active calls and 16 MiB per tool response, counting structured and text JSON copies. Oversized or excess concurrent calls return `resource_limit`. `grep --max-result-bytes` defaults to 16 MiB across files; MCP clamps this further to its response budget and reports omitted matches with `matches_truncated`.
+MCP defaults to four active calls (`--max-concurrent-requests`) and 16 MiB per tool response (`--max-response-bytes`), counting structured and text JSON copies. Every request also has finite server ceilings: `--max-entries` 100,000, `--max-decoded-bytes` 1 GiB, `--max-results` 10,000 find/grep results, and `--max-read-window` 1 MiB per `archive_read` window. Oversized or excess concurrent calls return `resource_limit`. `grep --max-result-bytes` defaults to 16 MiB across files; MCP clamps this further to its response budget and reports omitted matches with `matches_truncated`.
 
 ## Quick start
 

@@ -270,7 +270,7 @@
             <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
             <div class="cmd-body">
               <p>提供本地 MCP 服务,协议版本 <code>2025-06-18</code>。授权输入目录后可用九个只读工具;授权输出目录后增加 extract、pack、convert 的六个计划与执行工具。删除源文件需服务配置和请求同时允许。</p>
-              <p><code>--max-concurrent-requests</code> 默认 4,允许 1–64。<code>--max-response-bytes</code> 默认 16 MiB,计算工具结果中的 JSON 和文本副本;超限返回 <code>resource_limit</code>。客户端无法提高服务端限额,MCP grep 的结果上限还受响应大小约束。</p>
+              <p><code>--max-concurrent-requests</code> 默认 4,允许 1–64;<code>--max-response-bytes</code> 默认 16 MiB,计算工具结果中的 JSON 和文本副本。单次请求另有上限:<code>--max-entries</code> 100,000、<code>--max-decoded-bytes</code> 1 GiB、<code>--max-results</code> 10,000 条 find/grep 结果、<code>--max-read-window</code> 1 MiB(单次 <code>archive_read</code> 窗口)。超限返回 <code>resource_limit</code>。客户端无法提高服务端限额,MCP grep 的结果上限还受响应大小约束。</p>
             </div>
           </div>
         </section>
@@ -372,6 +372,10 @@
                   <tr><td>--max-compression-ratio</td><td>未指定则不启用</td></tr>
                   <tr><td>--max-entry-duration-seconds</td><td>未指定则不启用</td></tr>
                   <tr><td>grep --max-result-bytes</td><td class="num">16 MiB</td></tr>
+                  <tr><td>mcp --max-entries</td><td class="num">100,000</td></tr>
+                  <tr><td>mcp --max-decoded-bytes</td><td class="num">1 GiB</td></tr>
+                  <tr><td>mcp --max-results</td><td class="num">10,000</td></tr>
+                  <tr><td>mcp --max-read-window</td><td class="num">1 MiB</td></tr>
                   <tr><td>mcp --max-concurrent-requests</td><td class="num">4</td></tr>
                   <tr><td>mcp --max-response-bytes</td><td class="num">16 MiB</td></tr>
                 </tbody>

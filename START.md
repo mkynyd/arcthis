@@ -50,7 +50,7 @@ MCP is enabled in the default build so Cargo, Homebrew, npm, and pnpm installati
 
 Library users can still opt out with `cargo build --no-default-features`.
 
-The stdio transport uses protocol revision `2025-06-18` and reserves stdout for JSON-RPC. It exposes `archive_inspect`, `archive_list`, `archive_tree`, `archive_stat`, `archive_read`, `archive_find`, `archive_grep`, `archive_hash`, and `archive_verify`. Every request has finite limits on files, decoded bytes, and results; `archive_read` additionally requires `offset` and `length` and defaults to a 1 MiB maximum window.
+The stdio transport uses protocol revision `2025-06-18` and reserves stdout for JSON-RPC. It exposes `archive_inspect`, `archive_list`, `archive_tree`, `archive_stat`, `archive_read`, `archive_find`, `archive_grep`, `archive_hash`, and `archive_verify`. Every request has finite limits on files (`--max-entries`, 100,000), decoded bytes (`--max-decoded-bytes`, 1 GiB), and results (`--max-results`, 10,000); `archive_read` additionally requires `offset` and `length` and defaults to a 1 MiB maximum window (`--max-read-window`).
 
 Extract, pack, and convert each use separate `_plan` and `_execute` tools. They are absent unless at least one `--allow-output-root` is configured. Execution requires the exact SHA-256 plan digest and rejects source or destination changes since planning. Source deletion is disabled unless both `--allow-source-deletion` is present at server launch and the request explicitly asks for deletion. Password values are not accepted in MCP requests.
 

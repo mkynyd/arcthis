@@ -118,7 +118,7 @@ arcthis mcp --allow-root ./archives --allow-output-root ./outputs
 
 stdio 服务固定使用 MCP `2025-06-18` 协议版本。`archive_read` 强制提供 offset/length（偏移量和长度），并受单次窗口上限约束。删除 source 还必须同时满足服务的 `--allow-source-deletion` 与 plan/execute 请求里的 `delete_source: true`。完整规则见 [RFC 0003](./docs/RFC-0003-MCP-INTEGRATION.md)。
 
-MCP 默认最多同时运行 4 个调用，每次工具响应最多 16 MiB，计入结构化 JSON 和文本副本；并发超额或响应超限会返回 `resource_limit`。`grep --max-result-bytes` 默认限制跨文件的匹配结果为 16 MiB，MCP 还会按服务响应预算收紧此上限，省略的匹配通过 `matches_truncated` 报告。
+MCP 默认最多同时运行 4 个调用（`--max-concurrent-requests`），每次工具响应最多 16 MiB（`--max-response-bytes`），计入结构化 JSON 和文本副本。每次请求还有固定的服务端上限：`--max-entries` 100,000、`--max-decoded-bytes` 1 GiB、`--max-results` 10,000 条 find/grep 结果，以及 `archive_read` 单次窗口 `--max-read-window` 1 MiB；并发超额或响应超限会返回 `resource_limit`。`grep --max-result-bytes` 默认限制跨文件的匹配结果为 16 MiB，MCP 还会按服务响应预算收紧此上限，省略的匹配通过 `matches_truncated` 报告。
 
 ## 快速开始
 

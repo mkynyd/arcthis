@@ -45,7 +45,7 @@ cargo install --path . --locked
 
 只使用代码库且不需要 MCP 时，仍可通过 `cargo build --no-default-features` 关闭默认功能。
 
-stdio 传输固定协议版本 `2025-06-18`，stdout 只允许 JSON-RPC。只读工具包括 `archive_inspect`、`archive_list`、`archive_tree`、`archive_stat`、`archive_read`、`archive_find`、`archive_grep`、`archive_hash` 与 `archive_verify`。所有请求都有有限的文件数、解码字节数和结果数上限；`archive_read` 还强制提供 `offset`（偏移量）与 `length`（长度），默认单次最多返回 1 MiB。
+stdio 传输固定协议版本 `2025-06-18`，stdout 只允许 JSON-RPC。只读工具包括 `archive_inspect`、`archive_list`、`archive_tree`、`archive_stat`、`archive_read`、`archive_find`、`archive_grep`、`archive_hash` 与 `archive_verify`。所有请求都有有限的文件数（`--max-entries`，100,000）、解码字节数（`--max-decoded-bytes`，1 GiB）和结果数（`--max-results`，10,000）上限；`archive_read` 还强制提供 `offset`（偏移量）与 `length`（长度），默认单次最多返回 1 MiB（`--max-read-window`）。
 
 Extract、pack 与 convert 分别使用独立的 `_plan`（计划）和 `_execute`（执行）工具。未配置 `--allow-output-root` 时，这 6 个工具不会出现在工具列表中。执行必须回传完全一致的 SHA-256 计划摘要；计划后 source 或 destination 发生变化都会拒绝执行。删除 source 只有在服务启用 `--allow-source-deletion` 且请求明确要求删除时才允许。MCP 请求不接受密码值。
 

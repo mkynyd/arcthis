@@ -270,7 +270,7 @@
             <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
             <div class="cmd-body">
               <p>Serve local MCP clients using protocol revision <code>2025-06-18</code>. Input roots enable nine read-only tools. Output roots enable six plan-and-execute tools for extract, pack and convert. Source deletion requires both server and request permission.</p>
-              <p><code>--max-concurrent-requests</code> defaults to 4 (range 1–64). <code>--max-response-bytes</code> defaults to 16 MiB, counting the tool result's JSON and text copies. Excess calls or oversized results return <code>resource_limit</code>. Clients cannot raise server limits; MCP grep also fits within the response limit.</p>
+              <p><code>--max-concurrent-requests</code> defaults to 4 (range 1–64) and <code>--max-response-bytes</code> to 16 MiB, counting the tool result's JSON and text copies. Per-request ceilings are <code>--max-entries</code> 100,000, <code>--max-decoded-bytes</code> 1 GiB, <code>--max-results</code> 10,000 find/grep results, and <code>--max-read-window</code> 1 MiB per <code>archive_read</code> window. Excess calls or oversized results return <code>resource_limit</code>. Clients cannot raise server limits; MCP grep also fits within the response limit.</p>
             </div>
           </div>
         </section>
@@ -372,6 +372,10 @@
                   <tr><td>--max-compression-ratio</td><td>Disabled unless specified</td></tr>
                   <tr><td>--max-entry-duration-seconds</td><td>Disabled unless specified</td></tr>
                   <tr><td>grep --max-result-bytes</td><td class="num">16 MiB</td></tr>
+                  <tr><td>mcp --max-entries</td><td class="num">100,000</td></tr>
+                  <tr><td>mcp --max-decoded-bytes</td><td class="num">1 GiB</td></tr>
+                  <tr><td>mcp --max-results</td><td class="num">10,000</td></tr>
+                  <tr><td>mcp --max-read-window</td><td class="num">1 MiB</td></tr>
                   <tr><td>mcp --max-concurrent-requests</td><td class="num">4</td></tr>
                   <tr><td>mcp --max-response-bytes</td><td class="num">16 MiB</td></tr>
                 </tbody>
