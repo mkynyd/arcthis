@@ -20,6 +20,8 @@ Before extraction, every file path is normalized as an archive path and checked 
 
 The sanitized relative path is joined to a private temporary root. Code must never pass an untrusted file path directly to `Path::join` and then write.
 
+Duplicate, case-insensitive, and parent/child conflict checks operate on the entries a backend exposes. The ZIP backend currently merges same-name central-directory entries before Arcthis can see them, so an exactly duplicated ZIP path reaches none of these checks; see [Known limits of v0.5](#known-limits-of-v05).
+
 ## Links and special files
 
 The current implementation rejects symlinks, hardlinks, block/character devices, FIFOs, sockets, and unknown entry kinds during extraction. This prevents a link created by one entry from redirecting a later write outside the root. Future link restoration requires an explicit option, target validation, order-independent planning, and regression tests.
@@ -105,6 +107,7 @@ MCP tool execution defaults to four active blocking workers; excess calls are re
 - Split `--volume` sources cannot participate in `--delete-source`; deleting several volume files atomically is not yet specified.
 - RAR metadata (solid, encryption, compressed-size) is limited by the libarchive integration, so `inspect` may under-report; read/extract/verify remain authoritative. Format-native RAR multi-volume sets are not supported.
 - Filesystem races by other processes cannot be eliminated completely; temporary files and collision refusal reduce exposure.
+- A ZIP whose central directory repeats a path is presented as a single entry, because the pinned ZIP dependency keys entries by name. No `duplicate_entry_paths` warning is raised, `stat` does not return `collision`, and extraction writes the last duplicate instead of refusing the archive. TAR, compressed TAR, and 7z expose duplicates and are still refused. Detecting ZIP duplicates requires a backend change and dedicated regression tests.
 - Verification checks structural/codec integrity, not provenance or malicious content.
 
 Security issues should be reported privately once the repository publishes a security contact. Do not include sensitive archive samples in public issues.

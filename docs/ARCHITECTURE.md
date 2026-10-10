@@ -47,9 +47,10 @@ The initial `Archive` module owns these operations:
 - inspect archive-level information and capabilities;
 - copy one entry to a caller-provided `Write` stream;
 - verify all readable entry data;
-- safely extract through an explicit extraction plan.
-- find entry paths and stream content into grep/hash consumers;
+- safely extract through an explicit extraction plan;
 - traverse an explicit nested-entry chain through bounded in-memory sources.
+
+`find`, `grep`, and `hash` are format-independent free functions in `src/query.rs` that consume `Archive` metadata and `copy_entry_to` streaming instead of being archive methods.
 
 The interface intentionally prefers `copy_entry_to` over returning a borrowed decoder. ZIP entry readers often borrow archive state, while TAR readers are sequential. A caller-provided writer gives both adapters one streaming interface without self-referential types, whole-entry buffering, or backend leakage.
 
@@ -69,7 +70,7 @@ Detection is content-first:
 2. Match ZIP, 7z, RAR/RAR5, Gzip, Bzip2, XZ, or Zstandard signatures and validate the selected decoder.
 3. For compressed streams, inspect the decoded prefix and distinguish TAR containers from one-payload streams.
 4. Validate TAR headers and checksums. Compressed zero blocks need an explicit TAR suffix to distinguish empty containers from ordinary binary streams.
-5. Use extensions only for output format selection during `pack`, or as diagnostic context.
+5. Use extensions only for `pack` output-format selection, for the empty-container TAR suffix rule in step 4, or as diagnostic context.
 
 A misleading input extension does not override valid magic bytes. A non-TAR compressed stream is exposed as one implicit entry derived from its filename. Because these formats have no entry table, size enumeration requires a sequential decode and `inspect` reports that cost.
 
@@ -110,7 +111,7 @@ Enumeration builds one in-process metadata index per open `Archive`, avoiding re
 Full extraction is plan-driven:
 
 1. enumerate and validate every entry path and declared size;
-2. reject links, special files, duplicate/case-insensitive collisions, non-UTF-8 names, unsafe paths, and resource-limit violations;
+2. reject links, special files, duplicate/case-insensitive collisions, non-UTF-8 names, unsafe paths, and resource-limit violations (duplicate detection can only see entries the backend exposes; the ZIP dependency merges same-name central-directory entries, which is tracked in [docs/SECURITY.md](./SECURITY.md));
 3. choose the explicit or intelligent destination;
 4. extract into a temporary sibling staging location;
 5. close and flush all files;

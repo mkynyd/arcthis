@@ -104,7 +104,7 @@ Optional or unavailable fields are `null`. `archive_index` preserves source orde
 
 ### `list`
 
-Adds `entries`, preserving archive order and duplicates.
+Adds `entries`, preserving archive order and duplicates for backends that expose them. The ZIP backend merges same-name central-directory entries, so such an archive lists one entry; see [SECURITY.md](./SECURITY.md).
 
 ### `tree`
 
@@ -126,7 +126,7 @@ Implicit directories have `entry: null`. Duplicate leaves remain representable.
 
 ### `stat`
 
-Adds `entry`. A missing path returns `entry_not_found`; a duplicate path returns `collision` because selection is ambiguous.
+Adds `entry`. A missing path returns `entry_not_found`; a duplicate path returns `collision` because selection is ambiguous. The duplicate is only visible when the backend exposes both entries, so the ZIP merge described in [SECURITY.md](./SECURITY.md) prevents this collision for a ZIP with repeated central-directory paths.
 
 ### `inspect`
 

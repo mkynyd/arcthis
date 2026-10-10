@@ -94,7 +94,7 @@ arcthis <command> <archive> [entry] [options]
 - `-h`/`--help`：查看帮助。
 - `-V`/`--version`：查看版本。
 
-`NO_COLOR`、非 TTY 与 JSON 输出都不包含 ANSI 颜色装饰。
+`NO_COLOR`、非 TTY 与 JSON 输出都不包含 ANSI 颜色装饰。当前构建完全不输出 ANSI 装饰，因此 `--no-color` 与 `NO_COLOR` 只是为兼容性而接受，现阶段不改变任何输出。
 
 ## `inspect`：了解访问成本与风险
 
@@ -103,14 +103,14 @@ arcthis inspect archive.tar.gz
 arcthis inspect archive.tar.gz --json
 ```
 
-`inspect` 列出文件信息，但不会为了探测而读取每个文件的内容。结果包含格式、compression（压缩方式）、文件数、声明大小、近似压缩比、capabilities（能力）和 warnings（警告）。
+`inspect` 列出文件信息，但不会为了探测而读取每个文件的内容。普通模式输出格式、compression（压缩方式）、文件数、声明大小、访问成本、分卷状态和 warnings（警告）；`--json` 另外提供压缩比、`encrypted`/`solid` 标记、`capabilities` 对象和完整警告列表。
 
 重要的警告代码（warning code）：
 
 - `sequential_access`：目标读取可能需要从头顺序扫描。
 - `encrypted_entries`：存在加密内容，读取内容需要正确密码。
 - `non_regular_entries`：存在解压时会拒绝的链接/特殊条目。
-- `duplicate_entry_paths`：命名访问有歧义，解压会拒绝。
+- `duplicate_entry_paths`：命名访问有歧义，解压会拒绝。该检查只能看到底层实现暴露的条目；ZIP 中重复的中央目录路径会被 ZIP 依赖合并，因此不会出现此警告。见 [docs/SECURITY.md](./docs/SECURITY.md)。
 - `unsafe_entry_paths`：至少一个路径无法通过安全解压校验。
 - `default_extraction_limits_exceeded`：声明文件信息超过默认资源限制。
 - `high_compression_ratio`：至少一个文件声明的展开比超过 1000:1。
@@ -127,7 +127,7 @@ arcthis list archive.zip
 arcthis list archive.zip --json
 ```
 
-普通模式输出 `KIND`、`SIZE`、`PATH` 三列；JSON 保留压缩包内顺序和重复文件。
+普通模式输出 `KIND`、`SIZE`、`PATH` 三列；JSON 保留压缩包内顺序，并保留底层实现暴露的重复文件；ZIP 中重复的中央目录路径会被 ZIP 依赖合并，只出现一次。见 [docs/SECURITY.md](./docs/SECURITY.md)。
 
 每个文件对象包含：
 
@@ -148,7 +148,7 @@ arcthis tree source.tar
 arcthis tree source.tar --json
 ```
 
-普通模式使用树状字符。JSON node 包含 `name`、逻辑 `path`、`kind`、可选源文件 `entry` 和 `children`。隐式目录的 `entry` 为 `null`，重复文件叶节点会保留。树路径最多 4096 字节、256 个非空组件；超限会返回 `resource_limit`，不会继续构造无界深度的结果。
+普通模式使用树状字符。JSON node 包含 `name`、逻辑 `path`、`kind`、可选源文件 `entry` 和 `children`。隐式目录的 `entry` 为 `null`，重复文件叶节点在底层实现暴露时保留。树路径最多 4096 字节、256 个非空组件；超限会返回 `resource_limit`，不会继续构造无界深度的结果。
 
 ## `stat`：查看一个指定文件
 
@@ -157,7 +157,7 @@ arcthis stat archive.zip README.md
 arcthis stat archive.zip README.md --json
 ```
 
-路径必须与 `list` 显示一致。不存在时返回 `entry_not_found`；同名文件超过一个时返回 `collision`，不会静默选择。
+路径必须与 `list` 显示一致。不存在时返回 `entry_not_found`；同名文件超过一个时返回 `collision`，不会静默选择。底层实现只暴露一个同名条目时（例如 ZIP 依赖合并了重复的中央目录路径）不会触发该冲突，见 [docs/SECURITY.md](./docs/SECURITY.md)。
 
 ## `read`：直接读取一个文件
 
@@ -237,7 +237,7 @@ arcthis index dataset.7z --delete --dry-run --json
 arcthis index dataset.7z --delete --json
 ```
 
-`index` 把列出得到的文件信息写入平台缓存，后续打开会自动复用有效缓存。缓存的标识使用规范化源路径，源文件大小和纳秒修改时间变化会使其失效。`--refresh` 强制重新列出并一次性替换，`--delete` 只删除当前压缩包的缓存，`--dry-run` 仅报告 `would_create`、`would_refresh`、`would_reuse` 或 `would_delete`。`--index-directory` 可用于隔离或迁移缓存。
+`index` 把列出得到的文件信息写入平台缓存，后续打开会自动复用有效缓存。缓存的标识使用规范化源路径，源文件大小和纳秒修改时间变化会使其失效。`--refresh` 强制重新列出并一次性替换，`--delete` 只删除当前压缩包的缓存，`--dry-run` 仅报告 `would_create`、`would_refresh`、`would_reuse` 或 `would_delete`（`--delete` 找不到已有索引时报告 `missing`）。`--index-directory` 可用于隔离或迁移缓存。
 
 缓存文件是不可信的优化数据：JSON 损坏、格式不匹配或过期时会被忽略。当前缓存只保存文件信息，不保存解码内容或 TAR 定位点。
 
@@ -326,7 +326,7 @@ arcthis extract archive.tar.zst --dry-run --delete-source --json
 
 ### 解压安全
 
-解压会拒绝绝对路径、`.`/`..`、反斜杠、Windows 盘符/UNC 前缀、NUL、重复路径、大小写不敏感冲突、文件与父目录同名、超长路径、无效 UTF-8 名称、符号链接、硬链接与特殊文件。内容写入目标同文件系统的临时目录，所有计划文件成功后才保存。精确定义见 [docs/SECURITY.md](./docs/SECURITY.md)。
+解压会拒绝绝对路径、`.`/`..`、反斜杠、Windows 盘符/UNC 前缀、NUL、重复路径、大小写不敏感冲突、文件与父目录同名、超长路径、无效 UTF-8 名称、符号链接、硬链接与特殊文件。重复检查只能看到底层实现暴露的条目，因此 [docs/SECURITY.md](./docs/SECURITY.md) 记录的 ZIP 合并限制同样适用。内容写入目标同文件系统的临时目录，所有计划文件成功后才保存。精确定义见 [docs/SECURITY.md](./docs/SECURITY.md)。
 
 ## `extract-all`：批量处理目录中的压缩包
 

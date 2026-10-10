@@ -177,7 +177,7 @@
           <div class="cmd" id="cmd-list">
             <div class="cmd-head"><span class="cmd-name">list</span><span class="cmd-sig">arcthis list &lt;archive&gt; [--json]</span></div>
             <div class="cmd-body">
-              <p>List the archive's files in their original order, keeping duplicates. JSON output adds a full <code>entries</code> array.</p>
+              <p>List the archive's files in their original order, keeping duplicates that the backend exposes. The ZIP dependency merges repeated central-directory paths into one entry, so such a ZIP lists once. JSON output adds a full <code>entries</code> array.</p>
             </div>
           </div>
 
@@ -191,7 +191,7 @@
           <div class="cmd" id="cmd-stat">
             <div class="cmd-head"><span class="cmd-name">stat</span><span class="cmd-sig">arcthis stat &lt;archive&gt; &lt;entry&gt; [--json]</span></div>
             <div class="cmd-body">
-              <p>Show details for one file: kind, size, compressed size, modification time, encryption, CRC-32 and a file-type guess based on its extension. A missing path returns <code>entry_not_found</code>; a duplicate path returns <code>collision</code> because it's ambiguous which one you mean.</p>
+              <p>Show details for one file: kind, size, compressed size, modification time, encryption, CRC-32 and a file-type guess based on its extension. A missing path returns <code>entry_not_found</code>; a duplicate path returns <code>collision</code> because it's ambiguous which one you mean. A duplicate only produces that collision when the backend exposes both entries — see the ZIP note in <a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">docs/SECURITY.md</a>.</p>
             </div>
           </div>
 

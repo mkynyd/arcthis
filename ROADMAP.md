@@ -63,6 +63,8 @@ The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-
 
 Further performance work remains planned: wide-directory tree lookup, metadata reuse, and fewer sequential scans. Remote sources remain part of v0.6+.
 
+Known gap: the pinned ZIP dependency merges central-directory entries that share a name, so a ZIP with exact duplicate paths surfaces as a single entry and duplicate-path refusal cannot trigger for it; TAR, compressed TAR, and 7z still refuse duplicates. Changing this needs a ZIP backend change and dedicated regression tests. See [docs/SECURITY.md](./docs/SECURITY.md).
+
 ## v0.6+ — Further integrations
 
 1. **v0.6:** capped HTTP remote archive source with validated range/cache behavior.

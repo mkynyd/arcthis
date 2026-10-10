@@ -17,7 +17,7 @@
 1. `mkynyd/homebrew-tap` 必须存在并保持公开。
 2. 在 `mkynyd/arcthis` 配置 `HOMEBREW_TAP_TOKEN`：使用只允许写入 `mkynyd/homebrew-tap` contents 的细粒度 GitHub token，不复用个人通用 OAuth token。
 3. 在 npm 创建 `arcthis` 公共包的发布凭据，并在仓库配置 `NPM_TOKEN`。首次发布完成后优先迁移到 npm Trusted Publishing；迁移完成前定期轮换 token。
-4. 首次 crates.io 发布需要人工登录并使用只允许发布 `arcthis` 的 token。首次发布完成后，在 crates.io 为本仓库发布 workflow 配置 Trusted Publishing。
+4. crates.io 发布需要人工登录并使用只允许发布 `arcthis` 的 token。当前 cargo-dist 的 `publish-jobs` 只有 `homebrew` 与 `npm`，仓库 workflow 没有 crates.io Job，因此每次发布都必须由维护者在干净 checkout 上手动执行 `cargo publish --locked`；除非新增并验证发布 Job，不要依赖 Trusted Publishing 或自动化上传。
 5. 不把 token 写入仓库、日志、命令历史、release notes 或构建产物。
 
 ## 每次发布前
@@ -65,7 +65,7 @@ dist plan
 
 1. 把 `CHANGELOG.md` 的 `Unreleased` 改为发布日期，提交并等待 main 的 CI 全绿。
 2. 在干净且与 `origin/main` 一致的 main 上再次运行全部发布前命令。
-3. 首次发布人工执行 `cargo publish --locked`，确认 crates.io 页面与 `cargo install arcthis --locked` 可用。
+3. 人工执行 `cargo publish --locked` 并确认 crates.io 页面与 `cargo install arcthis --locked` 可用。这一步不会由发布 workflow 代劳，每次发布都要重新执行。
 4. 创建签名 Tag `v0.5.1` 并只推送该 Tag；cargo-dist workflow 随后创建 GitHub Release，并发布 npm 包与 Homebrew Formula。
 5. 等待 Release workflow 全部成功，不以 GitHub Release 已出现代替 npm/Homebrew Job 成功。
 6. 在干净环境分别执行 Cargo、Homebrew、npm、pnpm 安装，并重复版本、MCP 和归档 smoke test。

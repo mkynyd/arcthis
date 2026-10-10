@@ -101,7 +101,7 @@ Global options can appear with a subcommand:
 - `-h`, `--help` shows command help.
 - `-V`, `--version` shows the version.
 
-`NO_COLOR`, non-TTY output, and JSON output contain no ANSI color decoration.
+`NO_COLOR`, non-TTY output, and JSON output contain no ANSI color decoration. The current build emits no ANSI decoration at all, so `--no-color` and `NO_COLOR` are accepted for compatibility and change nothing today.
 
 ## `inspect` — learn archive cost and risk
 
@@ -110,14 +110,14 @@ arcthis inspect archive.tar.gz
 arcthis inspect archive.tar.gz --json
 ```
 
-`inspect` lists archive metadata without reading every file's content. It reports format, compression, file count, declared sizes, an approximate archive-size ratio, capabilities, and warnings.
+`inspect` lists archive metadata without reading every file's content. Human output reports format, compression, entry count, declared sizes, access cost, volume state, and any warnings. `--json` additionally exposes the compression ratio, the `encrypted`/`solid` flags, the `capabilities` object, and the full warning list.
 
 Important warning codes include:
 
 - `sequential_access` — selected reads may scan from the beginning.
 - `encrypted_entries` — encrypted content is present and content operations need the correct password.
 - `non_regular_entries` — links or special entries will be rejected by extraction.
-- `duplicate_entry_paths` — named access is ambiguous and extraction will refuse the archive.
+- `duplicate_entry_paths` — named access is ambiguous and extraction will refuse the archive. The check can only see entries the backend exposes; a ZIP that repeats a path in its central directory is merged by the ZIP dependency, so this warning does not appear for it. See [docs/SECURITY.md](./docs/SECURITY.md).
 - `unsafe_entry_paths` — extraction path validation would reject at least one entry.
 - `default_extraction_limits_exceeded` — declared metadata exceeds default limits.
 - `high_compression_ratio` — at least one entry declares expansion above 1000:1.
@@ -134,7 +134,7 @@ arcthis list archive.zip
 arcthis list archive.zip --json
 ```
 
-Human output is a tab-separated `KIND`, `SIZE`, and `PATH` table. JSON preserves archive order and duplicate files.
+Human output is a tab-separated `KIND`, `SIZE`, and `PATH` table. JSON preserves archive order and duplicate files for every backend that exposes them; a ZIP whose central directory repeats a path is merged by the ZIP dependency and appears once. See [docs/SECURITY.md](./docs/SECURITY.md).
 
 A file object includes:
 
@@ -155,7 +155,7 @@ arcthis tree source.tar
 arcthis tree source.tar --json
 ```
 
-Human output uses tree characters. JSON returns recursive nodes with `name`, logical `path`, `kind`, an optional source `entry`, and `children`. Implicit directories have `entry: null`; duplicate file leaves remain separate.
+Human output uses tree characters. JSON returns recursive nodes with `name`, logical `path`, `kind`, an optional source `entry`, and `children`. Implicit directories have `entry: null`; duplicate file leaves remain separate where the backend exposes them. Tree paths are limited to 4096 bytes and 256 non-empty components; larger paths return `resource_limit` instead of building an unbounded result.
 
 ## `stat` — inspect one named file
 
@@ -164,7 +164,7 @@ arcthis stat archive.zip README.md
 arcthis stat archive.zip README.md --json
 ```
 
-The path must match the entry path shown by `list`. A missing path returns `entry_not_found`. If the archive contains the same path more than once, `stat` returns `collision` instead of silently choosing one.
+The path must match the entry path shown by `list`. A missing path returns `entry_not_found`. If the archive contains the same path more than once, `stat` returns `collision` instead of silently choosing one. A backend that exposes only one same-name entry — for example a ZIP whose duplicate central-directory paths the ZIP dependency merged — cannot trigger that collision; see [docs/SECURITY.md](./docs/SECURITY.md).
 
 ## `read` — read one file directly
 
@@ -244,7 +244,7 @@ arcthis index dataset.7z --delete --dry-run --json
 arcthis index dataset.7z --delete --json
 ```
 
-`index` stores listed file metadata in the platform cache directory. Later opens reuse a valid cache automatically. The cache key uses the normalized source path; source size and nanosecond modification time invalidate stale entries. `--refresh` forces a re-list and a single-step replacement. `--delete` removes only this archive's cache, and `--dry-run` reports `would_create`, `would_refresh`, `would_reuse`, or `would_delete` without changing cache files. Use `--index-directory` to isolate or relocate the cache.
+`index` stores listed file metadata in the platform cache directory. Later opens reuse a valid cache automatically. The cache key uses the normalized source path; source size and nanosecond modification time invalidate stale entries. `--refresh` forces a re-list and a single-step replacement. `--delete` removes only this archive's cache, and `--dry-run` reports `would_create`, `would_refresh`, `would_reuse`, or `would_delete` — and `missing` when `--delete` finds no existing index — without changing cache files. Use `--index-directory` to isolate or relocate the cache.
 
 Cache files are untrusted optimization data: malformed, format-mismatched, or stale documents are ignored. Caches contain metadata, not decoded content or TAR seek points.
 
@@ -335,7 +335,7 @@ The default collision handling refuses an existing destination. Select exactly o
 
 ### Extraction safety
 
-Extraction rejects absolute paths, `.`/`..`, backslashes, Windows drive/UNC prefixes, NULs, duplicate paths, case-insensitive collisions, file-as-parent conflicts, overlong paths, invalid UTF-8 names, symlinks, hardlinks, and special files. It writes to a temporary folder on the destination filesystem and saves only after every planned file succeeds. See [docs/SECURITY.md](./docs/SECURITY.md).
+Extraction rejects absolute paths, `.`/`..`, backslashes, Windows drive/UNC prefixes, NULs, duplicate paths, case-insensitive collisions, file-as-parent conflicts, overlong paths, invalid UTF-8 names, symlinks, hardlinks, and special files. Duplicate detection sees only the entries a backend exposes, so the ZIP merge noted in [docs/SECURITY.md](./docs/SECURITY.md) applies. It writes to a temporary folder on the destination filesystem and saves only after every planned file succeeds.
 
 ## `extract-all` — process a directory of archives
 

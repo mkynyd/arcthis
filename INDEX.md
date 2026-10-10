@@ -18,7 +18,7 @@ This map lists important maintained files and their current responsibilities. Ge
 - `.github/workflows/ci.yml` — macOS/Linux formatting, lint, test, and release-build workflow.
 - `.github/workflows/release.yml` — cargo-dist-generated three-platform GitHub Release, npm, and Homebrew workflow.
 - `dist-workspace.toml` — Release targets, native build dependencies, installers, attestations, and package-manager publishing configuration.
-- `.gitignore` — Excludes build output, CodeGraph data, fixtures, temporary archives, `log.md`, and `HANDOFF.md`.
+- `.gitignore` — Excludes build output, CodeGraph and Playwright CLI state, temporary archives, the local `archive_test/` fixture directory, `log.md`, and `HANDOFF.md`.
 
 ## Library and CLI
 

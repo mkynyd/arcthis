@@ -40,7 +40,7 @@ Arcthis v0.5.1 包含命令行工具和本地 MCP 服务。所有安装渠道提
 - `list`、`tree`、`stat`、`inspect` 和直接读取的 `read`
 - 基于通配符的 `find`、有上限的逐行文本搜索 `grep`，以及 SHA-256/SHA-512 校验值 `hash`
 - 使用可重复 `--within` 明确访问嵌套的压缩包
-- 通过 `--password-file` 访问加密 ZIP 与 7z
+- 通过 `--password-file` 访问加密 ZIP、7z 与 RAR
 - 通过可重复 `--volume` 按顺序组合分卷文件
 - 可显式创建、刷新和删除的持久化文件列表缓存 `index`
 - 安全的完整解压或单个文件解压 `extract`

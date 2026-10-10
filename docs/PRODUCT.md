@@ -90,7 +90,7 @@ v0.3 adds agent-native discovery while preserving capped read behavior:
 v0.4 expands compatibility without weakening the access and lifecycle rules:
 
 - RAR/RAR5: content-first read, query, extract, and verify through a statically linked libarchive integration; creation remains unsupported and licensing/redistribution boundaries are documented.
-- Encryption: file-based password input for encrypted ZIP and 7z access, with stable missing/wrong-password errors and no secret CLI argument.
+- Encryption: file-based password input for encrypted ZIP, 7z, and RAR access (RAR depends on libarchive and the RAR variant), with stable missing/wrong-password errors and no secret CLI argument.
 - Split sources: explicit ordered split files exposed through repeatable `--volume`; native RAR volume protocols remain outside this source model.
 - Persistent metadata caches: single-step create/refresh/delete, dry-run actions, source fingerprint invalidation, and a configurable cache root.
 - Conversion: source safety check, capped temporary extraction, verified target packing, shared collision handling, and post-save `--delete-source`.

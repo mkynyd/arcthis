@@ -40,7 +40,7 @@ Current commands:
 - `list`, `tree`, `stat`, `inspect`, and `read` (which reads a file directly)
 - glob-based `find`, capped line-by-line text search `grep`, and SHA-256/SHA-512 `hash`
 - explicit nested-archive access with repeatable `--within`
-- password-file access for encrypted ZIP and 7z archives
+- password-file access for encrypted ZIP, 7z, and RAR archives
 - explicit ordered split files with repeatable `--volume`
 - a saved file-list cache (`index`) you can create, refresh, or delete
 - safe full or single-file `extract`

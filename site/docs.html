@@ -177,7 +177,7 @@
           <div class="cmd" id="cmd-list">
             <div class="cmd-head"><span class="cmd-name">list</span><span class="cmd-sig">arcthis list &lt;archive&gt; [--json]</span></div>
             <div class="cmd-body">
-              <p>按压缩包内的原始顺序列出所有文件,重名也保留。JSON 输出会附带完整的 <code>entries</code> 数组。</p>
+              <p>按压缩包内的原始顺序列出所有文件,底层实现暴露的重名条目也会保留;ZIP 依赖会把重复的中央目录路径合并成一个条目,只列出一次。JSON 输出会附带完整的 <code>entries</code> 数组。</p>
             </div>
           </div>
 
@@ -191,7 +191,7 @@
           <div class="cmd" id="cmd-stat">
             <div class="cmd-head"><span class="cmd-name">stat</span><span class="cmd-sig">arcthis stat &lt;archive&gt; &lt;entry&gt; [--json]</span></div>
             <div class="cmd-body">
-              <p>展示单个文件的详细信息:类型、大小、压缩后大小、修改时间、是否加密、CRC-32,以及按扩展名推测的文件类型。路径不存在返回 <code>entry_not_found</code>;路径重复返回 <code>collision</code>,因为无法确定你指的是哪一个。</p>
+              <p>展示单个文件的详细信息:类型、大小、压缩后大小、修改时间、是否加密、CRC-32,以及按扩展名推测的文件类型。路径不存在返回 <code>entry_not_found</code>;路径重复返回 <code>collision</code>,因为无法确定你指的是哪一个。只有当底层实现同时暴露重复条目时才会返回该冲突,具体限制见 <a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">docs/SECURITY.md</a> 中的 ZIP 说明。</p>
             </div>
           </div>
 
