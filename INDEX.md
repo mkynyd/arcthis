@@ -71,6 +71,7 @@ This map lists important maintained files and their current responsibilities. Ge
 
 ## Design documents
 
+- `docs/BRAND.md` — Approved A2 logo geometry, theme colors, assets, and website usage.
 - `docs/PRODUCT.md` — Product positioning, principles, users, delivered milestones, and non-goals.
 - `docs/ARCHITECTURE.md` — Module interfaces, format-handling interface, capabilities, direct reading, extraction, and future sources.
 - `docs/CLI.md` — Public command, JSON format, stdout/stderr, and machine error rules.
@@ -90,5 +91,5 @@ This map lists important maintained files and their current responsibilities. Ge
 - `site/en/` — English versions of all three pages. Language auto-detects from `navigator.language` on first visit and persists explicit choices via `localStorage`.
 - `site/assets/style.css` — Shared light/dark semantic-token design system (system-adaptive with manual toggle).
 - `site/assets/main.js` — Theme and language persistence, accessible install-method tabs, copy buttons, GSAP scroll reveals, and the window-scroll stacked-card effect.
-- `site/assets/logo.svg` / `site/assets/favicon.svg` — Placeholder archive-tree logo mark.
+- `site/assets/logo.svg` / `site/assets/favicon.svg` — Approved A2 open-container mark with straight content bars; both SVG assets adapt to the system color scheme.
 - `site/deploy.sh` — Single deploy entry point: bumps the `?v=<timestamp>` cache-busting query on the shared assets in every page, then rsyncs to https://arcthis.mkynstudio.top (`/www/wwwroot/arcthis.mkynstudio.top` on the `remoteDev` host) and fixes ownership. No build step.

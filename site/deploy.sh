@@ -2,7 +2,7 @@
 # Deploy the Arcthis site to arcthis.mkynstudio.top.
 #
 # Cache strategy: HTML pages are revalidated by the browser as usual, while the
-# shared assets (/assets/style.css, /assets/main.js) carry a ?v=<timestamp>
+# shared CSS, JavaScript, logo, and favicon assets carry a ?v=<timestamp>
 # query. Every deploy bumps that version in all pages, so returning visitors
 # always pick up the latest CSS/JS without a hard refresh.
 #
@@ -19,7 +19,7 @@ REMOTE_ROOT="/www/wwwroot/arcthis.mkynstudio.top"
 PAGES="index.html download.html docs.html en/index.html en/download.html en/docs.html"
 
 for f in $PAGES; do
-  sed -i '' -E "s#/assets/(style\.css|main\.js)(\?v=[0-9]+)?#/assets/\1?v=$V#g" "$f"
+  sed -i '' -E "s#/assets/(style\.css|main\.js|logo\.svg|favicon\.svg)(\?v=[0-9]+)?#/assets/\1?v=$V#g" "$f"
 done
 
 rsync -avz --exclude '.DS_Store' --exclude 'deploy.sh' ./ "$REMOTE_HOST:$REMOTE_ROOT/"

@@ -1,8 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="7.5" fill="#17181b"/>
-  <path d="M11 8.5v15" stroke="#fafafa" stroke-width="2.2" stroke-linecap="round"/>
-  <path d="M11 13.5h8" stroke="#fafafa" stroke-width="2.2" stroke-linecap="round"/>
-  <path d="M11 19.5h5.5" stroke="#fafafa" stroke-width="2.2" stroke-linecap="round"/>
-  <circle cx="21.5" cy="13.5" r="1.9" fill="#fafafa"/>
-  <circle cx="19" cy="19.5" r="1.9" fill="#fafafa"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Arcthis</title>
+  <style>
+    :root { --logo-ink: #172D35; --logo-accent: #087F8C; }
+    @media (prefers-color-scheme: dark) {
+      :root { --logo-ink: #F4F8F8; --logo-accent: #58D3CF; }
+    }
+  </style>
+  <path d="M44 10H20a10 10 0 0 0-10 10v24a10 10 0 0 0 10 10h24a10 10 0 0 0 10-10v-2M54 22v-2a10 10 0 0 0-10-10" fill="none" stroke="var(--logo-ink)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M20 19h22v6H20zM20 39h22v6H20zM20 29h4v6h-4z" fill="var(--logo-ink)"/>
+  <path d="M28 29h32v6H28z" fill="var(--logo-accent)"/>
 </svg>

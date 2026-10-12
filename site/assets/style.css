@@ -23,6 +23,9 @@
   --accent-soft: #e9f4ff;
   --focus-ring: #0878d1;
 
+  --logo-ink: #172D35;
+  --logo-accent: #087F8C;
+
   --syntax-keyword: #7c3aed;
   --syntax-string: #137547;
   --syntax-function: #0868b8;
@@ -72,6 +75,9 @@
   --accent-hover: #a8c2ff;
   --accent-soft: #172238;
   --focus-ring: #82aaff;
+
+  --logo-ink: #F4F8F8;
+  --logo-accent: #58D3CF;
 
   --syntax-keyword: #c792ea;
   --syntax-string: #c3e88d;
