@@ -68,7 +68,7 @@ This map lists important maintained files and their current responsibilities. Ge
 - `tests/cli_query.rs` — Find/grep/hash formats, scan limits, binary detection, and in-memory nested traversal tests.
 - `tests/cli_v04.rs` — RAR access, encrypted ZIP/7z, split files, persistent indexes, and convert regressions.
 - `tests/cli_iteration.rs` — Exploration regressions for solid ratios, normalized paths, duplicate/AES/Deflate/ZIP64 instances, encoding, verified reads, stdin, batch isolation, cache pruning, path parity and metadata.
-- `.github/workflows/release-smoke.yml`, `.github/scripts/release_smoke.py` — Native three-platform checks of downloaded candidate/final assets, checksums, linkage, default MCP, archive access and installer references.
+- `.github/workflows/release-smoke.yml`, `.github/scripts/release_smoke.py` — Three release targets on four native runners (macOS arm64/x64, Ubuntu 22.04/24.04), checking downloaded assets, checksums, direct/transitive linkage, default MCP, archive access and installer references.
 - `tests/app_service.rs` — Direct interface-independent service coverage and CLI-compatible structured results.
 - `tests/mcp_stdio.rs` — Independent JSON-RPC subprocess coverage for discovery, limits, cancellation, root policy, and controlled mutation.
 - `tests/mcp-inspector.json` — Official MCP Inspector launch configuration used for protocol/format smoke tests.

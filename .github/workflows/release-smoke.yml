@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   smoke:
-    name: Smoke ${{ matrix.target }}
+    name: Smoke ${{ matrix.target }} (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
@@ -20,6 +20,8 @@ jobs:
           - runner: macos-15-intel
             target: x86_64-apple-darwin
           - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.runner }}
     steps:
