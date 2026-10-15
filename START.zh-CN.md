@@ -2,13 +2,13 @@
 
 [English](./START.md)
 
-本文按尚未发布的 **0.6.0-rc.1 源码（JSON schema 2）** 编写。公开 0.5.1 二进制仍使用 schema 1，不包含下文新增选项；使用前请源码构建。迁移见 [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md)，改动与验证见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)。
+本文对应 **0.6.0（JSON schema 2）**。旧版 0.5.1 使用 schema 1，消费者升级需参考 [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md)；改动与验证见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)。
 
 v0.5.1 增加写入路径重叠检查、文件树层数限制、MCP 并发与响应大小限制，以及 `grep --max-result-bytes`。这段是公开 0.5.1 的历史说明；当前源码迁移见上方 ADR。
 
 格式识别以内容为主。空的压缩 TAR 只有全零块，需要保留 `.tar.gz`、`.tar.bz2`、`.tar.xz`、`.tar.zst` 或对应缩写后缀。其他以零字节开头的压缩文件保持单文件读取。
 
-## 0.6.0-rc.1 源码新增选项
+## 0.6.0 源码新增选项
 
 ```sh
 arcthis read bundle.zip --entry-index 3 --verify-first
@@ -42,7 +42,7 @@ pnpm add -g arcthis
 
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
-Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1) 下载。
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.6.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.6.0) 下载。
 
 ### 从源码构建
 
@@ -101,7 +101,7 @@ arcthis read dataset.tar.gz train/data.csv | head -n 20
 
 ## 当前源码的根帮助
 
-运行 `arcthis`、`arcthis -h` 或 `arcthis --help` 可查看 ASCII Logo、简介与根命令列表。无参数运行保留缺少命令的行为：帮助写入 stderr，退出码为 2；显式帮助写入 stdout，退出码为 0。子命令帮助、版本信息、压缩包结果和 MCP 响应不含 Logo。标志只使用 ASCII 字符，不含 ANSI 颜色。这是当前源码新增的表现，已发布的 v0.5.1 二进制尚不包含。
+运行 `arcthis`、`arcthis -h` 或 `arcthis --help` 可查看 ASCII Logo、简介与根命令列表。无参数运行保留缺少命令的行为：帮助写入 stderr，退出码为 2；显式帮助写入 stdout，退出码为 0。子命令帮助、版本信息、压缩包结果和 MCP 响应不含 Logo。标志只使用 ASCII 字符，不含 ANSI 颜色。该标志在 v0.6.0 加入。
 
 ## 命令形式与全局选项
 

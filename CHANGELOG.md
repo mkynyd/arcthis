@@ -2,7 +2,7 @@
 
 This file records user-visible changes to Arcthis. The project follows semantic versioning after the first public release.
 
-## 0.6.0-rc.1 — 2026-10-16
+## 0.6.0 — 2026-10-16
 
 ### Compatibility
 
@@ -11,6 +11,8 @@ This file records user-visible changes to Arcthis. The project follows semantic 
 - Rust callers constructing complete `ArchiveOpenOptions`, `ExtractionLimits`, `ExtractAllOptions` or `ArchiveEntry` literals must account for the new fields/types.
 
 ### Fixed
+
+- Anchor package includes to the repository root so ignored tool downloads cannot contribute same-named documentation.
 
 - Reuse scan readers across ZIP, TAR-family, 7z and RAR; preserve selection/order/budgets, CRC errors and global stopping.
 - Check solid-7z expansion by block; shared per-entry compressed sizes are unknown, not zero.

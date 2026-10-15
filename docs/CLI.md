@@ -2,7 +2,7 @@
 
 ## Command syntax
 
-This document follows unreleased **0.6.0-rc.1 / schema 2**. Public 0.5.1 remains schema 1. The breaking metadata/envelope changes and migration are recorded in [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md); complete report acceptance is in [EXPLORATION-ITERATION-PLAN.md](./EXPLORATION-ITERATION-PLAN.md).
+This document follows unreleased **0.6.0 / schema 2**. Public 0.5.1 remains schema 1. The breaking metadata/envelope changes and migration are recorded in [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md); complete report acceptance is in [EXPLORATION-ITERATION-PLAN.md](./EXPLORATION-ITERATION-PLAN.md).
 
 The preferred syntax is:
 
@@ -244,7 +244,7 @@ Clap syntax errors use exit code 2. The stable runtime category mapping is docum
 
 `preview`, recursive cross-archive search, format-native RAR multipart traversal, password prompting/secret-provider integration, and remote sources remain planned. They require matching library support, JSON formats, tests, and documentation before becoming public behavior.
 
-## Source-checkout options (0.6.0-rc.1)
+## Options added in 0.6.0
 
 - `--entry-index N`: stat/read/hash/extract select an exact `archive_index`; within chains apply it only at the final archive. Omitting entry is supported for stat/read/hash if selection is unambiguous.
 - `--encoding utf8|cp437|gbk|shift-jis`: strict explicit name decoding, retaining `path_raw_hex`. Default remains UTF-8 or escaped bytes; index maintenance stores original names and rejects decoding overrides.

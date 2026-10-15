@@ -1,10 +1,10 @@
 # ADR 0002: explicit entry identity and JSON schema 2
 
-Status: accepted for the unreleased checkout, 2026-10-15.
+Status: accepted for version 0.6.0, 2026-10-15.
 
 The complete exploration iteration is authorized. Schema 1 cannot express unknown executable state or distinguish an unknown ZIP local timestamp from an absolute timestamp consistently. CLI and MCP also serialize the same read-only operations differently.
 
-The unreleased checkout moves the public result `schema_version` from `"1"` to `"2"`. Published 0.5.1 remains schema 1. Consumers must check the version and migrate before using this checkout. No release is performed by this work.
+Version 0.6.0 moves the public result `schema_version` from `"1"` to `"2"`. Published 0.5.1 remains schema 1. Consumers must check the version and migrate before using this checkout. The migration first ships in 0.6.0.
 
 - Entries carry `path_raw_hex` as the adapter-exposed name bytes (ZIP/TAR/Gzip byte names; UTF-8 for Unicode names exposed by 7z/RAR libraries) and retain `archive_index` as instance identity. Name-based selection refuses ambiguity; explicit index selection bypasses only name ambiguity, never materialization safety. Extraction carries that identity through decoding and uses a common bounded writer.
 - `executable` is nullable; directories and unknown modes are null. Directory CRC is null. Unknown or shared-block compressed sizes are null, not zero.

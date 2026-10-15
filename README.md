@@ -29,7 +29,11 @@ ZIP can usually read a selected file directly. TAR and TAR.GZ scan in order. `in
 
 ## Project status
 
-Arcthis v0.5.1 includes the CLI and local MCP server. Every installation channel provides the same commands.
+Arcthis v0.6.0 includes the CLI and local MCP server. Every installation channel provides the same commands.
+
+### Changes in v0.6.0
+
+Version **0.6.0 uses JSON schema 2**. It preserves ZIP duplicate instances, fixes solid-7z ratios and TAR dot paths, reuses scan readers, and adds bounded stdin, strict name decoding, verified reads, batch continuation and cache management. See the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md) and [schema migration ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
 
 ### Changes in v0.5.1
 
@@ -87,7 +91,7 @@ pnpm add -g arcthis
 
 pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
-Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1).
+Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [v0.6.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.6.0).
 
 ### Build from source
 
@@ -100,9 +104,7 @@ cargo build --release --locked
 ./target/release/arcthis --help
 ```
 
-The current checkout adds an A2-inspired ASCII logo to root help (`arcthis`, `arcthis -h`, and `arcthis --help`). This addition is not included in the published v0.5.1 binaries.
-
-Current source is **0.6.0-rc.1 / JSON schema 2**, not yet released. It preserves ZIP duplicate instances, fixes solid-7z ratios and TAR dot paths, reuses content-scan readers, and adds bounded stdin, strict filename decoding, verified reads, batch continuation and cache management. Build from source for these options. See the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md) and [schema migration ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
+Root help (`arcthis`, `arcthis -h`, and `arcthis --help`) includes an A2-inspired ASCII logo in v0.6.0.
 
 To install a local checkout into Cargo's binary directory:
 
@@ -183,7 +185,7 @@ Nested access decodes the selected inner file into a size-limited read-only memo
 
 ## Agent interface
 
-Current checkout uses schema 2; published 0.5.1 remains schema 1.
+0.6.0 uses schema 2; 0.5.1 uses schema 1.
 
 - Successful structured output uses `schema_version: "2"`.
 - Results go to stdout; warnings and errors go to stderr.

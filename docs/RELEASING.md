@@ -1,6 +1,6 @@
 # Arcthis 发布流程
 
-当前源码为尚未发布的 `0.6.0-rc.1` / JSON schema 2。本轮没有发布；候选版本需要先完成下面的独立三平台验证与 CI/Secret 门禁，绝不能复用已有的 0.5.1 Tag。
+当前版本为 `0.6.0` / JSON schema 2。候选版本为 `v0.6.0-rc.1`；每次后续发布仍需完整执行候选、三平台、CI、Secret 与渠道验收门禁，不得复用旧 Tag。
 
 本文记录公开版本的固定发布步骤。正式发布不可覆盖；任何一项未满足都应停止，不应通过 `--allow-dirty`、跳过验证或手工修改生成产物绕过。
 
@@ -61,7 +61,7 @@ dist plan
 - 检查 macOS `otool -L` 与 Linux `ldd`；
 - 检查生成的 npm 包与 Homebrew Formula 指向同一 GitHub Release。
 
-仓库提供独立的 `Release smoke` 手动 workflow。在候选 Release workflow 成功后运行 `gh workflow run release-smoke.yml -f tag=v0.6.0-rc.1`，检查三个 target 的四个原生 runner（macOS arm64/x64、Ubuntu 22.04/24.04）全部成功；该 workflow 下载已发布的实际产物，核对校验和、原生架构、直接及系统传递依赖、默认 MCP、ZIP/TAR.GZ/7z 的 pack/list/read/grep/verify，以及 npm/Homebrew 生成文件的版本和 Release URL。正式版本也应重复此检查。
+仓库提供独立的 `Release smoke` 手动 workflow。在候选 Release workflow 成功后运行 `gh workflow run release-smoke.yml -f tag=v0.6.0-rc.1`，检查三个 target 的四个原生 runner（macOS arm64/x64、Ubuntu 22.04/24.04）全部成功；该 workflow 下载已发布的实际产物，核对校验和、原生架构、直接及系统传递依赖、默认 MCP、ZIP/TAR.GZ/7z 的 pack/list/read/grep/verify，以及 npm/Homebrew 生成文件的版本和 Release URL。正式版本也应重复此检查，macOS arm64 runner 还会在干净环境实际 Homebrew 安装并复测归档访问。
 
 候选验证结束后，把项目版本改回正式的 `0.6.0`，再进入正式发布步骤；不得移动、删除或复用已经推送的候选 Tag。
 
