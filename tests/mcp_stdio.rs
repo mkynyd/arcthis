@@ -154,6 +154,17 @@ fn discovery_declares_read_only_tools_and_schemas() {
     for tool in tools {
         assert!(tool["inputSchema"].is_object());
         assert!(tool["outputSchema"].is_object());
+        assert_eq!(
+            tool["outputSchema"]["properties"]["schema_version"]["const"],
+            "2"
+        );
+        assert_eq!(
+            tool["outputSchema"]["anyOf"]
+                .as_array()
+                .expect("success/error schemas")
+                .len(),
+            2
+        );
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
         assert_eq!(tool["annotations"]["destructiveHint"], false);
         assert_eq!(tool["annotations"]["idempotentHint"], true);
@@ -281,7 +292,15 @@ fn response_budget_rejects_large_results_without_partial_success() {
                 .expect("response error")
                 .contains("resource_limit")
         );
-        assert!(response["result"].get("structuredContent").is_none());
+        assert_eq!(
+            response["result"]["structuredContent"]["error"]["code"],
+            "resource_limit"
+        );
+        assert!(
+            response["result"]["structuredContent"]
+                .get("entries")
+                .is_none()
+        );
         assert!(
             serde_json::to_vec(&response["result"])
                 .expect("serialize response")
@@ -827,4 +846,109 @@ fn symlink_escapes_are_rejected_for_input_and_output() {
     assert_eq!(denied_output["result"]["isError"], true);
     assert!(!outside_target.exists());
     client.finish();
+}
+
+#[test]
+fn schema_two_envelopes_match_cli_and_parameter_errors_are_structured() {
+    let (temporary, archive) = fixture();
+    let archive = archive.canonicalize().expect("canonical archive");
+    let mut client = Client::start(temporary.path(), &[]);
+    client.initialize();
+    for (id, tool, command) in [
+        (800, "archive_list", "list"),
+        (801, "archive_tree", "tree"),
+        (802, "archive_inspect", "inspect"),
+    ] {
+        let response = client.call_tool(id, tool, json!({"path":archive}));
+        let value = &response["result"]["structuredContent"];
+        assert_eq!(value["schema_version"], "2");
+        let cli = Command::new(env!("CARGO_BIN_EXE_arcthis"))
+            .arg(command)
+            .arg(&archive)
+            .arg("--json")
+            .output()
+            .expect("CLI counterpart");
+        assert!(cli.status.success());
+        let expected: Value = serde_json::from_slice(&cli.stdout).expect("CLI JSON");
+        assert_eq!(*value, expected);
+    }
+    let missing = client.call_tool(
+        803,
+        "archive_read",
+        json!({"path":archive,"offset":0,"length":4}),
+    );
+    assert_eq!(missing["result"]["isError"], true);
+    assert_eq!(
+        missing["result"]["structuredContent"]["schema_version"],
+        "2"
+    );
+    assert_eq!(
+        missing["result"]["structuredContent"]["error"]["code"],
+        "invalid_argument"
+    );
+    assert!(!missing.to_string().contains("deserialize"));
+    client.finish();
+}
+
+#[test]
+fn per_request_password_files_obey_input_roots_and_are_never_returned() {
+    let root = TempDir::new().expect("root");
+    let outside = TempDir::new().expect("outside");
+    let archive = root.path().join("encrypted.zip");
+    let password = root.path().join("secret.txt");
+    std::fs::write(&password, b"private-fixture-password\r\n").expect("secret");
+    let mut writer = ZipWriter::new(File::create(&archive).expect("ZIP"));
+    writer
+        .start_file(
+            "entry.txt",
+            SimpleFileOptions::default()
+                .with_aes_encryption(zip::AesMode::Aes256, "private-fixture-password"),
+        )
+        .expect("encrypted entry");
+    writer.write_all(b"data").expect("entry bytes");
+    writer.finish().expect("finish ZIP");
+    let other = outside.path().join("secret.txt");
+    std::fs::write(&other, b"private-fixture-password").expect("outside secret");
+    let mut client = Client::start(root.path(), &[]);
+    client.initialize();
+    let response = client.call_tool(
+        810,
+        "archive_read",
+        json!({"path":archive,"entry":"entry.txt","offset":0,"length":4,"password_file":password}),
+    );
+    assert_eq!(response["result"]["structuredContent"]["data"], "data");
+    assert!(!response.to_string().contains("private-fixture-password"));
+    let denied = client.call_tool(
+        811,
+        "archive_read",
+        json!({"path":archive,"entry":"entry.txt","offset":0,"length":4,"password_file":other}),
+    );
+    assert_eq!(
+        denied["result"]["structuredContent"]["error"]["code"],
+        "permission_denied"
+    );
+    let inline=client.call_tool(812,"archive_read",json!({"path":archive,"entry":"entry.txt","offset":0,"length":4,"password":"must-not-appear"}));
+    assert_eq!(
+        inline["result"]["structuredContent"]["error"]["code"],
+        "invalid_argument"
+    );
+    assert!(!inline.to_string().contains("must-not-appear"));
+    client.finish();
+}
+
+#[test]
+fn clean_eof_before_initialize_exits_successfully() {
+    let root = TempDir::new().expect("root");
+    let output = Command::new(env!("CARGO_BIN_EXE_arcthis"))
+        .args(["mcp", "--allow-root"])
+        .arg(root.path())
+        .stdin(Stdio::null())
+        .output()
+        .expect("MCP EOF");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.is_empty());
 }

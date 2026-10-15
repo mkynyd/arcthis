@@ -1,5 +1,4 @@
 use std::io::{self, Write};
-use std::path::Path;
 use std::time::SystemTime;
 
 use sevenz_rust2::{ArchiveReader, Password};
@@ -7,12 +6,10 @@ use sevenz_rust2::{ArchiveReader, Password};
 use super::{ArchiveSource, ReadSeek};
 use crate::ArchivePassword;
 use crate::error::{ArcthisError, Result};
-use crate::extract::{ExtractionStats, ExtractionWriter, PlannedEntry};
 use crate::model::{
     ArchiveCapabilities, ArchiveEntry, ArchiveFormat, EntryCopyResult, EntryKind,
     EntryPathEncoding, VerificationResult,
 };
-use crate::security::ExtractionLimits;
 
 pub(crate) struct SevenZipBackend {
     source: ArchiveSource,
@@ -57,6 +54,18 @@ impl super::ArchiveBackend for SevenZipBackend {
                 coder.encoder_method_id() == sevenz_rust2::EncoderMethod::ID_AES256_SHA256
             })
         });
+        let mut block_files = vec![0_usize; reader.archive().blocks.len()];
+        for block in reader
+            .archive()
+            .stream_map
+            .file_block_index
+            .iter()
+            .flatten()
+        {
+            if let Some(count) = block_files.get_mut(*block) {
+                *count += 1;
+            }
+        }
         Ok(reader
             .archive()
             .files
@@ -72,82 +81,157 @@ impl super::ArchiveBackend for SevenZipBackend {
                     EntryKind::File
                 },
                 size: entry.size,
-                compressed_size: Some(entry.compressed_size),
+                compressed_size: if entry.is_directory {
+                    None
+                } else {
+                    match reader
+                        .archive()
+                        .stream_map
+                        .file_block_index
+                        .get(index)
+                        .copied()
+                        .flatten()
+                    {
+                        Some(block) if block_files.get(block) == Some(&1) => {
+                            Some(entry.compressed_size)
+                        }
+                        None if entry.size == 0 => Some(0),
+                        _ => None,
+                    }
+                },
                 modified_time: entry
                     .has_last_modified_date
                     .then(|| SystemTime::from(entry.last_modified_date))
                     .and_then(system_time_rfc3339),
                 encrypted: encrypted && !entry.is_directory,
-                executable: false,
+                executable: None,
                 symlink_target: None,
                 crc32: entry.has_crc.then(|| format!("{:08x}", entry.crc)),
+                path_raw_hex: String::new(),
+                modified_time_local: None,
                 mime_guess: None,
             })
             .collect())
     }
 
-    fn copy_entry_to(&self, path: &str, writer: &mut dyn Write) -> Result<EntryCopyResult> {
-        let mut reader = self.reader()?;
-        let mut found = false;
-        let mut bytes_written = 0_u64;
-        reader
-            .for_each_entries(|entry, entry_reader| {
-                if entry.name != path {
-                    return Ok(true);
-                }
-                found = true;
-                bytes_written = io::copy(entry_reader, writer)?;
-                Ok(false)
-            })
-            .map_err(map_seven_zip_error)?;
-        if !found {
-            return Err(ArcthisError::EntryNotFound {
-                entry: path.to_owned(),
-            });
+    fn enforce_compression_ratio(&self, max_ratio: u64) -> Result<()> {
+        let reader = self.reader()?;
+        let archive = reader.archive();
+        let starts = archive.stream_map.block_first_pack_stream_index();
+        for (index, block) in archive.blocks.iter().enumerate() {
+            let start = starts
+                .get(index)
+                .copied()
+                .ok_or_else(|| ArcthisError::InvalidArchive {
+                    message: "7z block has no packed stream mapping".to_owned(),
+                })?;
+            let end = starts
+                .get(index + 1)
+                .copied()
+                .unwrap_or(archive.pack_sizes().len());
+            let packed = archive
+                .pack_sizes()
+                .get(start..end)
+                .ok_or_else(|| ArcthisError::InvalidArchive {
+                    message: "7z packed stream mapping is out of range".to_owned(),
+                })?
+                .iter()
+                .try_fold(0_u64, |sum, size| sum.checked_add(*size))
+                .ok_or_else(|| ArcthisError::ResourceLimit {
+                    message: "7z packed block size overflow".to_owned(),
+                })?;
+            let unpacked = block.get_unpack_size();
+            if unpacked > 0 && (packed == 0 || unpacked > packed.saturating_mul(max_ratio)) {
+                return Err(ArcthisError::ResourceLimit {
+                    message: format!(
+                        "7z compression block {index} exceeds the configured {max_ratio}:1 compression ratio limit"
+                    ),
+                });
+            }
         }
-        Ok(EntryCopyResult { bytes_written })
+        Ok(())
     }
 
-    fn extract_plan(
+    fn copy_entries_to(
         &self,
-        plan: &[PlannedEntry],
-        staging_root: &Path,
-        limits: &ExtractionLimits,
-    ) -> Result<ExtractionStats> {
-        let targets = plan
-            .iter()
-            .map(|entry| (entry.archive_path.as_str(), entry))
-            .collect::<std::collections::HashMap<_, _>>();
-        let mut output = ExtractionWriter::new(staging_root, limits);
-        let mut failure = None;
+        entries: &[ArchiveEntry],
+        visitor: &mut super::EntryVisitor<'_>,
+    ) -> Result<()> {
         let mut reader = self.reader()?;
-        let result = reader.for_each_entries(|entry, entry_reader| {
-            let Some(target) = targets.get(entry.name.as_str()) else {
+        let targets = entries
+            .iter()
+            .map(|entry| (entry.archive_index, entry))
+            .collect::<std::collections::HashMap<_, _>>();
+        // Native callbacks borrow the immutable files table. Pointer identity preserves
+        // duplicate instances even when the codec visits empty files after data blocks.
+        let indices = reader
+            .archive()
+            .files
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| (std::ptr::from_ref(entry), index))
+            .collect::<std::collections::HashMap<_, _>>();
+        let mut empty = reader
+            .archive()
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                reader
+                    .archive()
+                    .stream_map
+                    .file_block_index
+                    .get(*index)
+                    .copied()
+                    .flatten()
+                    .is_none()
+            })
+            .filter_map(|(index, file)| {
+                targets
+                    .get(&u64::try_from(index).unwrap_or(u64::MAX))
+                    .map(|entry| (index, file.name.clone(), *entry))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .peekable();
+        let mut seen_empty = std::collections::HashSet::new();
+        let mut stopped = false;
+        let mut failure = None;
+        let result = reader.for_each_entries(|file, source| {
+            let Some(index) = indices.get(&std::ptr::from_ref(file)).copied() else {
+                return Err(sevenz_rust2::Error::from(io::Error::other(
+                    "unknown 7z entry identity",
+                )));
+            };
+            while empty.peek().is_some_and(|(earlier, _, _)| *earlier < index) {
+                let Some((earlier, name, entry)) = empty.next() else {
+                    break;
+                };
+                if !seen_empty.insert(earlier) {
+                    continue;
+                }
+                let result = visit_content(entry, &name, &mut io::empty(), visitor);
+                continue_scan(result, &mut failure, &mut stopped)?;
+            }
+            if seen_empty.contains(&index) {
+                return Ok(true);
+            }
+            if !file.has_stream {
+                seen_empty.insert(index);
+            }
+            let Some(entry) = targets.get(&u64::try_from(index).unwrap_or(u64::MAX)) else {
                 return Ok(true);
             };
-            let write_result = match target.kind {
-                EntryKind::Directory => output.create_directory(target),
-                EntryKind::File => output.write_file(target, entry_reader),
-                EntryKind::Symlink | EntryKind::Hardlink | EntryKind::Other => {
-                    Err(ArcthisError::UnsafePath {
-                        path: entry.name.clone(),
-                        reason: "links and special entries cannot be extracted".to_owned(),
-                    })
-                }
-            };
-            if let Err(error) = write_result {
-                failure = Some(error);
-                return Err(sevenz_rust2::Error::from(io::Error::other(
-                    "arcthis extraction stopped",
-                )));
-            }
-            Ok(true)
+            let result = visit_content(entry, &file.name, source, visitor);
+            continue_scan(result, &mut failure, &mut stopped)
         });
         if let Some(error) = failure {
             return Err(error);
         }
-        result.map_err(map_seven_zip_error)?;
-        Ok(output.stats())
+        if stopped {
+            return Ok(());
+        }
+        result.map_err(map_seven_zip_error)
     }
 
     fn verify(&self) -> Result<VerificationResult> {
@@ -171,6 +255,46 @@ impl super::ArchiveBackend for SevenZipBackend {
             entries_checked,
             bytes_checked,
         })
+    }
+}
+
+fn visit_content(
+    entry: &ArchiveEntry,
+    actual_name: &str,
+    source: &mut dyn std::io::Read,
+    visitor: &mut super::EntryVisitor<'_>,
+) -> Result<bool> {
+    let mut copy = |writer: &mut dyn Write| {
+        if actual_name != entry.original_path()? {
+            return Err(ArcthisError::EntryNotFound {
+                entry: entry.path.clone(),
+            });
+        }
+        let bytes_written = io::copy(source, writer)
+            .map_err(|error| ArcthisError::io("streaming 7z entry", error))?;
+        Ok(EntryCopyResult { bytes_written })
+    };
+    visitor(entry, &mut copy)
+}
+fn continue_scan(
+    result: Result<bool>,
+    failure: &mut Option<ArcthisError>,
+    stopped: &mut bool,
+) -> std::result::Result<bool, sevenz_rust2::Error> {
+    match result {
+        Ok(true) => Ok(true),
+        Ok(false) => {
+            *stopped = true;
+            Err(sevenz_rust2::Error::from(io::Error::other(
+                "arcthis scan finished",
+            )))
+        }
+        Err(error) => {
+            *failure = Some(error);
+            Err(sevenz_rust2::Error::from(io::Error::other(
+                "arcthis scan stopped",
+            )))
+        }
     }
 }
 

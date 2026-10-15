@@ -204,7 +204,7 @@ fn list_uses_magic_bytes_and_emits_structured_json() {
     );
     assert!(output.stderr.is_empty());
     let value: Value = serde_json::from_slice(&output.stdout).expect("parse list JSON");
-    assert_eq!(value["schema_version"], "1");
+    assert_eq!(value["schema_version"], "2");
     assert_eq!(value["archive"]["format"], "zip");
     assert_eq!(value["entries"].as_array().expect("entries array").len(), 3);
     assert_eq!(value["entries"][1]["path"], "README.md");
@@ -250,7 +250,7 @@ fn machine_error_uses_stderr_and_stable_exit_code() {
     assert_eq!(output.status.code(), Some(3));
     assert!(output.stdout.is_empty());
     let value: Value = serde_json::from_slice(&output.stderr).expect("parse error JSON");
-    assert_eq!(value["schema_version"], "1");
+    assert_eq!(value["schema_version"], "2");
     assert_eq!(value["error"]["code"], "unsupported_format");
 }
 

@@ -2,11 +2,32 @@
 
 [简体中文](./START.zh-CN.md)
 
-This guide describes the command-line tool and local MCP server in v0.5.1. For product goals and planned commands, see [docs/PRODUCT.md](./docs/PRODUCT.md) and [ROADMAP.md](./ROADMAP.md).
+This guide follows the unreleased **0.6.0-rc.1 source checkout (JSON schema 2)**. Public 0.5.1 binaries use schema 1 and lack the new options below. Build from source before using them; see [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md) and the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md).
 
-v0.5.1 adds write-path overlap checks, file-tree depth limits, MCP concurrent-call and response limits, and `grep --max-result-bytes`. Command names and JSON result fields remain unchanged.
+v0.5.1 added write-path overlap checks, file-tree depth limits, MCP concurrent-call and response limits, and `grep --max-result-bytes`. That release retained its prior command names and JSON fields; the current source migration is described above.
 
 Detection uses file content. Empty compressed TAR files have only zero blocks, so keep their `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst` or shorthand suffix. Other zero-prefixed compressed files remain single-file streams.
+
+## Source-checkout additions in 0.6.0-rc.1
+
+```sh
+arcthis read bundle.zip --entry-index 3 --verify-first
+arcthis stat legacy.zip --encoding gbk --entry-index 0 --verbose
+cat bundle.zip | arcthis list - --json
+arcthis extract files.tar --output out --no-sync
+arcthis extract-all incoming --continue-on-error --json
+arcthis pack folder --strip-root --output contents.zip
+arcthis index --list --json
+arcthis index --prune --dry-run --max-age-seconds 2592000 --json
+```
+
+Index selection applies only at the final archive in a within chain. Stat/read/hash may omit entry if one regular file exists or an index is given. Name decoding is strict (utf8/cp437/gbk/shift-jis); original bytes stay in path_raw_hex and decoded names still undergo extraction safety checks. Absolute timestamps are RFC3339 or null; timezone-less ZIP times use modified_time_local. Directory executable/CRC and unknown metadata are null.
+
+Verified reads use anonymous temporary storage and enforce a 4 GiB default actual-byte limit; default raw streaming may output partial bytes before failure, so check exit status. Stdin compressed data is buffered for seek/reopen with a 64 MiB default max-stdin-bytes limit and optional stdin-name; it is read-only and cannot be mixed with volumes. No-sync trades crash durability for speed while retaining staging and lifecycle checks. Continue-on-error reports plan.errors and partial_failure/12 while preserving source/destination overlap checks. Pack output follows umask and Gzip FNAME/mtime survives renaming.
+
+Index inventory/pruning affects only hash-named documents in the index cache; default expiry is 30 days, dry-run never deletes, and unrelated files remain. Unix ctime/dev/inode catches common same-size/restored-mtime replacements. archive.index_used records cache consumption; cache fingerprints are not content authenticity proofs. `read --json` is invalid_argument/2. Lifecycle source/destination paths are canonical absolute paths in both plan and result.
+
+MCP read-only requests accept password_file inside an authorized input root (at most 4096 bytes), not an inline password. Clean EOF exits 0; --json does not apply to the JSON-RPC server. CLI and MCP success/error envelopes use schema 2. See the [complete contract](./docs/CLI.md) and [migration ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
 
 ## Install
 
@@ -83,6 +104,10 @@ arcthis read dataset.tar.gz train/data.csv | head -n 20
 
 Input formats are detected from content. The current build supports ZIP, 7z, RAR/RAR5, TAR, compressed TAR variants using Gzip/Bzip2/XZ/Zstandard, and the same four compression methods as single-file formats. Compressed TAR, single-file formats, RAR, and solid 7z may scan or decode preceding data; `inspect` reports the actual access cost.
 
+## Root help in the current checkout
+
+Run `arcthis`, `arcthis -h`, or `arcthis --help` to see the ASCII logo, introduction, and root command list. A bare invocation retains the missing-command behavior: help goes to stderr and the process exits with code 2; explicit help goes to stdout and exits with code 0. Subcommand help, version output, archive results, and MCP responses have no banner. The logo is plain ASCII without ANSI color. It is a source-checkout addition, not part of the published v0.5.1 binaries.
+
 ## Command shape and global options
 
 ```text
@@ -115,9 +140,9 @@ arcthis inspect archive.tar.gz --json
 Important warning codes include:
 
 - `sequential_access` — selected reads may scan from the beginning.
+- `duplicate_entry_paths` — repeated display paths, including ZIP instances, require explicit index selection and prevent full extraction.
 - `encrypted_entries` — encrypted content is present and content operations need the correct password.
 - `non_regular_entries` — links or special entries will be rejected by extraction.
-- `duplicate_entry_paths` — named access is ambiguous and extraction will refuse the archive. The check can only see entries the backend exposes; a ZIP that repeats a path in its central directory is merged by the ZIP dependency, so this warning does not appear for it. See [docs/SECURITY.md](./docs/SECURITY.md).
 - `unsafe_entry_paths` — extraction path validation would reject at least one entry.
 - `default_extraction_limits_exceeded` — declared metadata exceeds default limits.
 - `high_compression_ratio` — at least one entry declares expansion above 1000:1.
@@ -134,12 +159,12 @@ arcthis list archive.zip
 arcthis list archive.zip --json
 ```
 
-Human output is a tab-separated `KIND`, `SIZE`, and `PATH` table. JSON preserves archive order and duplicate files for every backend that exposes them; a ZIP whose central directory repeats a path is merged by the ZIP dependency and appears once. See [docs/SECURITY.md](./docs/SECURITY.md).
+Human output is a tab-separated `KIND`, `SIZE`, and `PATH` table. JSON preserves all archive instances, including repeated ZIP central-directory names. Use `archive_index` / `--entry-index` to select one instance; path-only selection refuses ambiguity.
 
 A file object includes:
 
 - `archive_index`, preserving source archive order;
-- `path` and `path_encoding` (`utf8` or `escaped_bytes`);
+- `path` and `path_encoding` (utf8/escaped_bytes/cp437/gbk/shift_jis), plus `path_raw_hex`;
 - `kind`: `file`, `directory`, `symlink`, `hardlink`, or `other`;
 - `size` and optional `compressed_size`;
 - optional `modified_time`;
@@ -164,7 +189,7 @@ arcthis stat archive.zip README.md
 arcthis stat archive.zip README.md --json
 ```
 
-The path must match the entry path shown by `list`. A missing path returns `entry_not_found`. If the archive contains the same path more than once, `stat` returns `collision` instead of silently choosing one. A backend that exposes only one same-name entry — for example a ZIP whose duplicate central-directory paths the ZIP dependency merged — cannot trigger that collision; see [docs/SECURITY.md](./docs/SECURITY.md).
+The path must match `list`. A missing path returns `entry_not_found`; repeated display paths return `collision`. `--entry-index N` selects an exact instance. For stat/read/hash, entry may be omitted when only one regular file exists or an index is explicit; the index applies to the final archive after `--within`.
 
 ## `read` — read one file directly
 
@@ -174,7 +199,7 @@ arcthis read source.tar.gz src/lib.rs | rg unsafe
 arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 ```
 
-`read` is the core content command. It writes only raw file bytes to stdout and writes diagnostics to stderr. It never wraps bytes in JSON and therefore rejects `--json` with `unsupported_operation`.
+`read` is the core content command. It writes only raw file bytes to stdout and writes diagnostics to stderr. It never wraps bytes in JSON and therefore rejects `--json` with `invalid_argument` (exit 2).
 
 Regular files are supported. Directories, links, and special entries are rejected for `read`. BrokenPipe exits successfully, so `arcthis read ... | head` is a normal workflow.
 
@@ -197,6 +222,8 @@ arcthis grep papers.zip transformer --glob '**/*.md' --json
 ```
 
 The pattern is a raw byte sequence, not a regular expression. Files above `--max-entry-size` are skipped (16 MiB default), collection stops at `--max-matches` (10,000 default), and retained lines are capped at 1 MiB. A NUL in the first 8 KiB classifies a file as binary; binary files are skipped unless `--binary` is set. JSON reports scan, skip, byte, and truncation counters.
+
+ZIP searches reuse one central directory; TAR-family, 7z and RAR searches reuse one content traversal. Glob/declared-size filtering runs before selected entry content is copied. Sequential formats may still decode preceding bytes to reach selected entries. The visitor preserves scan/result budgets and archive instance identity without materializing files.
 
 `--max-result-bytes` caps serialized matching-line objects across files (16 MiB default), including path overhead, escaping, and UTF-8 replacements. If a complete match cannot fit, it is omitted and `matches_truncated` becomes `true`; zero collects no matches. Increase this limit explicitly when more output is needed.
 
@@ -335,7 +362,7 @@ The default collision handling refuses an existing destination. Select exactly o
 
 ### Extraction safety
 
-Extraction rejects absolute paths, `.`/`..`, backslashes, Windows drive/UNC prefixes, NULs, duplicate paths, case-insensitive collisions, file-as-parent conflicts, overlong paths, invalid UTF-8 names, symlinks, hardlinks, and special files. Duplicate detection sees only the entries a backend exposes, so the ZIP merge noted in [docs/SECURITY.md](./docs/SECURITY.md) applies. It writes to a temporary folder on the destination filesystem and saves only after every planned file succeeds.
+Extraction normalizes `.` and redundant internal separators, then rejects every `..`, absolute/drive/UNC paths, NUL/backslashes, normalized duplicates/case collisions/file parents, excessive paths, unresolved non-UTF-8 names, and links/special files. ZIP duplicates are visible and refused. Writes remain staged on the destination filesystem; default per-file fsync can be explicitly skipped with `--no-sync`, trading crash durability for speed without removing rollback or verified source-deletion rules.
 
 ## `extract-all` — process a directory of archives
 
@@ -405,7 +432,7 @@ Every successful structured document begins with:
 
 ```json
 {
-  "schema_version": "1"
+  "schema_version": "2"
 }
 ```
 
@@ -427,7 +454,7 @@ With `--json`, runtime errors are one JSON document on stderr and stdout remains
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "error": {
     "code": "entry_not_found",
     "message": "archive entry not found: missing.txt",
@@ -445,7 +472,7 @@ The complete JSON format is in [docs/CLI.md](./docs/CLI.md).
 | 0 | Success, including BrokenPipe consumer stop |
 | 1 | General I/O error |
 | 2 | CLI syntax/usage error from clap |
-| 3 | `unsupported_format` |
+| 3 | `unsupported_format`, `not_an_archive` |
 | 4 | `invalid_archive` or `corrupted_archive` |
 | 5 | `entry_not_found` |
 | 6 | `permission_denied` |

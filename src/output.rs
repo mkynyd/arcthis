@@ -278,6 +278,7 @@ pub(crate) fn write_stat(
     format: ArchiveFormat,
     entry: &ArchiveEntry,
     json: bool,
+    verbose: bool,
 ) -> Result<()> {
     if json {
         write_json(
@@ -308,7 +309,12 @@ pub(crate) fn write_stat(
                     entry.modified_time.as_deref().unwrap_or("unknown")
                 )
             })
-            .map_err(|error| ArcthisError::io("writing stat output", error))
+            .map_err(|error| ArcthisError::io("writing stat output", error))?;
+        if verbose {
+            writeln!(writer, "archive index: {}\npath bytes: {}\npath encoding: {}\nencrypted: {}\nexecutable: {}\ncrc32: {}\nmime: {}\nmodified local: {}", entry.archive_index, entry.path_raw_hex, entry.path_encoding, entry.encrypted, entry.executable.map_or_else(|| "unknown".to_owned(), |value|value.to_string()), entry.crc32.as_deref().unwrap_or("unknown"), entry.mime_guess.as_deref().unwrap_or("unknown"), entry.modified_time_local.as_deref().unwrap_or("unknown"))
+                .map_err(|error|ArcthisError::io("writing stat details",error))?;
+        }
+        Ok(())
     }
 }
 
@@ -345,6 +351,7 @@ pub(crate) fn write_inspect(
             .and_then(|()| writeln!(writer, "multipart: {}", inspection.multipart))
             .and_then(|()| writeln!(writer, "volumes: {}", inspection.volume_count))
             .map_err(|error| ArcthisError::io("writing inspect output", error))?;
+        writeln!(writer,"solid: {}\ncompression ratio: {}\ncan create: {}\ncan extract: {}\ncan verify: {}\ncan seek: {}\nstreaming read: {}",inspection.solid,inspection.compression_ratio.map_or_else(||"unknown".to_owned(),|ratio|format!("{ratio:.2}:1")),inspection.capabilities.can_create,inspection.capabilities.can_extract,inspection.capabilities.can_verify,inspection.capabilities.can_seek,inspection.capabilities.streaming_read).map_err(|error|ArcthisError::io("writing capabilities",error))?;
         for warning in &inspection.warnings {
             writeln!(writer, "warning [{}]: {}", warning.code, warning.message)
                 .map_err(|error| ArcthisError::io("writing inspect output", error))?;
@@ -372,10 +379,20 @@ pub(crate) fn write_extract(
     } else {
         writeln!(
             writer,
-            "extracted {} entries ({} bytes) to {}",
+            "extracted {} {} ({} bytes) to {}{}",
             extraction.entries_extracted,
+            if extraction.entries_extracted == 1 {
+                "entry"
+            } else {
+                "entries"
+            },
             extraction.bytes_written,
-            extraction.destination.display()
+            extraction.destination.display(),
+            if extraction.source_deleted {
+                "; source deleted"
+            } else {
+                ""
+            }
         )
         .map_err(|error| ArcthisError::io("writing extraction result", error))
     }
@@ -455,6 +472,15 @@ pub(crate) fn write_extract_all_plan(
             )
             .map_err(|error| ArcthisError::io("writing extract-all plan", error))?;
         }
+        for item in &plan.errors {
+            writeln!(
+                writer,
+                "failed {}: {}",
+                item.archive.display(),
+                item.error_message.as_deref().unwrap_or("unknown error")
+            )
+            .map_err(|error| ArcthisError::io("writing batch plan failure", error))?;
+        }
         for conflict in &plan.destination_conflicts {
             writeln!(writer, "conflict: {conflict}")
                 .map_err(|error| ArcthisError::io("writing extract-all plan", error))?;
@@ -490,12 +516,18 @@ pub(crate) fn write_extract_all(
             } else {
                 writeln!(
                     writer,
-                    "{:?} {} -> {}",
-                    item.status,
+                    "{} {} -> {}{}",
+                    item.status
+                        .map_or_else(|| "unknown".to_owned(), |status| status.to_string()),
                     item.archive.display(),
                     item.destination
                         .as_deref()
-                        .map_or_else(|| "-".to_owned(), |path| path.display().to_string())
+                        .map_or_else(|| "-".to_owned(), |path| path.display().to_string()),
+                    if item.source_deleted {
+                        "; source deleted"
+                    } else {
+                        ""
+                    }
                 )
             }
             .map_err(|error| ArcthisError::io("writing extract-all result", error))?;
@@ -523,8 +555,10 @@ pub(crate) fn write_verify(
     } else {
         writeln!(
             writer,
-            "verified {} entries ({} bytes)",
-            verification.entries_checked, verification.bytes_checked
+            "verified {} {} ({} bytes)",
+            verification.entries_checked,
+            entry_label(verification.entries_checked),
+            verification.bytes_checked
         )
         .map_err(|error| ArcthisError::io("writing verification result", error))
     }
@@ -542,10 +576,16 @@ pub(crate) fn write_pack(writer: &mut impl Write, result: &PackResult, json: boo
     } else {
         writeln!(
             writer,
-            "packed {} entries into {} ({} bytes, verified)",
+            "packed {} {} into {} ({} bytes, verified){}",
             result.entries_packed,
+            entry_label(result.entries_packed),
             result.destination.display(),
-            result.archive_size
+            result.archive_size,
+            if result.source_deleted {
+                "; source deleted"
+            } else {
+                ""
+            }
         )
         .map_err(|error| ArcthisError::io("writing pack result", error))
     }
@@ -594,10 +634,11 @@ pub(crate) fn write_index(writer: &mut impl Write, result: &IndexResult, json: b
     } else {
         writeln!(
             writer,
-            "{:?} index {} ({} entries) at {}",
+            "{} index {} ({} {}) at {}",
             result.action,
             result.archive.display(),
             result.entries_indexed,
+            entry_label(result.entries_indexed),
             result.index_path.display()
         )
         .map_err(|error| ArcthisError::io("writing index result", error))
@@ -620,10 +661,16 @@ pub(crate) fn write_convert(
     } else {
         writeln!(
             writer,
-            "converted {} entries to {} ({} bytes, verified)",
+            "converted {} {} to {} ({} bytes, verified){}",
             result.entries_converted,
+            entry_label(result.entries_converted),
             result.destination.display(),
-            result.archive_size
+            result.archive_size,
+            if result.source_deleted {
+                "; source deleted"
+            } else {
+                ""
+            }
         )
         .map_err(|error| ArcthisError::io("writing conversion result", error))
     }
@@ -685,6 +732,14 @@ fn write_human_tree(writer: &mut impl Write, nodes: &[TreeNode], prefix: &str) -
     Ok(())
 }
 
+pub(crate) fn write_service(writer: &mut impl Write, value: &impl Serialize) -> Result<()> {
+    write_json(writer, value)
+}
+
+fn entry_label(count: u64) -> &'static str {
+    if count == 1 { "entry" } else { "entries" }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::app::build_tree;
@@ -700,9 +755,11 @@ mod tests {
             compressed_size: None,
             modified_time: None,
             encrypted: false,
-            executable: false,
+            executable: None,
             symlink_target: None,
             crc32: None,
+            path_raw_hex: String::new(),
+            modified_time_local: None,
             mime_guess: None,
         }
     }

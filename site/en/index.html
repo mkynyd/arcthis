@@ -317,7 +317,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
                 </button>
               </div>
               <div class="term-body"><span class="tp">$ </span><span class="tc">arcthis</span> <span class="ta">stat</span> dataset.zip dataset/train/labels.csv <span class="tf">--json</span>
-<span class="ts">{"schema_version":"1","archive":{"path":"dataset.zip","path_lossy":false,"format":"zip"},"entry":{"archive_index":5,"path":"dataset/train/labels.csv","path_encoding":"utf8","kind":"file","size":28,"compressed_size":28,"modified_time":"2026-08-30T01:05:30","encrypted":false,"executable":false,"symlink_target":null,"crc32":"9e6ad3e5","mime_guess":"text/csv"}}</span></div>
+<span class="ts">{"schema_version":"2","archive":{"path":"/data/dataset.zip","path_lossy":false,"index_used":false,"format":"zip"},"entry":{"archive_index":5,"path":"dataset/train/labels.csv","path_encoding":"utf8","path_raw_hex":"646174617365742f747261696e2f6c6162656c732e637376","kind":"file","size":28,"compressed_size":28,"modified_time":null,"modified_time_local":"2026-08-30T01:05:30","encrypted":false,"executable":false,"symlink_target":null,"crc32":"9e6ad3e5","mime_guess":"text/csv"}}</span></div>
             </div>
           </article>
 
@@ -366,10 +366,11 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
     <section class="section" id="agents">
       <div class="wrap split">
         <div class="reveal">
+          <span class="section-index">0.6.0-rc.1 / schema 2 · candidate documentation</span>
           <span class="section-index">04 — Agent interface</span>
           <h2 class="section-title">JSON is the contract. <span class="tone-2">Stable fields, versioned schema.</span></h2>
           <ul class="fact-list">
-            <li><strong>Real structured output.</strong> Every successful response is one JSON document with <code>schema_version: "1"</code>. Field names and types are a public, versioned interface.</li>
+            <li><strong>Real structured output.</strong> Every successful response is one JSON document with <code>schema_version: "2"</code>. Field names and types are a public, versioned interface.</li>
             <li><strong>Clean output separation.</strong> Results go to stdout; diagnostics, warnings and errors go to stderr. <code>read</code> prints raw file contents and rejects <code>--json</code>.</li>
             <li><strong>Predictable failures.</strong> Errors come as JSON with fixed codes, each mapped to a deterministic exit code.</li>
             <li><strong>Honest costs.</strong> <code>inspect</code> reports capabilities like <code>random_access</code> and <code>solid</code>, so an agent can reason about what an operation will cost.</li>
@@ -379,17 +380,18 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
           <div class="frame">
             <div class="code-frame">
               <div class="code-head">
-                <span>response shape — schema_version "1"</span>
-                <button class="term-copy" type="button" data-copy='{"schema_version":"1","archive":{"path":"dataset.zip","path_lossy":false,"format":"zip"}}' data-copy-name="JSON envelope" aria-label="Copy JSON">
+                <span>response shape — schema_version "2"</span>
+                <button class="term-copy" type="button" data-copy='{"schema_version":"2","archive":{"path":"/data/dataset.zip","path_lossy":false,"index_used":false,"format":"zip"}}' data-copy-name="JSON envelope" aria-label="Copy JSON">
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V9A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>
                   <span data-copy-label>Copy</span>
                 </button>
               </div>
               <pre><span class="p">{</span>
-  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"2"</span><span class="p">,</span>
   <span class="s">"archive"</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s">"path"</span><span class="p">:</span> <span class="s">"dataset.zip"</span><span class="p">,</span>
+    <span class="s">"path"</span><span class="p">:</span> <span class="s">"/data/dataset.zip"</span><span class="p">,</span>
     <span class="s">"path_lossy"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span>
+    <span class="s">"index_used"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span>
     <span class="s">"format"</span><span class="p">:</span> <span class="s">"zip"</span>
   <span class="p">}</span>
 <span class="p">}</span></pre>
@@ -554,7 +556,7 @@ dataset/README.md:3:Sample training bundle. </span><span class="tc">TODO</span><
         <span class="sep">·</span>
         <span>MIT</span>
         <span class="sep">·</span>
-        <span>schema_version "1"</span>
+        <span>schema_version "2"</span>
         <span class="push">macOS + Linux</span>
       </div>
     </div>

@@ -2,6 +2,30 @@
 
 This file records user-visible changes to Arcthis. The project follows semantic versioning after the first public release.
 
+## 0.6.0-rc.1 — 2026-10-16
+
+### Compatibility
+
+- Public JSON moves to schema `2`; published 0.5.1 remains schema `1`. CLI and MCP share read-only structures and typed error envelopes. Original name bytes, nullable executable state and timezone-less ZIP timestamps have explicit representations. See [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
+- Filesystem result/plan references are canonical absolute paths; virtual stdin/nested names stay explicit. Existing named access rejects duplicate instances; `--entry-index` selects exactly one.
+- Rust callers constructing complete `ArchiveOpenOptions`, `ExtractionLimits`, `ExtractAllOptions` or `ArchiveEntry` literals must account for the new fields/types.
+
+### Fixed
+
+- Reuse scan readers across ZIP, TAR-family, 7z and RAR; preserve selection/order/budgets, CRC errors and global stopping.
+- Check solid-7z expansion by block; shared per-entry compressed sizes are unknown, not zero.
+- Normalize safe dot paths before collision/path checks and align dry-run counts with extraction.
+- Preserve ZIP duplicate directory instances, including AES/Deflate/ZIP64; refuse ambiguous named access and full extraction.
+- Preserve instance identity through filename decoding and shared extraction, including raw byte names that share a `%XX` display with literal names.
+- Fix cache deletion counts and Unix same-size/restored-mtime invalidation, metadata null/time semantics, argument/CRC diagnostics, human status/plurals/capabilities/deletion receipts and clean MCP EOF.
+
+### Added
+
+- `--entry-index`, strict `--encoding`, `read --verify-first`, `stat --verbose`, read-only stdin with byte limits, extraction `--no-sync`, `extract-all --continue-on-error`, `pack --strip-root`, and `index --list/--prune` with age/dry-run policies.
+- Gzip FNAME/mtime read/write, split-name fallback rules, umask-respecting pack output and canonical lifecycle result paths.
+- Root-authorized bounded per-request MCP password-file references on read-only tools; output schemas accept both versioned success and error results.
+- ASCII root help mark (previous local work, retained).
+
 ## 0.5.1 - 2026-10-10
 
 ### Fixed

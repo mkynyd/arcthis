@@ -16,3 +16,17 @@ The approved mark is A2: an open container outline with three straight content b
 All six Chinese/English pages use A2 in the header, footer, and favicon. Brand links retain their accessible names, and inline marks are decorative (`aria-hidden="true"`). The favicon URL carries the deployment asset version so returning browsers request the new mark. `site/deploy.sh` updates cache versions for CSS, JavaScript, logo, and favicon URLs.
 
 When modifying the mark, synchronize the two SVG assets and all twelve inline instances. Compare their three path geometries and check light/dark appearances at small sizes before deployment.
+
+## CLI ASCII mark (current checkout)
+
+`src/cli.rs` owns the ASCII mark and wordmark used before root Clap help. The open outline, flat content bars, and separated selected row follow A2. All characters are ASCII; the mark fits in 59 columns and adds no ANSI escapes or runtime dependencies. It appears for bare invocation and explicit root help, not for subcommand help, version output, archive results, or MCP messages. Published v0.5.1 binaries do not yet contain this source-checkout addition.
+
+```text
+  .----------.
+ /   ======   \                         _    _      _
+|             '       __ _  _ __   ___ | |_ | |__  (_) ___
+|   =  =========     / _` || '__| / __|| __|| '_ \ | |/ __|
+|             .     | (_| || |   | (__ | |_ | | | || |\__ \
+ \   ======   /      \__,_||_|    \___| \__||_| |_||_||___/
+  '----------'
+```

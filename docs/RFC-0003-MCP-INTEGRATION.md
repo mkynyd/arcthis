@@ -1,5 +1,7 @@
 # RFC-0003: MCP integration contract
 
+Current source addendum: **0.6.0-rc.1 / schema 2 is unreleased**. [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md) and the [exploration acceptance](./EXPLORATION-ITERATION-PLAN.md) supersede the historical v0.5 envelope/metadata/ZIP-duplicate statements below. Read-only MCP tools now support bounded root-authorized password_file references, and schema 2 success/error envelopes; inline passwords remain forbidden. Remote sources and other integration stages remain planned.
+
 Status: accepted and implemented in v0.5
 
 v0.5.1 adds the concurrent-call and response-byte limits below. Initialization describes the active read-only or authorized plan/execute mode.

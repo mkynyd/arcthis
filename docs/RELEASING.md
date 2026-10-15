@@ -1,5 +1,7 @@
 # Arcthis 发布流程
 
+当前源码为尚未发布的 `0.6.0-rc.1` / JSON schema 2。本轮没有发布；候选版本需要先完成下面的独立三平台验证与 CI/Secret 门禁，绝不能复用已有的 0.5.1 Tag。
+
 本文记录公开版本的固定发布步骤。正式发布不可覆盖；任何一项未满足都应停止，不应通过 `--allow-dirty`、跳过验证或手工修改生成产物绕过。
 
 ## 发布渠道
@@ -49,7 +51,7 @@ dist plan
 
 ## 候选版本验证
 
-正式版之前先把 `Cargo.toml` 与 `Cargo.lock` 中的项目版本改为 `0.5.1-rc.1` 之类的候选版本，提交并等待 main 的 CI 全绿，再创建完全一致的 `v0.5.1-rc.1` Tag。cargo-dist 不接受 Tag 与包版本不一致。默认配置不会把候选版本发布到 npm 或覆盖 Homebrew Formula。
+正式版之前先把 `Cargo.toml` 与 `Cargo.lock` 中的项目版本改为 `0.6.0-rc.1` 之类的候选版本，提交并等待 main 的 CI 全绿，再创建完全一致的 `v0.6.0-rc.1` Tag。cargo-dist 不接受 Tag 与包版本不一致。默认配置不会把候选版本发布到 npm 或覆盖 Homebrew Formula。
 
 候选产物必须实际完成：
 
@@ -59,14 +61,16 @@ dist plan
 - 检查 macOS `otool -L` 与 Linux `ldd`；
 - 检查生成的 npm 包与 Homebrew Formula 指向同一 GitHub Release。
 
-候选验证结束后，把项目版本改回正式的 `0.5.1`，再进入正式发布步骤；不得移动、删除或复用已经推送的候选 Tag。
+仓库提供独立的 `Release smoke` 手动 workflow。在候选 Release workflow 成功后运行 `gh workflow run release-smoke.yml -f tag=v0.6.0-rc.1`，检查三平台任务全部成功；该 workflow 下载已发布的实际产物，核对校验和、原生架构、动态库、默认 MCP、ZIP/TAR.GZ/7z 的 pack/list/read/grep/verify，以及 npm/Homebrew 生成文件的版本和 Release URL。正式版本也应重复此检查。
+
+候选验证结束后，把项目版本改回正式的 `0.6.0`，再进入正式发布步骤；不得移动、删除或复用已经推送的候选 Tag。
 
 ## 正式发布
 
 1. 把 `CHANGELOG.md` 的 `Unreleased` 改为发布日期，提交并等待 main 的 CI 全绿。
 2. 在干净且与 `origin/main` 一致的 main 上再次运行全部发布前命令。
 3. 人工执行 `cargo publish --locked` 并确认 crates.io 页面与 `cargo install arcthis --locked` 可用。这一步不会由发布 workflow 代劳，每次发布都要重新执行。
-4. 创建签名 Tag `v0.5.1` 并只推送该 Tag；cargo-dist workflow 随后创建 GitHub Release，并发布 npm 包与 Homebrew Formula。
+4. 创建签名 Tag `v0.6.0` 并只推送该 Tag；cargo-dist workflow 随后创建 GitHub Release，并发布 npm 包与 Homebrew Formula。
 5. 等待 Release workflow 全部成功，不以 GitHub Release 已出现代替 npm/Homebrew Job 成功。
 6. 在干净环境分别执行 Cargo、Homebrew、npm、pnpm 安装，并重复版本、MCP 和归档 smoke test。
 7. 更新中英文 README 与网站，把“尚未发布”替换为已经真实验证的安装命令，再部署网站。

@@ -99,6 +99,9 @@ impl CancellationToken {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ArchiveReference {
+    pub index_used: bool,
+    pub path_lossy: bool,
+    #[serde(serialize_with = "serialize_archive_path")]
     pub path: PathBuf,
     pub format: ArchiveFormat,
 }
@@ -106,13 +109,16 @@ pub struct ArchiveReference {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct InspectResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
+    #[serde(flatten)]
     pub inspection: ArchiveInspection,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ListResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
     pub entries: Vec<ArchiveEntry>,
 }
@@ -120,7 +126,10 @@ pub struct ListResult {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct TreeResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
+    #[serde(skip)]
+    #[cfg_attr(feature = "mcp", schemars(skip))]
     pub entries: Vec<ArchiveEntry>,
     pub tree: Vec<TreeNode>,
 }
@@ -138,6 +147,7 @@ pub struct TreeNode {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct StatResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
     pub entry: ArchiveEntry,
 }
@@ -153,6 +163,7 @@ pub struct ReadRequest<'a> {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ReadResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
     pub entry: ArchiveEntry,
     pub offset: u64,
@@ -163,6 +174,7 @@ pub struct ReadResult {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct FindServiceResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
     pub find: FindResult,
 }
@@ -170,6 +182,7 @@ pub struct FindServiceResult {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct GrepServiceResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
     pub grep: GrepResult,
 }
@@ -177,6 +190,7 @@ pub struct GrepServiceResult {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct HashServiceResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
     pub hash: HashResult,
 }
@@ -184,6 +198,7 @@ pub struct HashServiceResult {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct VerifyServiceResult {
+    pub schema_version: &'static str,
     pub archive: ArchiveReference,
     pub verification: VerificationResult,
 }
@@ -220,6 +235,7 @@ impl ApplicationService {
         let inspection = archive.inspect()?;
         self.cancellation.checkpoint()?;
         Ok(InspectResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             inspection,
         })
@@ -229,6 +245,7 @@ impl ApplicationService {
         let archive = self.open(source)?;
         let entries = self.entries(&archive)?;
         Ok(ListResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             entries,
         })
@@ -239,6 +256,7 @@ impl ApplicationService {
         let entries = self.entries(&archive)?;
         let tree = build_tree(&entries)?;
         Ok(TreeResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             entries,
             tree,
@@ -251,6 +269,7 @@ impl ApplicationService {
         self.cancellation.checkpoint()?;
         let entry = archive.entry(path)?;
         Ok(StatResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             entry,
         })
@@ -300,6 +319,7 @@ impl ApplicationService {
             .saturating_add(u64::try_from(writer.data.len()).unwrap_or(u64::MAX))
             >= entry.size;
         Ok(ReadResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             entry,
             offset: request.offset,
@@ -332,6 +352,50 @@ impl ApplicationService {
         Ok((reference(&archive), result))
     }
 
+    pub fn read_to_verified(
+        &self,
+        source: &ArchiveSourceRequest,
+        entry: &str,
+        output: &mut dyn Write,
+        max_bytes: u64,
+    ) -> Result<(ArchiveReference, EntryCopyResult)> {
+        use std::io::{Seek, SeekFrom};
+        let archive = self.open(source)?;
+        let metadata = archive.entry(entry)?;
+        let limit = max_bytes.min(self.limits.max_decoded_bytes);
+        if metadata.size > limit {
+            return Err(limit_error("verified read bytes", metadata.size, limit));
+        }
+        let mut temporary = tempfile::tempfile()
+            .map_err(|error| ArcthisError::io("creating verified read storage", error))?;
+        let mut writer = VerifiedWriter {
+            inner: &mut temporary,
+            cancellation: &self.cancellation,
+            remaining: limit,
+            exceeded: false,
+        };
+        let result = archive.copy_entry_to(entry, &mut writer);
+        if writer.exceeded {
+            return Err(limit_error(
+                "verified read bytes",
+                limit.saturating_add(1),
+                limit,
+            ));
+        }
+        let copy = result?;
+        self.cancellation.checkpoint()?;
+        temporary
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| ArcthisError::io("rewinding verified read", error))?;
+        let mut output = CancellationWriter {
+            inner: output,
+            cancellation: &self.cancellation,
+        };
+        io::copy(&mut temporary, &mut output)
+            .map_err(|error| ArcthisError::io("writing verified read", error))?;
+        Ok((reference(&archive), copy))
+    }
+
     pub fn find(&self, source: &ArchiveSourceRequest, glob: &str) -> Result<FindServiceResult> {
         let archive = self.open(source)?;
         self.ensure_entries_within_limits(&archive)?;
@@ -339,6 +403,7 @@ impl ApplicationService {
         let find = crate::query::find(&archive, glob)?;
         ensure_count("find results", find.matched, self.limits.max_results)?;
         Ok(FindServiceResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             find,
         })
@@ -371,6 +436,7 @@ impl ApplicationService {
         let grep = crate::query::grep(&archive, pattern, &options)?;
         self.cancellation.checkpoint()?;
         Ok(GrepServiceResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             grep,
         })
@@ -395,6 +461,7 @@ impl ApplicationService {
         let hash = crate::query::hash(&archive, entry, algorithm)?;
         self.cancellation.checkpoint()?;
         Ok(HashServiceResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             hash,
         })
@@ -420,6 +487,7 @@ impl ApplicationService {
         let verification = archive.verify()?;
         self.cancellation.checkpoint()?;
         Ok(VerifyServiceResult {
+            schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
             verification,
         })
@@ -590,8 +658,11 @@ pub(crate) fn build_tree(entries: &[ArchiveEntry]) -> Result<Vec<TreeNode>> {
 }
 
 fn reference(archive: &Archive) -> ArchiveReference {
+    let path = archive.reference_path();
     ArchiveReference {
-        path: archive.path().to_path_buf(),
+        index_used: archive.index_used(),
+        path_lossy: path.to_str().is_none(),
+        path,
         format: archive.format(),
     }
 }
@@ -689,4 +760,38 @@ impl Write for WindowWriter {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+struct VerifiedWriter<'a> {
+    inner: &'a mut dyn Write,
+    cancellation: &'a CancellationToken,
+    remaining: u64,
+    exceeded: bool,
+}
+impl Write for VerifiedWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > self.remaining {
+            self.exceeded = true;
+            return Err(io::Error::other("verified read budget exceeded"));
+        }
+        if self.cancellation.is_cancelled() {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "operation cancelled",
+            ));
+        }
+        let written = self.inner.write(bytes)?;
+        self.remaining -= u64::try_from(written).unwrap_or(u64::MAX);
+        Ok(written)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn serialize_archive_path<S: serde::Serializer>(
+    path: &std::path::Path,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
+    serializer.serialize_str(&path.to_string_lossy())
 }

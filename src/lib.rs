@@ -47,4 +47,4 @@ pub use query::{
 pub use security::ExtractionLimits;
 
 /// Version of the public machine-readable JSON contract.
-pub const SCHEMA_VERSION: &str = "1";
+pub const SCHEMA_VERSION: &str = "2";

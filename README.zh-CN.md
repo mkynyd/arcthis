@@ -100,6 +100,10 @@ cargo build --release --locked
 ./target/release/arcthis --help
 ```
 
+当前源码在根帮助（`arcthis`、`arcthis -h`、`arcthis --help`）前显示 A2 风格的 ASCII Logo；已发布的 v0.5.1 二进制尚不包含这个新增标志。
+
+当前源码为 **0.6.0-rc.1 / JSON schema 2，尚未发布**。已保留 ZIP 重复实例、修复 solid 7z 比例和 TAR dot 路径、复用内容扫描读取器，并增加有界 stdin、显式名称解码、验证后读取、批处理隔离与缓存管理。新选项需要源码构建，见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)和[迁移 ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md)。
+
 把本地源码安装到 Cargo 二进制目录：
 
 ```sh
@@ -175,11 +179,13 @@ arcthis convert project.zip --output project.tar.zst --dry-run --json
 
 创建压缩包会先写入同目录临时文件，完成收尾后，再通过统一的压缩包接口重新打开并逐文件验证，最后才保存到目标路径。输出位置位于源目录内部、或源与目标指向同一位置时都会被拒绝；`--delete-source` 只在保存后、且确认删除源文件不会删掉目标文件时才执行。dry-run 永远不会写入或删除。
 
-访问嵌套压缩包时，会把选中的内层文件解码到受资源上限约束的只读内存中，不会创建临时中间文件。转换会先把通过安全检查的文件写到系统临时目录，再执行 pack、重新打开验证并保存。持久化文件列表缓存被视为不可信缓存，并通过源文件大小与修改时间自动失效。精确定义和已知限制见 [docs/SECURITY.md](./docs/SECURITY.md)。
+访问嵌套压缩包时，会把选中的内层文件解码到受资源上限约束的只读内存中，不会创建临时中间文件。转换会先把通过安全检查的文件写到系统临时目录，再执行 pack、重新打开验证并保存。持久化文件列表缓存被视为不可信缓存，并通过源文件大小／修改时间与 Unix change identity自动失效。精确定义和已知限制见 [docs/SECURITY.md](./docs/SECURITY.md)。
 
 ## Agent 接口
 
-- 成功的结构化输出使用 `schema_version: "1"`。
+当前源码使用 schema 2；公开 0.5.1 保持 schema 1。
+
+- 成功的结构化输出使用 `schema_version: "2"`。
 - 结果写 stdout；警告与错误写 stderr。
 - 使用 `--json` 时，程序错误以 JSON 写到 stderr。
 - `read` 始终输出原始字节，并拒绝 `--json`。

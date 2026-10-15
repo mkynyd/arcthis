@@ -76,6 +76,15 @@ fn rar_backend_lists_reads_extracts_and_verifies() {
         .expect("read RAR");
     assert!(read.status.success());
     assert_eq!(read.stdout, "RAR 验证成功。".as_bytes());
+    let grep = cargo_bin_cmd!("arcthis")
+        .arg("grep")
+        .arg(&archive)
+        .args(["验证", "--json"])
+        .output()
+        .expect("streaming RAR grep");
+    let grep = parse_stdout(&grep);
+    assert_eq!(grep["grep"]["files_scanned"], 1);
+    assert_eq!(grep["grep"]["matches"][0]["text"], "RAR 验证成功。");
 
     let verify = cargo_bin_cmd!("arcthis")
         .args(["verify", archive.to_str().expect("archive path"), "--json"])
@@ -490,7 +499,11 @@ fn conversion_collision_refuses_or_renames_without_touching_existing_target() {
     let renamed_path = workspace.path().join("target.1.tar.zst");
     assert_eq!(
         value["convert"]["destination"],
-        renamed_path.to_str().expect("path")
+        renamed_path
+            .canonicalize()
+            .expect("canonical destination")
+            .to_str()
+            .expect("path")
     );
     assert!(renamed_path.is_file());
     assert_eq!(

@@ -1,21 +1,45 @@
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
-use serde::Serialize;
 
 use crate::error::{ArcthisError, Result};
 use crate::{
     ApplicationService, Archive, ArchiveSourceRequest, CancellationToken, CollisionPolicy,
-    ExtractOptions, ExtractionLimits, SCHEMA_VERSION, ServiceLimits, output,
+    ExtractOptions, ExtractionLimits, ServiceLimits, output,
 };
+
+const CLI_LOGO: &str = r"  .----------.
+ /   ======   \                         _    _      _
+|             '       __ _  _ __   ___ | |_ | |__  (_) ___
+|   =  =========     / _` || '__| / __|| __|| '_ \ | |/ __|
+|             .     | (_| || |   | (__ | |_ | | | || |\__ \
+ \   ======   /      \__,_||_|    \___| \__||_| |_||_||___/
+  '----------'";
+
+const EXIT_CODES: &str = "Exit codes (runtime errors use stable JSON error.code with --json):
+  0 success / BrokenPipe
+  1 io_error
+  2 argument syntax / invalid_argument
+  3 unsupported_format / not_an_archive
+  4 invalid_archive / corrupted_archive
+  5 entry_not_found
+  6 permission_denied
+  7 unsafe_path
+  8 resource_limit
+  9 collision
+ 10 unsupported_operation / password_required / wrong_password
+ 11 verification_failed
+ 12 partial_failure";
 
 #[derive(Debug, Parser)]
 #[command(
     name = "arcthis",
     version,
+    before_help = CLI_LOGO,
     about = "An agent-native CLI for accessing and manipulating compressed files",
-    long_about = "A unified archive access layer for AI agents and humans. Inspect and stream archive contents before choosing to extract them."
+    long_about = "A unified archive access layer for AI agents and humans. Inspect and stream archive contents before choosing to extract them.",
+    after_long_help = EXIT_CODES
 )]
 struct Cli {
     /// Emit stable machine-readable JSON where supported.
@@ -25,6 +49,27 @@ struct Cli {
     /// Disable terminal color decoration.
     #[arg(long, global = true)]
     no_color: bool,
+
+    /// Skip per-file fsync during extraction (staging and rollback still apply).
+    #[arg(long, global = true)]
+    no_sync: bool,
+
+    /// Select an exact archive instance by `archive_index` (stat/read/hash/extract).
+    #[arg(long, global = true)]
+    entry_index: Option<u64>,
+
+    /// Decode original entry-name bytes explicitly (utf8, cp437, gbk, shift-jis).
+    #[arg(long, global = true, value_parser = ["utf8", "cp437", "gbk", "shift-jis"])]
+    encoding: Option<String>,
+
+    /// Virtual filename for a stdin source, including a suffix for empty compressed TAR.
+    #[arg(long, global = true, default_value = "stdin")]
+    stdin_name: String,
+    /// Maximum bytes buffered from stdin; seekable archive formats require bounded storage.
+    #[arg(long, global = true, default_value_t = 64 * 1024 * 1024_u64)]
+    max_stdin_bytes: u64,
+    #[arg(skip)]
+    stdin_bytes: Option<std::sync::Arc<[u8]>>,
 
     /// Traverse into this archive entry; repeat to descend through multiple archives.
     #[arg(long, global = true)]
@@ -88,11 +133,25 @@ enum Command {
     /// Display archive entries as a file tree.
     Tree { archive: PathBuf },
     /// Show metadata for one archive entry.
-    Stat { archive: PathBuf, entry: String },
+    Stat {
+        archive: PathBuf,
+        entry: Option<String>,
+        #[arg(long)]
+        verbose: bool,
+    },
     /// Show archive metadata, capabilities, and risk warnings.
     Inspect { archive: PathBuf },
     /// Stream one regular file entry to stdout.
-    Read { archive: PathBuf, entry: String },
+    Read {
+        archive: PathBuf,
+        entry: Option<String>,
+        /// Validate the complete entry before writing stdout; uses bounded temporary storage.
+        #[arg(long)]
+        verify_first: bool,
+        /// Maximum bytes staged by --verify-first.
+        #[arg(long, default_value_t = 4 * 1024 * 1024 * 1024_u64)]
+        max_entry_size: u64,
+    },
     /// Find archive entries whose paths match a glob.
     Find {
         archive: PathBuf,
@@ -123,14 +182,23 @@ enum Command {
     /// Stream one entry through a cryptographic hash.
     Hash {
         archive: PathBuf,
-        entry: String,
+        entry: Option<String>,
         /// Digest algorithm.
         #[arg(long, value_enum, default_value_t = CliHashAlgorithm::Sha256)]
         algorithm: CliHashAlgorithm,
     },
     /// Create, refresh, inspect, or delete a persistent entry metadata index.
     Index {
-        archive: PathBuf,
+        archive: Option<PathBuf>,
+        /// List saved index documents and cache validity.
+        #[arg(long, conflicts_with_all = ["archive", "refresh", "delete", "prune"])]
+        list: bool,
+        /// Remove only stale, invalid, missing-source, or expired index documents.
+        #[arg(long, conflicts_with_all = ["archive", "refresh", "delete"])]
+        prune: bool,
+        /// Cache age threshold for --list/--prune (30 days by default).
+        #[arg(long, default_value_t = 30 * 24 * 60 * 60_u64)]
+        max_age_seconds: u64,
         /// Re-enumerate the archive and replace an existing index.
         #[arg(long, conflicts_with = "delete")]
         refresh: bool,
@@ -182,6 +250,9 @@ enum Command {
     /// Safely extract every supported archive discovered in a directory.
     ExtractAll {
         directory: PathBuf,
+        /// Report per-archive planning failures and continue independent archives.
+        #[arg(long)]
+        continue_on_error: bool,
         /// Discover archives below nested directories.
         #[arg(long)]
         recursive: bool,
@@ -224,6 +295,9 @@ enum Command {
     /// Create and verify a supported archive or single-stream file.
     Pack {
         source: PathBuf,
+        /// Pack directory contents without the source directory name.
+        #[arg(long)]
+        strip_root: bool,
         /// Archive output path; its suffix selects the format.
         #[arg(long)]
         output: PathBuf,
@@ -298,8 +372,9 @@ impl From<CliHashAlgorithm> for crate::query::HashAlgorithm {
 }
 
 pub fn main_entry() -> i32 {
-    let cli = Cli::parse();
-    match run(&cli) {
+    let mut cli = Cli::parse();
+    let result = prepare_stdin(&mut cli).and_then(|()| run(&cli));
+    match result {
         Ok(()) => 0,
         Err(error) if error.is_broken_pipe() => 0,
         Err(error) => {
@@ -321,6 +396,35 @@ pub fn main_entry() -> i32 {
 
 #[allow(clippy::too_many_lines)] // Keeping top-level command dispatch in one exhaustive match is clearer.
 fn run(cli: &Cli) -> Result<()> {
+    if cli.entry_index.is_some()
+        && !matches!(
+            cli.command,
+            Command::Stat { .. }
+                | Command::Read { .. }
+                | Command::Hash { .. }
+                | Command::Extract { .. }
+        )
+    {
+        return Err(ArcthisError::InvalidArgument {
+            message: "--entry-index applies to stat/read/hash/extract".to_owned(),
+        });
+    }
+    if cli.no_sync
+        && !matches!(
+            cli.command,
+            Command::Extract { .. } | Command::ExtractAll { .. } | Command::Convert { .. }
+        )
+    {
+        return Err(ArcthisError::InvalidArgument {
+            message: "--no-sync applies to extraction and conversion".to_owned(),
+        });
+    }
+    if cli.encoding.is_some() && matches!(cli.command, Command::Index { .. }) {
+        return Err(ArcthisError::InvalidArgument {
+            message: "index stores original names; --encoding does not apply to index management"
+                .to_owned(),
+        });
+    }
     let mut stdout = io::stdout().lock();
     let service = ApplicationService::new(
         ServiceLimits::cli_compatibility(),
@@ -339,6 +443,11 @@ fn run(cli: &Cli) -> Result<()> {
             max_concurrent_requests,
             max_response_bytes,
         } => {
+            if cli.json {
+                return Err(ArcthisError::InvalidArgument {
+                    message: "mcp stdout is JSON-RPC; --json does not apply".to_owned(),
+                });
+            }
             if !cli.within.is_empty()
                 || !cli.volume.is_empty()
                 || cli.password_file.is_some()
@@ -366,6 +475,9 @@ fn run(cli: &Cli) -> Result<()> {
         }
         Command::List { archive } => {
             let result = service.list(&archive_source_request(cli, archive)?)?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_list(
                 &mut stdout,
                 &result.archive.path,
@@ -376,6 +488,9 @@ fn run(cli: &Cli) -> Result<()> {
         }
         Command::Tree { archive } => {
             let result = service.tree(&archive_source_request(cli, archive)?)?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_tree(
                 &mut stdout,
                 &result.archive.path,
@@ -384,18 +499,30 @@ fn run(cli: &Cli) -> Result<()> {
                 cli.json,
             )
         }
-        Command::Stat { archive, entry } => {
-            let result = service.stat(&archive_source_request(cli, archive)?, entry)?;
+        Command::Stat {
+            archive,
+            entry,
+            verbose,
+        } => {
+            let entry = selected_entry(cli, archive, entry.as_deref())?;
+            let result = service.stat(&archive_source_request(cli, archive)?, &entry)?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_stat(
                 &mut stdout,
                 &result.archive.path,
                 result.archive.format,
                 &result.entry,
                 cli.json,
+                *verbose,
             )
         }
         Command::Inspect { archive } => {
             let result = service.inspect(&archive_source_request(cli, archive)?)?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_inspect(
                 &mut stdout,
                 &result.archive.path,
@@ -404,20 +531,34 @@ fn run(cli: &Cli) -> Result<()> {
                 cli.json,
             )
         }
-        Command::Read { archive, entry } => {
+        Command::Read {
+            archive,
+            entry,
+            verify_first,
+            max_entry_size,
+        } => {
             if cli.json {
-                return Err(ArcthisError::UnsupportedOperation {
+                return Err(ArcthisError::InvalidArgument {
                     message: "`read` emits raw bytes and cannot be combined with `--json`"
                         .to_owned(),
                 });
             }
-            service.read_to(&archive_source_request(cli, archive)?, entry, &mut stdout)?;
+            let entry = selected_entry(cli, archive, entry.as_deref())?;
+            let source = archive_source_request(cli, archive)?;
+            if *verify_first {
+                service.read_to_verified(&source, &entry, &mut stdout, *max_entry_size)?;
+            } else {
+                service.read_to(&source, &entry, &mut stdout)?;
+            }
             stdout
                 .flush()
                 .map_err(|error| ArcthisError::io("flushing entry output", error))
         }
         Command::Find { archive, glob } => {
             let result = service.find(&archive_source_request(cli, archive)?, glob)?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_find(
                 &mut stdout,
                 &result.archive.path,
@@ -447,6 +588,9 @@ fn run(cli: &Cli) -> Result<()> {
                     ..crate::query::GrepOptions::default()
                 },
             )?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_grep(
                 &mut stdout,
                 &result.archive.path,
@@ -460,11 +604,15 @@ fn run(cli: &Cli) -> Result<()> {
             entry,
             algorithm,
         } => {
+            let entry = selected_entry(cli, archive, entry.as_deref())?;
             let result = service.hash(
                 &archive_source_request(cli, archive)?,
-                entry,
+                &entry,
                 (*algorithm).into(),
             )?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_hash(
                 &mut stdout,
                 &result.archive.path,
@@ -475,6 +623,9 @@ fn run(cli: &Cli) -> Result<()> {
         }
         Command::Index {
             archive,
+            list,
+            prune,
+            max_age_seconds,
             refresh,
             delete,
             dry_run,
@@ -485,6 +636,40 @@ fn run(cli: &Cli) -> Result<()> {
                         .to_owned(),
                 });
             }
+            if *list || *prune {
+                let result = crate::index::manage_cache(
+                    cli.index_directory.as_deref(),
+                    *prune,
+                    *dry_run,
+                    *max_age_seconds,
+                )?;
+                if cli.json {
+                    return output::write_service(&mut stdout, &result);
+                }
+                for item in result.items {
+                    writeln!(
+                        stdout,
+                        "{} {} ({} entries, {} bytes)",
+                        if item.deleted {
+                            "deleted"
+                        } else if item.stale {
+                            "stale"
+                        } else {
+                            "valid"
+                        },
+                        item.index_path.display(),
+                        item.entries_indexed,
+                        item.bytes
+                    )
+                    .map_err(|error| ArcthisError::io("writing cache inventory", error))?;
+                }
+                return Ok(());
+            }
+            let archive = archive
+                .as_deref()
+                .ok_or_else(|| ArcthisError::InvalidArgument {
+                    message: "index requires an archive, --list or --prune".to_owned(),
+                })?;
             let result = crate::index::maintain_index(
                 archive,
                 &archive_open_options(cli)?,
@@ -520,6 +705,11 @@ fn run(cli: &Cli) -> Result<()> {
                     message: "--delete-source is not supported for multipart extraction".to_owned(),
                 });
             }
+            let selected = if cli.entry_index.is_some() {
+                Some(selected_entry(cli, archive, entry.as_deref())?)
+            } else {
+                entry.clone()
+            };
             let archive = open_cli_archive(cli, archive)?;
             let options = ExtractOptions {
                 output: destination.clone(),
@@ -531,19 +721,21 @@ fn run(cli: &Cli) -> Result<()> {
                     max_compression_ratio: *max_compression_ratio,
                     max_entry_duration: max_entry_duration_seconds
                         .map(std::time::Duration::from_secs),
+                    sync_files: !cli.no_sync,
                     ..ExtractionLimits::default()
                 },
                 collision_policy: collision_policy(*overwrite, *skip_existing, *rename),
                 delete_source: *delete_source,
             };
             if *dry_run {
-                let plan = archive.plan_extract(entry.as_deref(), &options)?;
+                let plan = archive.plan_extract(selected.as_deref(), &options)?;
                 return output::write_extract_plan(&mut stdout, &plan, cli.json);
             }
-            let result = archive.extract(entry.as_deref(), &options)?;
+            let source_path = archive.reference_path();
+            let result = archive.extract(selected.as_deref(), &options)?;
             output::write_extract(
                 &mut stdout,
-                archive.path(),
+                &source_path,
                 archive.format(),
                 &result,
                 cli.json,
@@ -551,6 +743,9 @@ fn run(cli: &Cli) -> Result<()> {
         }
         Command::Verify { archive } => {
             let result = service.verify(&archive_source_request(cli, archive)?)?;
+            if cli.json {
+                return output::write_service(&mut stdout, &result);
+            }
             output::write_verify(
                 &mut stdout,
                 &result.archive.path,
@@ -561,6 +756,7 @@ fn run(cli: &Cli) -> Result<()> {
         }
         Command::ExtractAll {
             directory,
+            continue_on_error,
             recursive,
             workers,
             dry_run,
@@ -585,6 +781,7 @@ fn run(cli: &Cli) -> Result<()> {
             });
             let options = crate::batch::ExtractAllOptions {
                 recursive: *recursive,
+                continue_on_error: *continue_on_error,
                 workers: worker_count,
                 extract: ExtractOptions {
                     output: None,
@@ -596,6 +793,7 @@ fn run(cli: &Cli) -> Result<()> {
                         max_compression_ratio: *max_compression_ratio,
                         max_entry_duration: max_entry_duration_seconds
                             .map(std::time::Duration::from_secs),
+                        sync_files: !cli.no_sync,
                         ..ExtractionLimits::default()
                     },
                     collision_policy: collision_policy(*overwrite, *skip_existing, *rename),
@@ -605,7 +803,13 @@ fn run(cli: &Cli) -> Result<()> {
             };
             if *dry_run {
                 let plan = crate::batch::plan_extract_all(directory, &options)?;
-                return output::write_extract_all_plan(&mut stdout, &plan, cli.json);
+                output::write_extract_all_plan(&mut stdout, &plan, cli.json)?;
+                if !plan.errors.is_empty() {
+                    return Err(ArcthisError::PartialFailure {
+                        message: format!("{} archive plan(s) failed", plan.errors.len()),
+                    });
+                }
+                return Ok(());
             }
             let result = crate::batch::extract_all(directory, &options)?;
             output::write_extract_all(&mut stdout, &result, cli.json)?;
@@ -618,6 +822,7 @@ fn run(cli: &Cli) -> Result<()> {
         }
         Command::Pack {
             source,
+            strip_root,
             output: destination,
             dry_run,
             delete_source,
@@ -634,7 +839,7 @@ fn run(cli: &Cli) -> Result<()> {
             let options = crate::pack::PackOptions {
                 collision_policy: collision_policy(*overwrite, *skip_existing, *rename),
                 delete_source: *delete_source,
-                include_source_root: true,
+                include_source_root: !strip_root,
                 ..crate::pack::PackOptions::default()
             };
             if *dry_run {
@@ -672,6 +877,7 @@ fn run(cli: &Cli) -> Result<()> {
                     max_compression_ratio: *max_compression_ratio,
                     max_entry_duration: max_entry_duration_seconds
                         .map(std::time::Duration::from_secs),
+                    sync_files: !cli.no_sync,
                     ..ExtractionLimits::default()
                 },
                 collision_policy: collision_policy(*overwrite, *skip_existing, *rename),
@@ -722,6 +928,12 @@ fn archive_open_options(cli: &Cli) -> Result<crate::ArchiveOpenOptions> {
         password,
         volumes: cli.volume.clone(),
         index_directory: cli.index_directory.clone(),
+        entry_index: cli.entry_index,
+        name_encoding: cli.encoding.clone(),
+        memory_source: cli
+            .stdin_bytes
+            .as_ref()
+            .map(|bytes| (std::sync::Arc::clone(bytes), PathBuf::from(&cli.stdin_name))),
     })
 }
 
@@ -737,57 +949,99 @@ const fn collision_policy(overwrite: bool, skip_existing: bool, rename: bool) ->
     }
 }
 
-#[derive(Serialize)]
-struct ErrorEnvelope<'a> {
-    schema_version: &'static str,
-    error: ErrorObject<'a>,
-}
-
-#[derive(Serialize)]
-struct ErrorObject<'a> {
-    code: crate::ErrorCode,
-    message: String,
-    details: ErrorDetails<'a>,
-}
-
-#[derive(Serialize)]
-#[serde(untagged)]
-enum ErrorDetails<'a> {
-    Entry { entry: &'a str },
-    Path { path: String },
-    Message { message: &'a str },
-    Empty {},
-}
-
 fn write_json_error(writer: &mut impl Write, error: &ArcthisError) -> Result<()> {
-    let details = match error {
-        ArcthisError::EntryNotFound { entry } => ErrorDetails::Entry { entry },
-        ArcthisError::UnsupportedFormat { path } => ErrorDetails::Path {
-            path: path.to_string_lossy().into_owned(),
-        },
-        ArcthisError::InvalidArchive { message }
-        | ArcthisError::CorruptedArchive { message }
-        | ArcthisError::ResourceLimit { message }
-        | ArcthisError::Collision { message }
-        | ArcthisError::UnsupportedOperation { message }
-        | ArcthisError::VerificationFailed { message }
-        | ArcthisError::PartialFailure { message } => ErrorDetails::Message { message },
-        ArcthisError::UnsafePath { path, .. } => ErrorDetails::Path { path: path.clone() },
-        ArcthisError::PermissionDenied { .. }
-        | ArcthisError::PasswordRequired
-        | ArcthisError::WrongPassword
-        | ArcthisError::Io { .. } => ErrorDetails::Empty {},
-    };
-    let envelope = ErrorEnvelope {
-        schema_version: SCHEMA_VERSION,
-        error: ErrorObject {
-            code: error.code(),
-            message: error.to_string(),
-            details,
-        },
-    };
-    serde_json::to_writer(&mut *writer, &envelope).map_err(|serialize_error| {
-        ArcthisError::io("serializing JSON error", io::Error::other(serialize_error))
+    serde_json::to_writer(&mut *writer, &crate::error::envelope(error))
+        .map_err(|error| ArcthisError::io("serializing JSON error", io::Error::other(error)))?;
+    writeln!(writer).map_err(|error| ArcthisError::io("writing JSON error", error))
+}
+
+fn selected_entry(cli: &Cli, path: &Path, entry: Option<&str>) -> Result<String> {
+    if let Some(entry) = entry {
+        return Ok(entry.to_owned());
+    }
+    let archive = open_cli_archive(cli, path)?;
+    let entries = archive.entries()?;
+    let mut files = entries.iter().filter(|entry| {
+        entry.kind == crate::EntryKind::File
+            && cli
+                .entry_index
+                .is_none_or(|index| entry.archive_index == index)
+    });
+    let file = files.next().ok_or_else(|| ArcthisError::EntryNotFound {
+        entry: cli.entry_index.map_or_else(
+            || "regular file".to_owned(),
+            |index| format!("archive_index {index}"),
+        ),
     })?;
-    writeln!(writer).map_err(|write_error| ArcthisError::io("writing JSON error", write_error))
+    if files.next().is_some() {
+        return Err(ArcthisError::InvalidArgument {
+            message: "entry is required when more than one regular file is present".to_owned(),
+        });
+    }
+    Ok(file.path.clone())
+}
+
+fn prepare_stdin(cli: &mut Cli) -> Result<()> {
+    if cli.json && matches!(cli.command, Command::Read { .. }) {
+        return Err(ArcthisError::InvalidArgument {
+            message: "read emits raw bytes; --json cannot be combined with read".to_owned(),
+        });
+    }
+    let Some(source) = cli.command.read_archive_path() else {
+        return Ok(());
+    };
+    if source != Path::new("-") {
+        return Ok(());
+    }
+    if !cli.volume.is_empty() {
+        return Err(ArcthisError::InvalidArgument {
+            message: "stdin cannot be combined with --volume".to_owned(),
+        });
+    }
+    let mut input = io::stdin().lock();
+    let mut data = Vec::new();
+    let mut buffer = vec![0_u8; 65536];
+    loop {
+        let remaining = cli
+            .max_stdin_bytes
+            .saturating_sub(u64::try_from(data.len()).unwrap_or(u64::MAX));
+        let request = usize::try_from(remaining.saturating_add(1))
+            .unwrap_or(usize::MAX)
+            .min(buffer.len());
+        let count = input
+            .read(&mut buffer[..request])
+            .map_err(|error| ArcthisError::io("reading stdin source", error))?;
+        if count == 0 {
+            break;
+        }
+        if u64::try_from(count).unwrap_or(u64::MAX) > remaining {
+            return Err(ArcthisError::ResourceLimit {
+                message: "stdin exceeds --max-stdin-bytes".to_owned(),
+            });
+        }
+        data.try_reserve(count)
+            .map_err(|_| ArcthisError::ResourceLimit {
+                message: "cannot buffer stdin source".to_owned(),
+            })?;
+        data.extend_from_slice(&buffer[..count]);
+    }
+    cli.stdin_bytes = Some(std::sync::Arc::from(data));
+    Ok(())
+}
+
+impl Command {
+    fn read_archive_path(&self) -> Option<&Path> {
+        match self {
+            Command::List { archive }
+            | Command::Tree { archive }
+            | Command::Inspect { archive }
+            | Command::Verify { archive }
+            | Command::Stat { archive, .. }
+            | Command::Read { archive, .. }
+            | Command::Find { archive, .. }
+            | Command::Grep { archive, .. }
+            | Command::Hash { archive, .. } => Some(archive.as_path()),
+            _ => None,
+        }
+    }
 }

@@ -25,25 +25,27 @@ This map lists important maintained files and their current responsibilities. Ge
 - `src/lib.rs` — Public library exports and machine format version.
 - `src/app.rs` — Interface-independent structured application service, request limits, cancellation, capped reads, and bounded iterative tree construction.
 - `src/main.rs` — Thin binary entry point and process exit handoff.
-- `src/cli.rs` — Clap syntax, command dispatch, BrokenPipe handling, JSON errors, and exit-code mapping.
+- `src/cli.rs` — Clap syntax, the A2 ASCII root-help banner, command dispatch, BrokenPipe handling, JSON errors, and exit-code mapping.
 - `src/mcp.rs` — Feature-gated stdio MCP server, root authorization, concurrent-call admission, response budgets, and cancellation bridge.
 - `src/mcp_mutation.rs` — Extract/pack/convert plan digests, source/destination fingerprints, and controlled execution handlers.
 - `src/model.rs` — Shared serialized archive, file, capability, inspection, copy, and verification models.
 - `src/error.rs` — Typed library errors and stable public error categories.
 - `src/output.rs` — Human renderers and structured versioned JSON output.
-- `src/query.rs` — Glob find, literal grep with cross-file result/decoded byte budgets, and checksum operations.
+- `src/query.rs` — Glob find, bulk-visitor literal grep with cross-file result/decoded byte budgets, and checksum operations.
 - `src/budget.rs` — Allocation-free serialized JSON accounting, including MCP text/structured duplication and escaping.
-- `src/index.rs` — Persistent file metadata index with fingerprint invalidation and cache management.
+- `src/index.rs` — Bounded persistent metadata cache, source/change-identity invalidation, hit observability, inventory and scoped pruning.
 - `src/convert.rs` — Temporary-then-save conversion through safe extraction and verified packing with shared collision behavior.
 
 ## Archive access
 
-- `src/archive/mod.rs` — Deep format-independent `Archive` interface, metadata index, and capped nested traversal.
+- `src/archive/mod.rs` — Deep format-independent `Archive` interface, metadata index, ambiguity-checked bulk copying, and capped nested traversal.
 - `src/archive/locator.rs` — Filesystem archive source abstraction prepared for future source types.
 - `src/archive/detect.rs` — Content-first detection and compressed-prefix probing for every supported format.
 - `src/archive/codec.rs` — Shared synchronous Gzip, Bzip2, XZ, and Zstandard decoder construction.
-- `src/archive/backend/mod.rs` — Internal format-handling interface, repeatable file/memory sources, and file-path rendering rules.
-- `src/archive/backend/zip.rs` — ZIP metadata, direct read/extract, and CRC verification handler.
+- `src/archive/backend/mod.rs` — Internal format-handling interface, deferred bulk-copy visitor, shared instance-indexed extraction writer, repeatable file/memory sources, and file-path rendering rules.
+- `src/archive/backend/zip.rs` — ZIP metadata preserving duplicate instances, reader-reusing bulk copy, explicit-index access, extraction and CRC verification.
+- `src/archive/backend/zip_directory.rs` — Bounded original central headers and seekable single-entry ZIP/ZIP64 directory views over original data.
+- `src/archive/names.rs` — Raw-name byte identity and strict explicit UTF-8/CP437/GBK/Shift-JIS decoding.
 - `src/archive/backend/seven_zip.rs` — Pure-Rust 7z metadata, direct access, extraction, and verification handler.
 - `src/archive/backend/tar.rs` — TAR and compressed-TAR sequential metadata, direct access, extraction, and verification handler.
 - `src/archive/backend/stream.rs` — Single-compression-format virtual-file access and verification handler.
@@ -65,6 +67,8 @@ This map lists important maintained files and their current responsibilities. Ge
 - `tests/cli_lifecycle.rs` — Dry-run, collision policy, path-alias rejection, verified delete-source, recursive batch, and worker regressions.
 - `tests/cli_query.rs` — Find/grep/hash formats, scan limits, binary detection, and in-memory nested traversal tests.
 - `tests/cli_v04.rs` — RAR access, encrypted ZIP/7z, split files, persistent indexes, and convert regressions.
+- `tests/cli_iteration.rs` — Exploration regressions for solid ratios, normalized paths, duplicate/AES/Deflate/ZIP64 instances, encoding, verified reads, stdin, batch isolation, cache pruning, path parity and metadata.
+- `.github/workflows/release-smoke.yml`, `.github/scripts/release_smoke.py` — Native three-platform checks of downloaded candidate/final assets, checksums, linkage, default MCP, archive access and installer references.
 - `tests/app_service.rs` — Direct interface-independent service coverage and CLI-compatible structured results.
 - `tests/mcp_stdio.rs` — Independent JSON-RPC subprocess coverage for discovery, limits, cancellation, root policy, and controlled mutation.
 - `tests/mcp-inspector.json` — Official MCP Inspector launch configuration used for protocol/format smoke tests.
@@ -77,6 +81,8 @@ This map lists important maintained files and their current responsibilities. Ge
 - `docs/CLI.md` — Public command, JSON format, stdout/stderr, and machine error rules.
 - `docs/SECURITY.md` — Trust model, path rules, resource limits, temporary files, verification, and known limits.
 - `docs/RELEASING.md` — Release channels, credentials, quality gates, candidate validation, and publication steps.
+- `docs/EXPLORATION-ITERATION-PLAN.md` — Black-box report review, module priorities, acceptance criteria, ZIP grep measurements, and remaining work.
+- `docs/ADR-0002-EXPLORATION-CONTRACT.md` — Unreleased 0.6/schema 2 migration, entry identity, metadata and shared envelopes.
 - `docs/ADR-0001-TRANSACTIONAL-LIFECYCLE.md` — Accepted source/destination separation and verified delete-source invariants.
 - `docs/RFC-0001-NESTED-ARCHIVES.md` — Accepted explicit `--within` syntax, source model, and nested resource limits.
 - `docs/RFC-0002-MULTIPART-SOURCES.md` — Accepted `--volume` byte-stream segment model and its format-native volume boundaries.

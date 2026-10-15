@@ -11,16 +11,16 @@ Before extraction, every file path is normalized as an archive path and checked 
 - empty file paths;
 - NUL bytes;
 - absolute POSIX paths;
-- `.` and `..` components;
+- every `..` component (`.` and redundant interior separators are normalized away);
 - Windows drive prefixes, rooted paths, UNC/device prefixes, and backslash traversal;
 - paths that normalize outside the extraction root;
 - duplicate, case-insensitive, or parent/child conflicts that would make extraction filesystem- or order-dependent;
-- non-UTF-8 file names that cannot be written without changing the original bytes;
+- unresolved byte-escaped names unless an explicit strict decoding policy produces a safe, non-colliding name;
 - paths whose platform representation cannot be handled safely.
 
 The sanitized relative path is joined to a private temporary root. Code must never pass an untrusted file path directly to `Path::join` and then write.
 
-Duplicate, case-insensitive, and parent/child conflict checks operate on the entries a backend exposes. The ZIP backend currently merges same-name central-directory entries before Arcthis can see them, so an exactly duplicated ZIP path reaches none of these checks; see [Known limits of v0.5](#known-limits-of-v05).
+Duplicate, case-insensitive and parent/child conflicts are checked after lexical normalization for all exposed instances. The current ZIP adapter preserves original central-directory instances using bounded directory views; it never silently selects the last duplicate. Name-based reads reject ambiguity, and explicit index reads do not relax extraction safety. Published 0.5.1 had a ZIP merge gap; it is fixed in this unreleased checkout.
 
 ## Links and special files
 
@@ -87,7 +87,7 @@ Dry-run computes and serializes the destination, collision action, estimated siz
 
 ## Local MCP policy
 
-The built-in stdio MCP server grants no implicit filesystem access. Every input is canonicalized and must remain within an explicit `--allow-root`; MCP client roots are informational only. Read requests have finite file, decoded-byte, result, and window limits. Mutation requests may lower but cannot raise the server entry/decoded-byte ceilings; packing checks source entry count, per-file size, total size, and path shape before writing. Binary windows are base64-encoded only after the raw byte limit is enforced. Passwords are not accepted as tool arguments.
+The built-in stdio MCP server grants no implicit filesystem access. Every input is canonicalized and must remain within an explicit `--allow-root`; MCP client roots are informational only. Read requests have finite file, decoded-byte, result, and window limits. Mutation requests may lower but cannot raise the server entry/decoded-byte ceilings; packing checks source entry count, per-file size, total size, and path shape before writing. Binary windows are base64-encoded only after the raw byte limit is enforced. Inline password values are not accepted. Read-only tools may use a `password_file` reference inside an allowed input root; canonical root checks and a 4096-byte actual read limit apply. The bytes are never returned or logged. Controlled mutation inputs do not accept password-file references.
 
 Mutation tools are not advertised without an explicit `--allow-output-root`. Output paths must be descendants, not the root itself; `..`, symlink traversal below the allowed root, and destinations resolving outside it are rejected. Planning is non-mutating. Execute requires a SHA-256 digest over the exact request and plan plus source and destination fingerprints, then recomputes it before entering the normal staged process. A mismatch preserves source and destination state. Source deletion is a double opt-in: server policy plus request intent, and still occurs only after a verified save.
 
@@ -95,7 +95,7 @@ MCP cancellation is bridged into application-service checkpoints. Cancellation b
 
 MCP tool execution defaults to four active blocking workers; excess calls are rejected with `resource_limit` rather than queued without a bound. A cancelled protocol request keeps its slot occupied until the actual worker ends. Tool responses default to a 16 MiB serialized budget counting both text and structured JSON. Allocation-free accounting rejects oversized domain results before MCP builds those copies, reserving 256 bytes for the result envelope. Minimum response budgets are 1 KiB in read-only mode and 128 KiB with output roots, preserving room to acknowledge committed mutations. Grep shares an actual cross-file decoded-byte budget and clamps retained matches to one quarter of the response ceiling.
 
-## Known limits of v0.5
+## Known limits of the current checkout
 
 - Duration enforcement is checked during output writes; a codec that blocks inside one decoder call cannot be preempted safely.
 - No sandbox around codec crates.
@@ -103,11 +103,20 @@ MCP tool execution defaults to four active blocking workers; excess calls are re
 - Response limits apply after backend metadata/domain results are built; they do not cap backend metadata allocation, codec working memory, or the transport's pending output queue.
 - Nested traversal currently buffers one selected inner archive in memory so its implementation can reopen it; it does not yet provide range-backed nested seeking.
 - Literal `grep` still decodes complete selected files even after binary classification or match truncation when an underlying integrity stream must be consumed.
-- The current implementation rejects non-UTF-8 file names instead of preserving raw filesystem bytes, and does not perform full Unicode normalization collision analysis.
+- Default extraction rejects unresolved byte names. Explicit strict legacy decoding does not preserve raw filesystem bytes and does not perform full Unicode normalization collision analysis.
 - Split `--volume` sources cannot participate in `--delete-source`; deleting several volume files atomically is not yet specified.
 - RAR metadata (solid, encryption, compressed-size) is limited by the libarchive integration, so `inspect` may under-report; read/extract/verify remain authoritative. Format-native RAR multi-volume sets are not supported.
 - Filesystem races by other processes cannot be eliminated completely; temporary files and collision refusal reduce exposure.
-- A ZIP whose central directory repeats a path is presented as a single entry, because the pinned ZIP dependency keys entries by name. No `duplicate_entry_paths` warning is raised, `stat` does not return `collision`, and extraction writes the last duplicate instead of refusing the archive. TAR, compressed TAR, and 7z expose duplicates and are still refused. Detecting ZIP duplicates requires a backend change and dedicated regression tests.
 - Verification checks structural/codec integrity, not provenance or malicious content.
 
 Security issues should be reported privately once the repository publishes a security contact. Do not include sensitive archive samples in public issues.
+
+## Unreleased read and durability options
+
+`read --verify-first` fully decodes an entry into an anonymous temporary file before stdout receives bytes. Its explicit per-entry limit defaults to 4 GiB and is also clamped to the service decoded-byte ceiling; actual writes enforce it. The default raw streaming mode may emit partial bytes before a CRC/I/O error, so every consumer must check the process exit status. Verified reads do not imply source deletion.
+
+`--no-sync` disables per-file fsync only for extraction/conversion. All writes still use staging and normal commit/rollback; it trades power-loss durability for speed. The default remains per-file syncing. `pack` output permissions follow 0666 & umask.
+
+Stdin is an explicit bounded source for read-only CLI commands. Compressed bytes are buffered for repeatable seek/decode, defaulting to at most 64 MiB; the limit is checked during reads and reservations are fallible. It cannot be mixed with volumes or used for source deletion. Nested and multipart sources also cannot delete a source through the library.
+
+Solid-7z ratio limits use packed/unpacked block totals; individual shared-block compressed sizes are null. This declaration check supplements actual extraction entry/total/duration limits. ZIP directory metadata retention is capped at 256 MiB; individual single-entry views retain only their central header and small footer, leaving compressed data in the original source. SFX input detection is not advertised.
