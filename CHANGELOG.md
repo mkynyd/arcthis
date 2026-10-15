@@ -13,7 +13,6 @@ This file records user-visible changes to Arcthis. The project follows semantic 
 ### Fixed
 
 - Anchor package includes to the repository root so ignored tool downloads cannot contribute same-named documentation.
-
 - Reuse scan readers across ZIP, TAR-family, 7z and RAR; preserve selection/order/budgets, CRC errors and global stopping.
 - Check solid-7z expansion by block; shared per-entry compressed sizes are unknown, not zero.
 - Normalize safe dot paths before collision/path checks and align dry-run counts with extraction.
@@ -26,7 +25,7 @@ This file records user-visible changes to Arcthis. The project follows semantic 
 - `--entry-index`, strict `--encoding`, `read --verify-first`, `stat --verbose`, read-only stdin with byte limits, extraction `--no-sync`, `extract-all --continue-on-error`, `pack --strip-root`, and `index --list/--prune` with age/dry-run policies.
 - Gzip FNAME/mtime read/write, split-name fallback rules, umask-respecting pack output and canonical lifecycle result paths.
 - Root-authorized bounded per-request MCP password-file references on read-only tools; output schemas accept both versioned success and error results.
-- ASCII root help mark (previous local work, retained).
+- ASCII root help mark.
 
 ## 0.5.1 - 2026-10-10
 

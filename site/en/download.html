@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Download — Arcthis</title>
   <meta name="description" content="Install Arcthis 0.6.0 through Cargo, Homebrew, npm, pnpm or GitHub Releases.">
-  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=20261016031948">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=20261016040610">
   <link rel="alternate" hreflang="zh-CN" href="https://arcthis.mkynstudio.top/download.html">
   <link rel="alternate" hreflang="en" href="https://arcthis.mkynstudio.top/en/download.html">
   <script>
@@ -30,7 +30,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=20261016031948">
+  <link rel="stylesheet" href="/assets/style.css?v=20261016040610">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -100,6 +100,7 @@
           </div>
         </div>
 
+        <p class="reveal">If pnpm 11 reports <code>ERR_PNPM_IGNORED_BUILDS</code>, append <code>--allow-build=arcthis</code> to approve only the Arcthis installation script. For proxy-dependent GitHub access, set <code>HTTPS_PROXY</code>/<code>HTTP_PROXY</code> on the installation command.</p>
         <p class="reveal">You can also download Apple Silicon macOS, Intel macOS and x86_64 Linux archives plus SHA-256 checksums from <a href="https://github.com/mkynyd/arcthis/releases/tag/v0.6.0" rel="noopener">GitHub Release v0.6.0</a>. pnpm 11 holds packages published less than 24 hours ago; on release day, append <code>--config.minimumReleaseAge=0</code> if it reports <code>ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION</code>.</p>
 
         <h2 class="section-title reveal" style="font-size:clamp(28px,4vw,48px);margin-top:var(--space-3xl);">Build from source <span class="tone-2">(optional)</span></h2>
@@ -276,6 +277,6 @@ arcthis <span class="f">--version</span>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
-  <script src="/assets/main.js?v=20261016031948" defer></script>
+  <script src="/assets/main.js?v=20261016040610" defer></script>
 </body>
 </html>

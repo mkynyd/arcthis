@@ -29,7 +29,7 @@ ZIP can usually read a selected file directly. TAR and TAR.GZ scan in order. `in
 
 ## Project status
 
-Arcthis v0.6.0 includes the CLI and local MCP server. Every installation channel provides the same commands.
+Arcthis v0.6.0 includes the CLI and local MCP server. Every installation channel provides the same commands. See [0.6.0 release verification](./docs/RELEASE-0.6.0.md) for provenance, platforms and channel checks.
 
 ### Changes in v0.6.0
 
@@ -88,6 +88,8 @@ brew install mkynyd/tap/arcthis
 npm install -g arcthis
 pnpm add -g arcthis
 ```
+
+If pnpm 11 reports `ERR_PNPM_IGNORED_BUILDS`, approve the Arcthis installation script by appending `--allow-build=arcthis` to the install command.
 
 pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
@@ -200,7 +202,7 @@ The public JSON format and error model are documented in [docs/CLI.md](./docs/CL
 
 ## Platform support
 
-v0.5 is developed and tested on macOS and Linux through local tests and a two-platform GitHub Actions workflow, including all-feature MCP coverage. The design avoids Unix-only public interfaces, but Windows is not yet a supported automated-test target.
+Arcthis is developed and tested on macOS and Linux through local tests and a two-platform GitHub Actions workflow, including all-feature MCP coverage. The design avoids Unix-only public interfaces, but Windows is not yet a supported automated-test target.
 
 ## Development
 

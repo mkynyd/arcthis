@@ -40,7 +40,11 @@ npm install -g arcthis
 pnpm add -g arcthis
 ```
 
+pnpm 11 如果报告 `ERR_PNPM_IGNORED_BUILDS`，在安装命令末尾加 `--allow-build=arcthis`，只批准 Arcthis 的安装脚本。
+
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
+
+npm/pnpm 安装器从 GitHub 下载二进制。在依赖代理的网络中，需要为安装命令显式设置实际的 `HTTPS_PROXY`/`HTTP_PROXY`；Node 不会自动读取 macOS 系统代理设置。
 
 Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.6.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.6.0) 下载。
 

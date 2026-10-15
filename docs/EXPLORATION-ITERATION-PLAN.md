@@ -2,7 +2,7 @@
 
 更新：2026-10-16。依据《arcthis 0.5.1 黑盒探索报告》（2026-10-12），对照当前代码、真实 CLI 和 MCP stdio 测试逐项处理。外部报告是问题线索；其修法建议不直接作为执行指令。
 
-当前版本为 **0.6.0，JSON schema 2**。旧版 0.5.1 为 schema 1。迁移决策见 [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md)。源码迭代已完成；用户随后授权维护网站、提交并发布，候选验证与正式发布继续遵循 RELEASING.md。
+当前版本为 **0.6.0，JSON schema 2**。旧版 0.5.1 为 schema 1。迁移决策见 [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md)。本轮涵盖源码、项目文档、网站文档与发布验收；发布遵循 RELEASING.md。
 
 ## 逐项结果
 
@@ -60,3 +60,5 @@
 候选 `v0.6.0-rc.1` 已通过[四个原生 runner 的实际下载包验证](https://github.com/mkynyd/arcthis/actions/runs/38792221837)，覆盖三个发布 target 和 Ubuntu 22.04/24.04。Linux 校验区分直接 ELF 依赖与 libxml2 的系统 ICU/C++ 传递依赖；初次候选检查据此补正了发布文档，再重新验证全部平台。正式发布状态另行记录。
 
 正式源码构建的额外证据在 `archive_test/release-0.6/`：`final-clippy.log`、`final-tests.log`、`final-no-default.log`、`final-release-build.log`、`final-acceptance.json`、`final-performance.json`。网站六页同版本同步，手机端长错误码允许换行；最终在线校验随渠道发布记录追加。
+
+正式 0.6.0 已完成全渠道发布、安装与线上网站验收，来源、平台、校验值和证据见[发布验收记录](./RELEASE-0.6.0.md)。

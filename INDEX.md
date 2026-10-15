@@ -81,8 +81,9 @@ This map lists important maintained files and their current responsibilities. Ge
 - `docs/CLI.md` — Public command, JSON format, stdout/stderr, and machine error rules.
 - `docs/SECURITY.md` — Trust model, path rules, resource limits, temporary files, verification, and known limits.
 - `docs/RELEASING.md` — Release channels, credentials, quality gates, candidate validation, and publication steps.
-- `docs/EXPLORATION-ITERATION-PLAN.md` — Black-box report review, module priorities, acceptance criteria, ZIP grep measurements, and remaining work.
-- `docs/ADR-0002-EXPLORATION-CONTRACT.md` — Unreleased 0.6/schema 2 migration, entry identity, metadata and shared envelopes.
+- `docs/RELEASE-0.6.0.md` — Published 0.6.0 provenance, native platforms, installation channels, checksums, core regression and production website QA evidence.
+- `docs/EXPLORATION-ITERATION-PLAN.md` — Completed black-box report findings, acceptance criteria, regression and release performance measurements.
+- `docs/ADR-0002-EXPLORATION-CONTRACT.md` — Released 0.6/schema 2 migration, entry identity, metadata and shared envelopes.
 - `docs/ADR-0001-TRANSACTIONAL-LIFECYCLE.md` — Accepted source/destination separation and verified delete-source invariants.
 - `docs/RFC-0001-NESTED-ARCHIVES.md` — Accepted explicit `--within` syntax, source model, and nested resource limits.
 - `docs/RFC-0002-MULTIPART-SOURCES.md` — Accepted `--volume` byte-stream segment model and its format-native volume boundaries.
@@ -93,7 +94,7 @@ This map lists important maintained files and their current responsibilities. Ge
 ## Website
 
 - `site/index.html` — Chinese landing page with command examples, installation tabs, resource-limit overview, and scroll-stacked command cards.
-- `site/download.html` / `site/docs.html` — Chinese source-build install guide and CLI reference.
+- `site/download.html` / `site/docs.html` — Chinese installation guide and CLI reference.
 - `site/en/` — English versions of all three pages. Language auto-detects from `navigator.language` on first visit and persists explicit choices via `localStorage`.
 - `site/assets/style.css` — Shared light/dark semantic-token design system (system-adaptive with manual toggle).
 - `site/assets/main.js` — Theme and language persistence, accessible install-method tabs, copy buttons, GSAP scroll reveals, and the window-scroll stacked-card effect.

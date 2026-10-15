@@ -63,7 +63,7 @@ The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-
 
 Further performance work remains planned: wide-directory tree lookup, metadata reuse, and fewer sequential scans. Remote sources remain part of v0.6+.
 
-## 0.6.0 — Exploration follow-up (implemented)
+## v0.6.0 — Exploration follow-up (released)
 
 - [x] Root CLI ASCII mark.
 - [x] Reader-reusing ZIP/TAR-family/7z/RAR grep, stable instance identity, bounded results and global stopping.
@@ -75,6 +75,8 @@ Further performance work remains planned: wide-directory tree lookup, metadata r
 - [x] Cache hit observability, stronger Unix invalidation, inventory and scoped pruning.
 - [x] JSON schema 2, common CLI/MCP envelopes, structured argument errors, password-file references and clean EOF.
 - [x] Human metadata, deletion receipts, stable exit-code documentation and accurate diagnostics.
+
+Publication, native platform and installation-channel evidence is recorded in [release verification](./docs/RELEASE-0.6.0.md).
 
 The [report acceptance ledger](./docs/EXPLORATION-ITERATION-PLAN.md) records all 28 findings, corrections and scope decisions. Schema migration is documented in [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). The published 0.5.1 ZIP merge limitation is fixed only in version 0.6.0. Earlier raw ZIP/TAR access semantics otherwise remain streaming and guarded. Further wide-tree lookup, preemptible decoding and remote-source work remain independent future work.
 

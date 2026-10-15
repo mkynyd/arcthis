@@ -29,7 +29,7 @@ ZIP 通常可以直接读取目标文件；TAR 和 TAR.GZ 按顺序扫描。`ins
 
 ## 当前状态
 
-Arcthis v0.6.0 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。
+Arcthis v0.6.0 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。发布来源、平台和安装验收见 [0.6.0 发布记录](./docs/RELEASE-0.6.0.md)。
 
 ### v0.6.0 更新
 
@@ -88,6 +88,8 @@ brew install mkynyd/tap/arcthis
 npm install -g arcthis
 pnpm add -g arcthis
 ```
+
+pnpm 11 如果报告 `ERR_PNPM_IGNORED_BUILDS`，在安装命令末尾加 `--allow-build=arcthis`，只批准 Arcthis 的安装脚本。
 
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
@@ -200,7 +202,7 @@ arcthis convert project.zip --output project.tar.zst --dry-run --json
 
 ## 平台支持
 
-v0.5 面向 macOS 与 Linux 开发和测试，并配置了覆盖 all-features/MCP 的双平台 GitHub Actions。架构避免把 Unix-only 类型暴露为对外接口，但 Windows 暂时不是正式的自动化测试目标。
+Arcthis 面向 macOS 与 Linux 开发和测试，并配置了覆盖 all-features/MCP 的双平台 GitHub Actions。架构避免把 Unix-only 类型暴露为对外接口，但 Windows 暂时不是正式的自动化测试目标。
 
 ## 开发入口
 

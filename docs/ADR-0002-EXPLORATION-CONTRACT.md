@@ -2,7 +2,7 @@
 
 Status: accepted for version 0.6.0, 2026-10-15.
 
-The complete exploration iteration is authorized. Schema 1 cannot express unknown executable state or distinguish an unknown ZIP local timestamp from an absolute timestamp consistently. CLI and MCP also serialize the same read-only operations differently.
+Schema 1 cannot express unknown executable state or distinguish an unknown ZIP local timestamp from an absolute timestamp consistently. CLI and MCP also serialize the same read-only operations differently.
 
 Version 0.6.0 moves the public result `schema_version` from `"1"` to `"2"`. Published 0.5.1 remains schema 1. Consumers must check the version and migrate before using this checkout. The migration first ships in 0.6.0.
 
