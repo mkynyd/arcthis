@@ -10,21 +10,21 @@ repository = "https://github.com/mkynyd/arcthis"
 license = "MIT"
 readme = "README.md"
 include = [
-    "Cargo.toml",
-    "Cargo.lock",
-    "rust-toolchain.toml",
-    "src/**",
-    "tests/**",
-    "README.md",
-    "README.zh-CN.md",
-    "START.md",
-    "START.zh-CN.md",
-    "INDEX.md",
-    "ROADMAP.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "THIRD_PARTY_LICENSES.md",
-    "docs/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/rust-toolchain.toml",
+    "/src/**",
+    "/tests/**",
+    "/README.md",
+    "/README.zh-CN.md",
+    "/START.md",
+    "/START.zh-CN.md",
+    "/INDEX.md",
+    "/ROADMAP.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/THIRD_PARTY_LICENSES.md",
+    "/docs/**",
 ]
 keywords = ["archive", "cli", "agent", "zip", "tar"]
 categories = ["command-line-utilities", "compression"]
