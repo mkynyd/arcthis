@@ -2,7 +2,7 @@
 
 更新：2026-10-16。依据《arcthis 0.5.1 黑盒探索报告》（2026-10-12），对照当前代码、真实 CLI 和 MCP stdio 测试逐项处理。外部报告是问题线索；其修法建议不直接作为执行指令。
 
-当前源码为 **0.6.0-rc.1，JSON schema 2，尚未发布**。公开安装渠道仍是 0.5.1/schema 1。迁移决策见 [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md)。源码迭代已完成；用户随后授权维护网站、提交并发布，候选验证与正式发布继续遵循 RELEASING.md。
+当前版本为 **0.6.0，JSON schema 2**。旧版 0.5.1 为 schema 1。迁移决策见 [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md)。源码迭代已完成；用户随后授权维护网站、提交并发布，候选验证与正式发布继续遵循 RELEASING.md。
 
 ## 逐项结果
 
@@ -18,7 +18,7 @@
 | 8 `%XX` 歧义 | 已修复 | `path_raw_hex` 保留 adapter 暴露的名字字节，index 为实例身份；同显示名的命名访问明确 collision，显式 index 能区分。ZIP/TAR 的原始字节名与字面 `%XX` 名经显式解码后，可分别抽取出正确内容；统一 writer 以 index 接收计划，回归先失败后通过。 |
 | 9 非 UTF-8 物化 | 已处理 | 默认仍拒绝未解码名字；显式 `--encoding utf8|cp437|gbk|shift-jis` 严格解码，不使用有损替换，解码后的名称继续经过 sanitizer 和碰撞检查。GBK 中文真实抽取和读取通过。 |
 | 10 index 无消费／清理 | 推论纠正并补齐 | 原实现已经消费缓存，撤销 source 权限不能证明相反结论。新增 `archive.index_used`、`index --list`、`index --prune`、年龄阈值和 dry-run；只删除索引子目录中符合哈希命名的 stale 文件。增加 Unix ctime/dev/inode 指纹；同长度／恢复 mtime 的替换不再复用旧名字。文档读取上限在实际读取时执行。 |
-| 11 read 部分输出 | 已提供选项 | 默认继续 raw streaming，必须检查退出码。`--verify-first` 先完整解码并校验到匿名临时文件，再输出；默认最多 4 GiB，可显式降低，受服务限额约束。CRC、密码或存储失败时 stdout 无内容。 |
+| 11 read 部分输出 | 已提供选项 | 默认继续 raw streaming，必须检查退出码。`--verify-first` 先完整解码并校验到匿名临时文件，再输出；默认最多 4 GiB，可显式降低，受服务限额约束。CRC、密码或暂存存储失败时 stdout 无内容。 |
 | 12 read + JSON | 已修复分类 | 返回 `invalid_argument` / exit 2，先于 archive/password I/O；read 的 stdout 契约保持原始字节。 |
 | 13 时间戳 | 已统一语义 | `modified_time` 仅为带偏移的绝对 RFC3339 或 null。ZIP DOS 无时区时间放入 `modified_time_local`，不凭空附加 Z。 |
 | 14 null / 0 | 已修复 | 不可用／共享块压缩大小、未知时间／模式／CRC 使用 null；真实的零字节文件和可用的零 CRC 不被伪造为未知。 |
@@ -43,16 +43,20 @@
 
 本次回归使用动态 fixture 和独立 CLI／JSON-RPC 子进程。源码同时验证默认 MCP 构建和 `--no-default-features`；没有运行正式发布或宣称三平台 release 已独立验证。
 
-第一轮 ZIP release 基线：200/400/800 文件三次中位数为 0.121310/0.445761/1.700703 秒，400→800 为 3.82 倍。第一轮优化后 20,001 文件为 0.229570 秒。完整迭代后，以相同 ZIP fixture 的三次中位数复测如下；报告对 19 分钟的外推不作为本次基线。
+第一轮 ZIP release 基线：200/400/800 文件三次中位数为 0.121310/0.445761/1.700703 秒，400→800 为 3.82 倍。第一轮优化后 20,001 文件为 0.229570 秒。正式 0.6.0 release 构建后，以相同 ZIP fixture 的三次中位数复测如下；报告对 19 分钟的外推不作为本次基线。
 
 | release 场景 | 实测秒数 |
 | --- | ---: |
-| ZIP grep 400 / 800 / 1600 / 3200 文件 | 0.010605 / 0.016678 / 0.028932 / 0.055327 |
-| ZIP grep 20,001 文件 | 0.307632 |
-| TAR.GZ grep 400 / 800 / 1600 / 3200 文件 | 0.005661 / 0.007389 / 0.011233 / 0.018143 |
-| solid 7z grep 1000 文件 | 0.013642 |
-| 抽取 1000 空文件：默认 fsync / 显式 no-sync（各一次） | 5.062707 / 0.118510 |
+| ZIP grep 400 / 800 / 1600 / 3200 文件 | 0.010387 / 0.015874 / 0.028425 / 0.051902 |
+| ZIP grep 20,001 文件 | 0.302400 |
+| TAR.GZ grep 400 / 800 / 1600 / 3200 文件 | 0.005390 / 0.006958 / 0.010470 / 0.018893 |
+| solid 7z grep 1000 文件 | 0.013700 |
+| 抽取 1000 空文件：默认 fsync / 显式 no-sync（各一次） | 4.970414 / 0.129756 |
 
 最终通过 `cargo fmt --check`、`cargo clippy --all-targets --all-features -- -D warnings`、`cargo test --all-features` **104 项**、`cargo test --no-default-features` **84 项**和 release build。真实 release smoke 用独立 JSON Schema validator 校验 **15 个 MCP output schema 和 19 份实际成功／错误结果**，完成 **11 种可创建格式**的 pack→grep 往返，并核对帮助、stdout/stderr、退出码与 ASCII；RAR 另由真实 CLI fixture 覆盖 list/read/grep/extract/verify。
 
 证据在本机 `archive_test/report-all/`（`tests-final.log`、`tests-no-default.log`、`clippy-final.log`、`release-build.log`、`acceptance-smoke.json`、`performance.json`、`identity-red.log`／`identity-green.log`）。HANDOFF.md、log.md 和本机 fixture／证据都被 Git 忽略；原始外部报告不复制进仓库。核心迭代验收与后续发布分开记录；候选三平台验证和渠道发布状态以发布记录为准。
+
+候选 `v0.6.0-rc.1` 已通过[四个原生 runner 的实际下载包验证](https://github.com/mkynyd/arcthis/actions/runs/38792221837)，覆盖三个发布 target 和 Ubuntu 22.04/24.04。Linux 校验区分直接 ELF 依赖与 libxml2 的系统 ICU/C++ 传递依赖；初次候选检查据此补正了发布文档，再重新验证全部平台。正式发布状态另行记录。
+
+正式源码构建的额外证据在 `archive_test/release-0.6/`：`final-clippy.log`、`final-tests.log`、`final-no-default.log`、`final-release-build.log`、`final-acceptance.json`、`final-performance.json`。网站六页同版本同步，手机端长错误码允许换行；最终在线校验随渠道发布记录追加。

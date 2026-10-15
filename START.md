@@ -2,13 +2,13 @@
 
 [简体中文](./START.zh-CN.md)
 
-This guide follows the unreleased **0.6.0-rc.1 source checkout (JSON schema 2)**. Public 0.5.1 binaries use schema 1 and lack the new options below. Build from source before using them; see [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md) and the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md).
+This guide covers **0.6.0 (JSON schema 2)**. Version 0.5.1 used schema 1; migrate consumers using [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). Changes and validation are recorded in the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md).
 
 v0.5.1 added write-path overlap checks, file-tree depth limits, MCP concurrent-call and response limits, and `grep --max-result-bytes`. That release retained its prior command names and JSON fields; the current source migration is described above.
 
 Detection uses file content. Empty compressed TAR files have only zero blocks, so keep their `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst` or shorthand suffix. Other zero-prefixed compressed files remain single-file streams.
 
-## Source-checkout additions in 0.6.0-rc.1
+## Source-checkout additions in 0.6.0
 
 ```sh
 arcthis read bundle.zip --entry-index 3 --verify-first
@@ -42,7 +42,7 @@ pnpm add -g arcthis
 
 pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
-Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1).
+Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [v0.6.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.6.0).
 
 ### Build from source
 
@@ -106,7 +106,7 @@ Input formats are detected from content. The current build supports ZIP, 7z, RAR
 
 ## Root help in the current checkout
 
-Run `arcthis`, `arcthis -h`, or `arcthis --help` to see the ASCII logo, introduction, and root command list. A bare invocation retains the missing-command behavior: help goes to stderr and the process exits with code 2; explicit help goes to stdout and exits with code 0. Subcommand help, version output, archive results, and MCP responses have no banner. The logo is plain ASCII without ANSI color. It is a source-checkout addition, not part of the published v0.5.1 binaries.
+Run `arcthis`, `arcthis -h`, or `arcthis --help` to see the ASCII logo, introduction, and root command list. A bare invocation retains the missing-command behavior: help goes to stderr and the process exits with code 2; explicit help goes to stdout and exits with code 0. Subcommand help, version output, archive results, and MCP responses have no banner. The logo is plain ASCII without ANSI color. The logo was added in v0.6.0.
 
 ## Command shape and global options
 

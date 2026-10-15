@@ -54,7 +54,7 @@
 - 命令语法优先保持 `arcthis <command> <archive> [entry] [options]`，禁止加入格式专属一级命令。
 - stdout 仅输出结果数据，stderr 仅输出诊断、警告和进度。`read` 的 stdout 是原始 entry bytes。
 - 非 TTY、`--json`、`NO_COLOR` 或 `--no-color` 模式不得输出 ANSI decoration。BrokenPipe 必须按 Unix 惯例正常退出。
-- 当前未发布源码为 `0.6.0-rc.1` / JSON schema 2；公开 0.5.1 仍是 schema 1，迁移见 ADR-0002。
+- 当前版本为 `0.6.0` / JSON schema 2；旧版 0.5.1 为 schema 1，迁移见 ADR-0002。
 - JSON 是公共 interface。已发布 schema 的字段名、类型、含义和 `schema_version` 不得静默改变；破坏性改动必须写 RFC/ADR 并升级 schema version。
 - Machine mode 错误写入 stderr，使用稳定 error code 和合理的 process exit code，不暴露 crate 或 Rust backtrace。
 

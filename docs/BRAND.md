@@ -19,7 +19,7 @@ When modifying the mark, synchronize the two SVG assets and all twelve inline in
 
 ## CLI ASCII mark (current checkout)
 
-`src/cli.rs` owns the ASCII mark and wordmark used before root Clap help. The open outline, flat content bars, and separated selected row follow A2. All characters are ASCII; the mark fits in 59 columns and adds no ANSI escapes or runtime dependencies. It appears for bare invocation and explicit root help, not for subcommand help, version output, archive results, or MCP messages. Published v0.5.1 binaries do not yet contain this source-checkout addition.
+`src/cli.rs` owns the ASCII mark and wordmark used before root Clap help. The open outline, flat content bars, and separated selected row follow A2. All characters are ASCII; the mark fits in 59 columns and adds no ANSI escapes or runtime dependencies. It appears for bare invocation and explicit root help, not for subcommand help, version output, archive results, or MCP messages. The CLI mark is included from v0.6.0.
 
 ```text
   .----------.

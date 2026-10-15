@@ -20,7 +20,7 @@ Before extraction, every file path is normalized as an archive path and checked 
 
 The sanitized relative path is joined to a private temporary root. Code must never pass an untrusted file path directly to `Path::join` and then write.
 
-Duplicate, case-insensitive and parent/child conflicts are checked after lexical normalization for all exposed instances. The current ZIP adapter preserves original central-directory instances using bounded directory views; it never silently selects the last duplicate. Name-based reads reject ambiguity, and explicit index reads do not relax extraction safety. Published 0.5.1 had a ZIP merge gap; it is fixed in this unreleased checkout.
+Duplicate, case-insensitive and parent/child conflicts are checked after lexical normalization for all exposed instances. The current ZIP adapter preserves original central-directory instances using bounded directory views; it never silently selects the last duplicate. Name-based reads reject ambiguity, and explicit index reads do not relax extraction safety. Published 0.5.1 had a ZIP merge gap; it is fixed in version 0.6.0.
 
 ## Links and special files
 
@@ -111,7 +111,7 @@ MCP tool execution defaults to four active blocking workers; excess calls are re
 
 Security issues should be reported privately once the repository publishes a security contact. Do not include sensitive archive samples in public issues.
 
-## Unreleased read and durability options
+## Read and durability options
 
 `read --verify-first` fully decodes an entry into an anonymous temporary file before stdout receives bytes. Its explicit per-entry limit defaults to 4 GiB and is also clamped to the service decoded-byte ceiling; actual writes enforce it. The default raw streaming mode may emit partial bytes before a CRC/I/O error, so every consumer must check the process exit status. Verified reads do not imply source deletion.
 

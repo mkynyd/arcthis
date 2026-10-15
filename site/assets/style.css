@@ -131,6 +131,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 img, svg { display: block; }
 
 code, pre, kbd, .mono { font-family: var(--mono); }
+p code { overflow-wrap: anywhere; }
 
 :focus-visible {
   outline: 2px solid var(--focus-ring);

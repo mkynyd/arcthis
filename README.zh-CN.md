@@ -29,7 +29,11 @@ ZIP 通常可以直接读取目标文件；TAR 和 TAR.GZ 按顺序扫描。`ins
 
 ## 当前状态
 
-Arcthis v0.5.1 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。
+Arcthis v0.6.0 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。
+
+### v0.6.0 更新
+
+版本 **0.6.0 使用 JSON schema 2**，保留 ZIP 重名实例，修复 solid 7z 比例与 TAR dot 路径，复用扫描 reader，并提供有界 stdin、严格编码、先校验读取、逐档继续和缓存管理。详见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)和[schema 迁移 ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md)。
 
 ### v0.5.1 更新
 
@@ -87,7 +91,7 @@ pnpm add -g arcthis
 
 pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
-Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从 [v0.5.1 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.5.1) 下载。
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从 [v0.6.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.6.0) 下载。
 
 ### 从源码构建
 
@@ -100,9 +104,7 @@ cargo build --release --locked
 ./target/release/arcthis --help
 ```
 
-当前源码在根帮助（`arcthis`、`arcthis -h`、`arcthis --help`）前显示 A2 风格的 ASCII Logo；已发布的 v0.5.1 二进制尚不包含这个新增标志。
-
-当前源码为 **0.6.0-rc.1 / JSON schema 2，尚未发布**。已保留 ZIP 重复实例、修复 solid 7z 比例和 TAR dot 路径、复用内容扫描读取器，并增加有界 stdin、显式名称解码、验证后读取、批处理隔离与缓存管理。新选项需要源码构建，见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)和[迁移 ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md)。
+v0.6.0 在根帮助（`arcthis`、`arcthis -h`、`arcthis --help`）前显示 A2 风格的 ASCII Logo。
 
 把本地源码安装到 Cargo 二进制目录：
 
@@ -183,7 +185,7 @@ arcthis convert project.zip --output project.tar.zst --dry-run --json
 
 ## Agent 接口
 
-当前源码使用 schema 2；公开 0.5.1 保持 schema 1。
+0.6.0 使用 schema 2；0.5.1 使用 schema 1。
 
 - 成功的结构化输出使用 `schema_version: "2"`。
 - 结果写 stdout；警告与错误写 stderr。

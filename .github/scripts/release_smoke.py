@@ -43,7 +43,33 @@ def main():
             assert 'not found' not in linkage
             allowed = {'linux-vdso.so.1', 'ld-linux-x86-64.so.2', 'libc.so.6', 'libm.so.6', 'libdl.so.2', 'libpthread.so.0', 'librt.so.1', 'libgcc_s.so.1', 'libnettle.so.8', 'liblzma.so.5', 'liblz4.so.1', 'libz.so.1', 'libxml2.so.2'}
             libraries = {Path(line.strip().split()[0]).name for line in linkage.splitlines() if line.strip()}
-            assert libraries <= allowed, linkage
+            def needed(path):
+                return set(re.findall(r'\(NEEDED\).*?\[(.*?)\]', run('readelf', '-d', str(path))))
+            direct = needed(binary)
+            assert direct <= allowed, (direct, linkage)
+            resolved = {}
+            for line in linkage.splitlines():
+                match = re.match(r'\s*(\S+) => (\S+) \(', line)
+                if match:
+                    resolved[match[1]] = Path(match[2]).resolve()
+                elif line.strip().startswith('/'):
+                    path = Path(line.strip().split()[0])
+                    resolved[path.name] = path.resolve()
+            assert all(path.is_file() and str(path).startswith(('/usr/lib/', '/lib/', '/lib64/')) for path in resolved.values()), linkage
+            # Ubuntu's system libxml2 pulls ICU, which in turn pulls C++ runtime.
+            # Keep direct dependencies strict and prove every additional library
+            # is in that actual ELF dependency closure, rather than widening it.
+            pending = ['libxml2.so.2'] if 'libxml2.so.2' in resolved else []
+            xml_dependencies = set()
+            while pending:
+                name = pending.pop()
+                if name in xml_dependencies:
+                    continue
+                xml_dependencies.add(name)
+                assert name in resolved, (name, linkage)
+                pending.extend(needed(resolved[name]))
+            assert libraries - allowed <= xml_dependencies, linkage
+            print(json.dumps({'direct_dependencies': sorted(direct), 'system_xml_dependency_closure': sorted(xml_dependencies)}))
         print(linkage)
         payload = work/'payload.txt'
         payload.write_bytes('release smoke 内容\n'.encode())
@@ -68,6 +94,18 @@ def main():
             assert metadata['version'] == tag[1:]
             texts = [package.extractfile(member).read() for member in members.values() if member.size < 1024*1024]
             assert any(f'/releases/download/{tag}'.encode() in text for text in texts)
+        if platform.system() == 'Darwin' and platform.machine() == 'arm64' and '-' not in tag:
+            subprocess.run(['brew', 'install', 'mkynyd/tap/arcthis'], check=True)
+            installed = str(Path(run('brew', '--prefix', 'arcthis').strip())/'bin/arcthis')
+            assert run(installed, '--version').strip() == f'arcthis {tag[1:]}'
+            assert 'allow-root' in run(installed, 'mcp', '--help')
+            brew_archive = work/'brew-smoke.zip'
+            subprocess.run([installed, 'pack', str(payload), '--output', str(brew_archive)], check=True)
+            listing = json.loads(run(installed, 'list', str(brew_archive), '--json'))
+            entry = next(item for item in listing['entries'] if item['kind'] == 'file')
+            assert subprocess.check_output([installed, 'read', str(brew_archive), entry['path']]) == payload.read_bytes()
+            assert json.loads(run(installed, 'verify', str(brew_archive), '--json'))['verification']['verified']
+            print('Homebrew clean-runner install: passed')
         print(json.dumps({'tag': tag, 'target': target, 'checksum': 'passed', 'linkage': 'passed', 'formats': 3, 'installers': 'passed'}))
 
 
