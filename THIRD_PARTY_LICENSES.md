@@ -15,6 +15,7 @@ Direct dependencies and their declared licenses:
 | `clap` | 4.6 | MIT OR Apache-2.0 | CLI grammar and help |
 | `compress-tools` | 0.16 | MIT OR Apache-2.0 | libarchive adapter used by the RAR backend |
 | `directories` | 6.0 | MIT OR Apache-2.0 | Platform cache directory for persistent indexes |
+| `encoding_rs` | 0.8 | (Apache-2.0 OR MIT) AND BSD-3-Clause | Strict opt-in legacy filename decoding; never compression |
 | `flate2` | 1.1 | MIT OR Apache-2.0 | Gzip/Deflate codec |
 | `globset` | 0.4 | Unlicense OR MIT | Glob matching for `find`/`grep` |
 | `lzma-rust2` | 0.20 | Apache-2.0 | Pure-Rust XZ/LZMA codec |

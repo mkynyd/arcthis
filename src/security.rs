@@ -13,6 +13,8 @@ pub struct ExtractionLimits {
     pub max_components: usize,
     pub max_compression_ratio: Option<u64>,
     pub max_entry_duration: Option<Duration>,
+    /// Sync each extracted file before commit; disable only to trade crash durability for speed.
+    pub sync_files: bool,
 }
 
 impl Default for ExtractionLimits {
@@ -25,6 +27,7 @@ impl Default for ExtractionLimits {
             max_components: 256,
             max_compression_ratio: None,
             max_entry_duration: None,
+            sync_files: true,
         }
     }
 }
@@ -81,11 +84,20 @@ pub(crate) fn validate_entry_path(
 
     let mut result = PathBuf::new();
     for component in components {
-        if component.is_empty() {
-            return unsafe_path(path, "empty path components are not allowed");
+        if component == ".." {
+            return unsafe_path(path, "parent path components are not allowed");
         }
-        if component == "." || component == ".." {
-            return unsafe_path(path, "dot path components are not allowed");
+        if component == "." || component.is_empty() {
+            continue;
+        }
+        if result.as_os_str().is_empty()
+            && component
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphabetic)
+            && component.as_bytes().get(1) == Some(&b':')
+        {
+            return unsafe_path(path, "Windows drive prefixes are not allowed");
         }
         if component.len() > 255 {
             return Err(ArcthisError::ResourceLimit {
@@ -93,6 +105,9 @@ pub(crate) fn validate_entry_path(
             });
         }
         result.push(component);
+    }
+    if kind != EntryKind::Directory && (result.as_os_str().is_empty() || path.ends_with('/')) {
+        return unsafe_path(path, "file path has no final filename");
     }
     Ok(result)
 }

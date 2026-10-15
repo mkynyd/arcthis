@@ -2,6 +2,11 @@ mod backend;
 mod codec;
 mod detect;
 mod locator;
+pub(crate) mod names;
+
+pub(crate) fn backend_display_path(bytes: &[u8]) -> String {
+    backend::display_entry_path(bytes).0
+}
 
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -64,6 +69,10 @@ pub struct ArchiveOpenOptions {
     pub volumes: Vec<PathBuf>,
     /// Override the platform cache root used by persistent archive indexes.
     pub index_directory: Option<PathBuf>,
+    pub entry_index: Option<u64>,
+    pub name_encoding: Option<String>,
+    /// Explicit bounded in-memory source (used for stdin); display locator remains separate.
+    pub memory_source: Option<(Arc<[u8]>, PathBuf)>,
 }
 
 impl std::fmt::Debug for ArchiveOpenOptions {
@@ -73,6 +82,15 @@ impl std::fmt::Debug for ArchiveOpenOptions {
             .field("password", &self.password.as_ref().map(|_| "[REDACTED]"))
             .field("volumes", &self.volumes)
             .field("index_directory", &self.index_directory)
+            .field("entry_index", &self.entry_index)
+            .field("name_encoding", &self.name_encoding)
+            .field(
+                "memory_source",
+                &self
+                    .memory_source
+                    .as_ref()
+                    .map(|(bytes, name)| (bytes.len(), name)),
+            )
             .finish()
     }
 }
@@ -84,6 +102,9 @@ pub struct Archive {
     backend: Box<dyn ArchiveBackend>,
     entry_index: Mutex<Option<Vec<ArchiveEntry>>>,
     index_directory: Option<PathBuf>,
+    cache_used: std::sync::atomic::AtomicBool,
+    selected_index: Option<u64>,
+    name_encoding: Option<String>,
 }
 
 impl Archive {
@@ -96,7 +117,25 @@ impl Archive {
         options: &ArchiveOpenOptions,
     ) -> Result<Self> {
         let locator = locator.into();
-        let source = if options.volumes.is_empty() {
+        if options.memory_source.is_none() && locator.path().is_dir() {
+            return Err(ArcthisError::InvalidArgument {
+                message: format!(
+                    "archive source is a directory: {}",
+                    locator.path().display()
+                ),
+            });
+        }
+        let source = if let Some((bytes, name)) = &options.memory_source {
+            if !options.volumes.is_empty() {
+                return Err(ArcthisError::InvalidArgument {
+                    message: "memory/stdin sources cannot be combined with volumes".to_owned(),
+                });
+            }
+            ArchiveSource::Memory {
+                bytes: Arc::clone(bytes),
+                name: name.clone(),
+            }
+        } else if options.volumes.is_empty() {
             ArchiveSource::file(locator.path().to_path_buf())
         } else {
             let mut paths = Vec::with_capacity(options.volumes.len() + 1);
@@ -138,7 +177,9 @@ impl Archive {
                 message: format!("nested archive depth exceeds {MAX_NESTED_DEPTH}"),
             });
         }
-        let mut archive = Self::open_with_options(locator, options)?;
+        let mut traversal_options = options.clone();
+        traversal_options.entry_index = None;
+        let mut archive = Self::open_with_options(locator, &traversal_options)?;
         for entry_path in entries {
             let entry = archive.entry(entry_path)?;
             if entry.size > max_nested_entry_size {
@@ -165,13 +206,22 @@ impl Archive {
             copy_result?;
             let display = PathBuf::from(format!(
                 "{}::{}",
-                archive.path().to_string_lossy(),
+                archive.reference_path().to_string_lossy(),
                 entry_path
             ));
             let locator = ArchiveLocator::file(display.clone());
             let source = ArchiveSource::memory(writer.bytes, display);
-            archive = Self::open_source(locator, source, options)?;
+            archive = Self::open_source(locator, source, &traversal_options).map_err(|error| {
+                if matches!(error, ArcthisError::UnsupportedFormat { .. }) {
+                    ArcthisError::NotAnArchive {
+                        entry: entry_path.clone(),
+                    }
+                } else {
+                    error
+                }
+            })?;
         }
+        archive.selected_index = options.entry_index;
         Ok(archive)
     }
 
@@ -209,11 +259,25 @@ impl Archive {
             backend,
             entry_index: Mutex::new(None),
             index_directory: options.index_directory.clone(),
+            cache_used: std::sync::atomic::AtomicBool::new(false),
+            selected_index: options.entry_index,
+            name_encoding: options.name_encoding.clone(),
         })
     }
 
     pub fn path(&self) -> &Path {
         self.locator.path()
+    }
+
+    pub(crate) fn reference_path(&self) -> PathBuf {
+        if self.source.file_path().is_some() || self.source.volume_count() > 1 {
+            self.path().canonicalize().unwrap_or_else(|_| {
+                crate::lifecycle::comparable_path(self.path())
+                    .unwrap_or_else(|_| self.path().to_path_buf())
+            })
+        } else {
+            self.path().to_path_buf()
+        }
     }
 
     pub fn format(&self) -> ArchiveFormat {
@@ -235,7 +299,8 @@ impl Archive {
         {
             return Ok(entries.clone());
         }
-        if let Some(path) = self.source.file_path()
+        if self.name_encoding.is_none()
+            && let Some(path) = self.source.file_path()
             && let Some(entries) = crate::index::load_cached_entries(
                 path,
                 self.format(),
@@ -248,14 +313,27 @@ impl Archive {
                 .map_err(|_| ArcthisError::UnsupportedOperation {
                     message: "archive entry index lock was poisoned".to_owned(),
                 })? = Some(entries.clone());
+            self.cache_used
+                .store(true, std::sync::atomic::Ordering::Relaxed);
             return Ok(entries);
         }
         self.refresh_entries()
     }
 
+    pub fn index_used(&self) -> bool {
+        self.cache_used.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn refresh_entries(&self) -> Result<Vec<ArchiveEntry>> {
+        self.cache_used
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         let mut entries = self.backend.entries()?;
         for entry in &mut entries {
+            let bytes = names::original_bytes(&entry.path, entry.path_encoding)?;
+            entry.path_raw_hex = names::hex(&bytes);
+            if let Some(encoding) = &self.name_encoding {
+                (entry.path, entry.path_encoding) = names::decode(&bytes, encoding)?;
+            }
             entry.mime_guess = mime_guess::from_path(&entry.path)
                 .first_raw()
                 .map(str::to_owned);
@@ -270,10 +348,12 @@ impl Archive {
     }
 
     pub fn entry(&self, path: &str) -> Result<ArchiveEntry> {
-        let mut matches = self
-            .entries()?
-            .into_iter()
-            .filter(|entry| entry.path == path);
+        let mut matches = self.entries()?.into_iter().filter(|entry| {
+            entry.path == path
+                && self
+                    .selected_index
+                    .is_none_or(|index| entry.archive_index == index)
+        });
         let entry = matches.next().ok_or_else(|| ArcthisError::EntryNotFound {
             entry: path.to_owned(),
         })?;
@@ -292,7 +372,45 @@ impl Archive {
                 message: format!("entry `{path}` is not a regular file"),
             });
         }
-        self.backend.copy_entry_to(path, writer)
+        let mut result = None;
+        self.backend
+            .copy_entries_to(std::slice::from_ref(&entry), &mut |_, copy| {
+                result = Some(copy(writer)?);
+                Ok(false)
+            })?;
+        result.ok_or_else(|| ArcthisError::EntryNotFound {
+            entry: path.to_owned(),
+        })
+    }
+
+    pub(crate) fn copy_entries_to(
+        &self,
+        entries: &[ArchiveEntry],
+        visitor: &mut backend::EntryVisitor<'_>,
+    ) -> Result<()> {
+        let mut path_counts = HashMap::new();
+        for entry in entries {
+            *path_counts.entry(entry.path.as_str()).or_insert(0_usize) += 1;
+        }
+        self.backend.copy_entries_to(entries, &mut |entry, copy| {
+            let mut checked_copy = |writer: &mut dyn Write| {
+                if path_counts
+                    .get(entry.path.as_str())
+                    .is_some_and(|count| *count > 1)
+                {
+                    return Err(ArcthisError::Collision {
+                        message: format!("entry path `{}` occurs more than once", entry.path),
+                    });
+                }
+                if entry.kind != EntryKind::File {
+                    return Err(ArcthisError::UnsupportedOperation {
+                        message: format!("entry `{}` is not a regular file", entry.path),
+                    });
+                }
+                copy(writer)
+            };
+            visitor(entry, &mut checked_copy)
+        })
     }
 
     #[allow(clippy::too_many_lines)] // One pass keeps warning derivation consistent with the returned metadata.
@@ -358,7 +476,7 @@ impl Archive {
         }
         let default_limits = ExtractionLimits::default();
         if entries.iter().any(|entry| {
-            entry.path_encoding != EntryPathEncoding::Utf8
+            entry.path_encoding == EntryPathEncoding::EscapedBytes
                 || validate_entry_path(&entry.path, entry.kind, &default_limits).is_err()
         }) {
             warnings.push(ArchiveWarning {
@@ -373,12 +491,19 @@ impl Archive {
                 message: "declared archive metadata exceeds default extraction limits".to_owned(),
             });
         }
-        if entries.iter().any(|entry| {
-            entry.size > 0
-                && entry.compressed_size.is_some_and(|compressed| {
-                    compressed == 0 || entry.size > compressed.saturating_mul(1_000)
-                })
-        }) {
+        let block_ratio_exceeded = match self.backend.enforce_compression_ratio(1_000) {
+            Ok(()) => false,
+            Err(ArcthisError::ResourceLimit { .. }) => true,
+            Err(error) => return Err(error),
+        };
+        if block_ratio_exceeded
+            || entries.iter().any(|entry| {
+                entry.size > 0
+                    && entry.compressed_size.is_some_and(|compressed| {
+                        compressed == 0 || entry.size > compressed.saturating_mul(1_000)
+                    })
+            })
+        {
             warnings.push(ArchiveWarning {
                 code: "high_compression_ratio".to_owned(),
                 message: "one or more entries declare an expansion ratio above 1000:1".to_owned(),
@@ -444,6 +569,10 @@ impl Archive {
         selected_entry: Option<&str>,
         options: &ExtractOptions,
     ) -> Result<ExtractResult> {
+        self.ensure_deletable_source(options)?;
+        if let Some(ratio) = options.limits.max_compression_ratio {
+            self.backend.enforce_compression_ratio(ratio)?;
+        }
         crate::extract::extract_archive(self, selected_entry, options)
     }
 
@@ -452,7 +581,20 @@ impl Archive {
         selected_entry: Option<&str>,
         options: &ExtractOptions,
     ) -> Result<ExtractPlan> {
+        self.ensure_deletable_source(options)?;
+        if let Some(ratio) = options.limits.max_compression_ratio {
+            self.backend.enforce_compression_ratio(ratio)?;
+        }
         crate::extract::plan_extract_archive(self, selected_entry, options)
+    }
+
+    fn ensure_deletable_source(&self, options: &ExtractOptions) -> Result<()> {
+        if options.delete_source && self.source.file_path().is_none() {
+            return Err(ArcthisError::UnsupportedOperation {
+                message: "source deletion requires one filesystem archive".to_owned(),
+            });
+        }
+        Ok(())
     }
 
     pub(crate) fn extract_plan(
@@ -465,7 +607,9 @@ impl Archive {
     }
 
     pub fn verify(&self) -> Result<VerificationResult> {
-        self.backend.verify()
+        self.backend
+            .verify()
+            .map_err(crate::extract::map_archive_stream_error)
     }
 }
 

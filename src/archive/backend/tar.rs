@@ -1,15 +1,12 @@
 use std::io::{self, Read, Write};
-use std::path::Path;
 
 use super::{ArchiveBackend, ArchiveSource, display_entry_path, format_unix_time};
 use crate::archive::codec::{StreamCompression, decoder};
 use crate::error::{ArcthisError, Result};
-use crate::extract::{ExtractionStats, ExtractionWriter, PlannedEntry};
 use crate::model::{
     ArchiveCapabilities, ArchiveEntry, ArchiveFormat, EntryCopyResult, EntryKind,
     VerificationResult,
 };
-use crate::security::ExtractionLimits;
 
 pub(crate) struct TarBackend {
     source: ArchiveSource,
@@ -84,9 +81,13 @@ impl TarBackend {
                 compressed_size: None,
                 modified_time: header.mtime().ok().and_then(format_unix_time),
                 encrypted: false,
-                executable: mode.is_some_and(|value| value & 0o111 != 0),
+                executable: (kind == EntryKind::File)
+                    .then(|| mode.map(|value| value & 0o111 != 0))
+                    .flatten(),
                 symlink_target: link_target,
                 crc32: None,
+                path_raw_hex: String::new(),
+                modified_time_local: None,
                 mime_guess: None,
             });
         }
@@ -123,68 +124,43 @@ impl ArchiveBackend for TarBackend {
         self.read_entries()
     }
 
-    fn copy_entry_to(&self, path: &str, writer: &mut dyn Write) -> Result<EntryCopyResult> {
-        let reader = self.reader()?;
-        let mut archive = tar::Archive::new(reader);
-        let entries = archive
-            .entries()
-            .map_err(|error| ArcthisError::InvalidArchive {
-                message: error.to_string(),
-            })?;
-        for entry in entries {
-            let mut entry = entry.map_err(|error| ArcthisError::CorruptedArchive {
-                message: error.to_string(),
-            })?;
-            if display_entry_path(entry.path_bytes().as_ref()).0 != path {
-                continue;
-            }
-            let bytes_written = io::copy(&mut entry, writer)
-                .map_err(|error| ArcthisError::io("streaming TAR entry", error))?;
-            return Ok(EntryCopyResult { bytes_written });
-        }
-        Err(ArcthisError::EntryNotFound {
-            entry: path.to_owned(),
-        })
-    }
-
-    fn extract_plan(
+    fn copy_entries_to(
         &self,
-        plan: &[PlannedEntry],
-        staging_root: &Path,
-        limits: &ExtractionLimits,
-    ) -> Result<ExtractionStats> {
-        let targets = plan
+        entries: &[ArchiveEntry],
+        visitor: &mut super::EntryVisitor<'_>,
+    ) -> Result<()> {
+        let targets = entries
             .iter()
-            .map(|entry| (entry.archive_path.as_str(), entry))
+            .map(|entry| (entry.archive_index, entry))
             .collect::<std::collections::HashMap<_, _>>();
-        let mut writer = ExtractionWriter::new(staging_root, limits);
-        let reader = self.reader()?;
-        let mut archive = tar::Archive::new(reader);
-        let entries = archive
+        let mut archive = tar::Archive::new(self.reader()?);
+        let iterator = archive
             .entries()
             .map_err(|error| ArcthisError::InvalidArchive {
                 message: error.to_string(),
             })?;
-        for entry in entries {
-            let mut entry = entry.map_err(|error| ArcthisError::CorruptedArchive {
+        for (index, file) in iterator.enumerate() {
+            let mut file = file.map_err(|error| ArcthisError::CorruptedArchive {
                 message: error.to_string(),
             })?;
-            let path = display_entry_path(entry.path_bytes().as_ref()).0;
-            let Some(target) = targets.get(path.as_str()) else {
+            let Some(entry) = targets.get(&u64::try_from(index).unwrap_or(u64::MAX)) else {
                 continue;
             };
-            match target.kind {
-                EntryKind::Directory => writer.create_directory(target)?,
-                EntryKind::File => writer.write_file(target, &mut entry)?,
-                EntryKind::Symlink | EntryKind::Hardlink | EntryKind::Other => {
-                    return Err(ArcthisError::UnsafePath {
-                        path,
-                        reason: "links and special entries cannot be extracted".to_owned(),
+            let mut copy = |writer: &mut dyn Write| {
+                if display_entry_path(file.path_bytes().as_ref()).0 != entry.original_path()? {
+                    return Err(ArcthisError::EntryNotFound {
+                        entry: entry.path.clone(),
                     });
                 }
+                let bytes_written = io::copy(&mut file, writer)
+                    .map_err(|error| ArcthisError::io("streaming TAR entry", error))?;
+                Ok(EntryCopyResult { bytes_written })
+            };
+            if !visitor(entry, &mut copy)? {
+                break;
             }
         }
-        Ok(writer.stats())
+        Ok(())
     }
 
     fn verify(&self) -> Result<VerificationResult> {

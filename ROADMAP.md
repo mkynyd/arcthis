@@ -63,11 +63,24 @@ The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-
 
 Further performance work remains planned: wide-directory tree lookup, metadata reuse, and fewer sequential scans. Remote sources remain part of v0.6+.
 
-Known gap: the pinned ZIP dependency merges central-directory entries that share a name, so a ZIP with exact duplicate paths surfaces as a single entry and duplicate-path refusal cannot trigger for it; TAR, compressed TAR, and 7z still refuse duplicates. Changing this needs a ZIP backend change and dedicated regression tests. See [docs/SECURITY.md](./docs/SECURITY.md).
+## 0.6.0-rc.1 — Exploration follow-up (implemented, not released)
 
-## v0.6+ — Further integrations
+- [x] Root CLI ASCII mark.
+- [x] Reader-reusing ZIP/TAR-family/7z/RAR grep, stable instance identity, bounded results and global stopping.
+- [x] Solid-7z block ratios and nullable shared compressed sizes.
+- [x] Safe dot-path normalization and consistent plan/perform counts.
+- [x] All ZIP duplicate instances, exact index selection, AES/Deflate/ZIP64 views.
+- [x] Strict name decoding and raw-byte identity; bounded stdin and optional verified reads.
+- [x] Explicit extraction no-sync, batch continuation with conflict isolation, umask and strip-root packing, Gzip FNAME/mtime.
+- [x] Cache hit observability, stronger Unix invalidation, inventory and scoped pruning.
+- [x] JSON schema 2, common CLI/MCP envelopes, structured argument errors, password-file references and clean EOF.
+- [x] Human metadata, deletion receipts, stable exit-code documentation and accurate diagnostics.
 
-1. **v0.6:** capped HTTP remote archive source with validated range/cache behavior.
+The [report acceptance ledger](./docs/EXPLORATION-ITERATION-PLAN.md) records all 28 findings, corrections and scope decisions. Schema migration is documented in [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). The published 0.5.1 ZIP merge limitation is fixed only in this unreleased checkout. Earlier raw ZIP/TAR access semantics otherwise remain streaming and guarded. Further wide-tree lookup, preemptible decoding and remote-source work remain independent future work.
+
+## After the local 0.6 iteration — Further integrations
+
+1. **Next remote stage:** capped HTTP remote archive source with validated range/cache behavior.
 2. **v0.7:** authenticated S3 and SSH sources over the remote-source rules.
 3. **v0.8:** versioned HTTP service with auth, quotas, cancellation, and streaming.
 4. **v0.9:** small C ABI and demand-driven language bindings.

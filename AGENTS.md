@@ -19,13 +19,14 @@
 
 - `src/lib.rs` 只暴露可复用的 library interface，不应依赖 CLI 表现层。
 - `src/app.rs` 提供 frontend-neutral typed application service；CLI、MCP 和未来 frontend 必须复用该层的查询语义与资源限制。
-- `src/archive/` 管理 archive 抽象、格式检测与 backend adapter。上层命令不得重复 ZIP/TAR-specific 分支。
+- `src/archive/` 管理 archive 抽象、格式检测与 backend adapter。上层命令不得重复 ZIP/TAR-specific 分支。ZIP 实例通过原始中央目录和 `zip_directory.rs` 的有界视图保留，解密／解码／CRC 仍委托给 ZIP crate。
 - `src/cli.rs` 和 `src/output.rs` 只负责 CLI 语法、输出和进程退出语义。
 - `src/mcp.rs` 只负责 MCP transport、schema、授权和 tool contract；受控写操作的 plan digest 与执行适配集中在 `src/mcp_mutation.rs`。
-- `src/security.rs` 是 entry path 和 extraction 安全规则的单一真相源。
+- `src/security.rs` 是 entry path 和 extraction 安全规则的单一真相源；先规范化安全的 `.`／冗余分隔符，再做重复、大小写和父子冲突检查。原始路径字节与显式解码集中在 `src/archive/names.rs`。
+- 全量抽取复用 backend 批量复制和统一 `ExtractionWriter`；计划以 `archive_index` 传递实例身份，禁止用可能有转义歧义的显示字符串作为唯一抽取键。
 - `src/lifecycle.rs` 统一管理 collision policy、staged commit、rollback 与 post-commit source deletion；pack/extract/batch 不得各自发明生命周期语义。
 - `src/batch.rs` 只编排独立 archive，必须复用单 archive 的 planning/extraction 路径，并保持有界 worker 与确定性结果顺序。
-- `src/query.rs` 管理 find/grep/hash 的格式无关 streaming 语义；内容扫描必须具备 entry、line、match 与 binary 限制。
+- `src/query.rs` 管理 find/grep/hash 的格式无关 streaming 语义；内容扫描必须具备 entry、line、match 与 binary 限制。多条目扫描通过 archive/backend 批量复制接口复用读取状态，不得在 query 层加入格式分支或逐文件复制整张元数据表。
 - `src/budget.rs` 统一计算结果 JSON 字节；MCP 同时限制活跃请求、工具响应与服务端资源上限。
 - Nested archive 必须通过显式 `--within` 与受限 reader/source abstraction 实现，不得使用歧义 path grammar，也不得静默创建具名临时 inner archive。
 - `tests/` 使用动态 fixture 和 CLI 集成测试验证公开行为。
@@ -53,6 +54,7 @@
 - 命令语法优先保持 `arcthis <command> <archive> [entry] [options]`，禁止加入格式专属一级命令。
 - stdout 仅输出结果数据，stderr 仅输出诊断、警告和进度。`read` 的 stdout 是原始 entry bytes。
 - 非 TTY、`--json`、`NO_COLOR` 或 `--no-color` 模式不得输出 ANSI decoration。BrokenPipe 必须按 Unix 惯例正常退出。
+- 当前未发布源码为 `0.6.0-rc.1` / JSON schema 2；公开 0.5.1 仍是 schema 1，迁移见 ADR-0002。
 - JSON 是公共 interface。已发布 schema 的字段名、类型、含义和 `schema_version` 不得静默改变；破坏性改动必须写 RFC/ADR 并升级 schema version。
 - Machine mode 错误写入 stderr，使用稳定 error code 和合理的 process exit code，不暴露 crate 或 Rust backtrace。
 

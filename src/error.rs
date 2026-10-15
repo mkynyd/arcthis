@@ -10,6 +10,8 @@ pub type Result<T> = std::result::Result<T, ArcthisError>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
+    InvalidArgument,
+    NotAnArchive,
     UnsupportedFormat,
     InvalidArchive,
     CorruptedArchive,
@@ -29,7 +31,8 @@ pub enum ErrorCode {
 impl ErrorCode {
     pub const fn exit_code(self) -> u8 {
         match self {
-            Self::UnsupportedFormat => 3,
+            Self::InvalidArgument => 2,
+            Self::NotAnArchive | Self::UnsupportedFormat => 3,
             Self::InvalidArchive | Self::CorruptedArchive => 4,
             Self::EntryNotFound => 5,
             Self::PermissionDenied => 6,
@@ -46,7 +49,14 @@ impl ErrorCode {
 
 #[derive(Debug, Error)]
 pub enum ArcthisError {
-    #[error("unsupported archive format: {path}")]
+    #[error("invalid argument: {message}")]
+    InvalidArgument { message: String },
+    #[error("entry is not an archive: {entry}")]
+    NotAnArchive { entry: String },
+    #[error("unsupported output archive format: {path}")]
+    UnsupportedOutputFormat { path: PathBuf },
+
+    #[error("unsupported input archive format: {path}")]
     UnsupportedFormat { path: PathBuf },
 
     #[error("invalid archive: {message}")]
@@ -100,7 +110,11 @@ pub enum ArcthisError {
 impl ArcthisError {
     pub const fn code(&self) -> ErrorCode {
         match self {
-            Self::UnsupportedFormat { .. } => ErrorCode::UnsupportedFormat,
+            Self::InvalidArgument { .. } => ErrorCode::InvalidArgument,
+            Self::NotAnArchive { .. } => ErrorCode::NotAnArchive,
+            Self::UnsupportedFormat { .. } | Self::UnsupportedOutputFormat { .. } => {
+                ErrorCode::UnsupportedFormat
+            }
             Self::InvalidArchive { .. } => ErrorCode::InvalidArchive,
             Self::CorruptedArchive { .. } => ErrorCode::CorruptedArchive,
             Self::EntryNotFound { .. } => ErrorCode::EntryNotFound,
@@ -137,5 +151,60 @@ impl ArcthisError {
             Self::Io { source, .. } | Self::PermissionDenied { source, .. }
                 if source.kind() == io::ErrorKind::BrokenPipe
         )
+    }
+}
+
+#[derive(Serialize)]
+pub(crate) struct ErrorEnvelope<'a> {
+    schema_version: &'static str,
+    error: ErrorObject<'a>,
+}
+
+#[derive(Serialize)]
+struct ErrorObject<'a> {
+    code: crate::ErrorCode,
+    message: String,
+    details: ErrorDetails<'a>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ErrorDetails<'a> {
+    Entry { entry: &'a str },
+    Path { path: String },
+    Message { message: &'a str },
+    Empty {},
+}
+
+pub(crate) fn envelope(error: &ArcthisError) -> ErrorEnvelope<'_> {
+    let details = match error {
+        ArcthisError::EntryNotFound { entry } | ArcthisError::NotAnArchive { entry } => {
+            ErrorDetails::Entry { entry }
+        }
+        ArcthisError::UnsupportedFormat { path }
+        | ArcthisError::UnsupportedOutputFormat { path } => ErrorDetails::Path {
+            path: path.to_string_lossy().into_owned(),
+        },
+        ArcthisError::InvalidArgument { message }
+        | ArcthisError::InvalidArchive { message }
+        | ArcthisError::CorruptedArchive { message }
+        | ArcthisError::ResourceLimit { message }
+        | ArcthisError::Collision { message }
+        | ArcthisError::UnsupportedOperation { message }
+        | ArcthisError::VerificationFailed { message }
+        | ArcthisError::PartialFailure { message } => ErrorDetails::Message { message },
+        ArcthisError::UnsafePath { path, .. } => ErrorDetails::Path { path: path.clone() },
+        ArcthisError::PermissionDenied { .. }
+        | ArcthisError::PasswordRequired
+        | ArcthisError::WrongPassword
+        | ArcthisError::Io { .. } => ErrorDetails::Empty {},
+    };
+    ErrorEnvelope {
+        schema_version: crate::SCHEMA_VERSION,
+        error: ErrorObject {
+            code: error.code(),
+            message: error.to_string(),
+            details,
+        },
     }
 }

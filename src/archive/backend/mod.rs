@@ -3,17 +3,18 @@ mod seven_zip;
 mod stream;
 mod tar;
 mod zip;
+mod zip_directory;
 
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::error::Result;
-use crate::extract::{ExtractionStats, PlannedEntry};
+use crate::error::{ArcthisError, Result};
+use crate::extract::{ExtractionStats, ExtractionWriter, PlannedEntry};
 use crate::model::{
-    ArchiveCapabilities, ArchiveEntry, ArchiveFormat, EntryCopyResult, EntryPathEncoding,
-    VerificationResult,
+    ArchiveCapabilities, ArchiveEntry, ArchiveFormat, EntryCopyResult, EntryKind,
+    EntryPathEncoding, VerificationResult,
 };
 use crate::security::ExtractionLimits;
 
@@ -221,18 +222,80 @@ impl Seek for MultiFileReader {
     }
 }
 
+/// A deferred copy lets the consumer skip content without opening its decoder.
+pub(crate) type EntryCopier<'a> = dyn FnMut(&mut dyn Write) -> Result<EntryCopyResult> + 'a;
+/// Return false to stop visiting entries, including before any content is opened.
+pub(crate) type EntryVisitor<'a> =
+    dyn FnMut(&ArchiveEntry, &mut EntryCopier<'_>) -> Result<bool> + 'a;
+
 pub(crate) trait ArchiveBackend: Send + Sync {
     fn format(&self) -> ArchiveFormat;
     fn capabilities(&self) -> ArchiveCapabilities;
     fn validate(&self) -> Result<()>;
     fn entries(&self) -> Result<Vec<ArchiveEntry>>;
-    fn copy_entry_to(&self, path: &str, writer: &mut dyn Write) -> Result<EntryCopyResult>;
+    fn enforce_compression_ratio(&self, _max_ratio: u64) -> Result<()> {
+        Ok(())
+    }
+    fn copy_entries_to(
+        &self,
+        entries: &[ArchiveEntry],
+        visitor: &mut EntryVisitor<'_>,
+    ) -> Result<()>;
     fn extract_plan(
         &self,
         plan: &[PlannedEntry],
         staging_root: &Path,
         limits: &ExtractionLimits,
-    ) -> Result<ExtractionStats>;
+    ) -> Result<ExtractionStats> {
+        let mut output = ExtractionWriter::new(staging_root, limits);
+        let targets = plan
+            .iter()
+            .map(|entry| (entry.archive_index, entry))
+            .collect::<std::collections::HashMap<_, _>>();
+        let entries = plan
+            .iter()
+            .map(|entry| ArchiveEntry {
+                archive_index: entry.archive_index,
+                path: entry.archive_path.clone(),
+                path_encoding: EntryPathEncoding::Utf8,
+                path_raw_hex: entry.path_raw_hex.clone(),
+                kind: entry.kind,
+                size: entry.size,
+                compressed_size: None,
+                modified_time: None,
+                modified_time_local: None,
+                encrypted: false,
+                executable: (entry.kind == EntryKind::File).then_some(entry.executable),
+                symlink_target: None,
+                crc32: None,
+                mime_guess: None,
+            })
+            .collect::<Vec<_>>();
+        self.copy_entries_to(&entries, &mut |entry, copy| {
+            let target =
+                targets
+                    .get(&entry.archive_index)
+                    .ok_or_else(|| ArcthisError::EntryNotFound {
+                        entry: entry.path.clone(),
+                    })?;
+            match target.kind {
+                EntryKind::Directory => output.create_directory(target)?,
+                EntryKind::File => output.write_file_with(target, |writer| {
+                    copy(writer)
+                        .map(|result| result.bytes_written)
+                        .map_err(crate::extract::map_archive_stream_error)
+                })?,
+                _ => {
+                    return Err(ArcthisError::UnsafePath {
+                        path: entry.path.clone(),
+                        reason: "links and special entries are not restored".to_owned(),
+                    });
+                }
+            }
+            Ok(true)
+        })?;
+        Ok(output.stats())
+    }
     fn verify(&self) -> Result<VerificationResult>;
 }
 

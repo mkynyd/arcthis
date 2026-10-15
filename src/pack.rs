@@ -8,7 +8,6 @@ use flate2::Compression;
 use flate2::write::GzEncoder;
 use lzma_rust2::{XzOptions, XzWriter};
 use serde::Serialize;
-use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -162,8 +161,7 @@ pub fn pack_source_with_options(
     let parent = output.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)
         .map_err(|error| ArcthisError::io("creating archive output parent", error))?;
-    let mut temporary = NamedTempFile::new_in(parent)
-        .map_err(|error| ArcthisError::io("creating temporary archive output", error))?;
+    let mut temporary = temporary_output(parent)?;
 
     match format {
         ArchiveFormat::Zip => write_zip(temporary.as_file_mut(), &source_entries)?,
@@ -271,7 +269,7 @@ pub(crate) fn output_format(output: &Path) -> Result<ArchiveFormat> {
     } else if extension.is_some_and(|value| value.eq_ignore_ascii_case("zst")) {
         Ok(ArchiveFormat::Zstd)
     } else {
-        Err(ArcthisError::UnsupportedFormat {
+        Err(ArcthisError::UnsupportedOutputFormat {
             path: output.to_path_buf(),
         })
     }
@@ -407,6 +405,18 @@ fn map_walk_error(error: walkdir::Error) -> ArcthisError {
         .io_error()
         .map_or(io::ErrorKind::Other, io::Error::kind);
     ArcthisError::io("scanning pack source", io::Error::new(kind, error))
+}
+
+fn temporary_output(parent: &Path) -> Result<tempfile::NamedTempFile> {
+    let mut builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(fs::Permissions::from_mode(0o666));
+    }
+    builder
+        .tempfile_in(parent)
+        .map_err(|error| ArcthisError::io("creating temporary archive output", error))
 }
 
 fn write_zip(file: &mut File, entries: &[SourceEntry]) -> Result<()> {
@@ -550,7 +560,17 @@ fn write_single_stream(
         .map_err(|error| ArcthisError::io("opening single-stream source", error))?;
     match format {
         ArchiveFormat::Gzip => {
-            let mut encoder = GzEncoder::new(file, Compression::default());
+            let mtime = source
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .and_then(|duration| u32::try_from(duration.as_secs()).ok())
+                .unwrap_or(0);
+            let mut encoder = flate2::GzBuilder::new()
+                .filename(entry.archive_path.as_os_str().as_encoded_bytes())
+                .mtime(mtime)
+                .write(file, Compression::default());
             io::copy(&mut source, &mut encoder)
                 .map_err(|error| ArcthisError::io("writing Gzip stream", error))?;
             encoder

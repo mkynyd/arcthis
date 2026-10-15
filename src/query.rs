@@ -120,12 +120,7 @@ pub fn hash(archive: &Archive, entry: &str, algorithm: HashAlgorithm) -> Result<
 
 pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<GrepResult> {
     let matcher = options.glob.as_deref().map(build_matcher).transpose()?;
-    let candidates = archive.entries()?.into_iter().filter(|entry| {
-        entry.kind == EntryKind::File
-            && matcher
-                .as_ref()
-                .is_none_or(|matcher| matcher.is_match(&entry.path))
-    });
+    let entries = archive.entries()?;
     let mut result = GrepResult {
         pattern: pattern.to_owned(),
         glob: options.glob.clone(),
@@ -137,17 +132,24 @@ pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<G
         matches: Vec::new(),
     };
     let mut result_bytes = 0_u64;
-    for entry in candidates {
+    archive.copy_entries_to(&entries, &mut |entry, copy| {
+        if entry.kind != EntryKind::File
+            || matcher
+                .as_ref()
+                .is_some_and(|matcher| !matcher.is_match(&entry.path))
+        {
+            return Ok(true);
+        }
         if entry.size > options.max_entry_size {
             result.oversized_files_skipped += 1;
-            continue;
+            return Ok(true);
         }
         let remaining = options
             .max_matches
             .saturating_sub(u64::try_from(result.matches.len()).unwrap_or(u64::MAX));
         if remaining == 0 {
             result.matches_truncated = true;
-            break;
+            return Ok(false);
         }
         let mut scanner = GrepWriter::new(
             &entry.path,
@@ -157,7 +159,7 @@ pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<G
             options.max_result_bytes.saturating_sub(result_bytes),
             options.max_total_size.saturating_sub(result.bytes_scanned),
         );
-        if let Err(error) = archive.copy_entry_to(&entry.path, &mut scanner) {
+        if let Err(error) = copy(&mut scanner) {
             if scanner.limit_exceeded {
                 return Err(ArcthisError::ResourceLimit {
                     message: "grep decoded bytes exceed the per-entry or total scan budget"
@@ -177,16 +179,17 @@ pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<G
         }
         if scan.truncated {
             result.matches_truncated = true;
-            break;
+            return Ok(false);
         }
-    }
+        Ok(true)
+    })?;
     Ok(result)
 }
 
 fn build_matcher(pattern: &str) -> Result<GlobMatcher> {
     Glob::new(pattern)
         .map(|glob| glob.compile_matcher())
-        .map_err(|error| ArcthisError::UnsupportedOperation {
+        .map_err(|error| ArcthisError::InvalidArgument {
             message: format!("invalid glob `{pattern}`: {error}"),
         })
 }

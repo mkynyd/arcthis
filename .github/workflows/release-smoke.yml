@@ -1,0 +1,35 @@
+name: Release smoke
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing candidate or final release tag
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  smoke:
+    name: Smoke ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check downloaded release, linkage and archive access
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: python3 .github/scripts/release_smoke.py

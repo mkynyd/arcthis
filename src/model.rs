@@ -62,6 +62,9 @@ pub enum EntryKind {
 pub enum EntryPathEncoding {
     Utf8,
     EscapedBytes,
+    Cp437,
+    Gbk,
+    ShiftJis,
 }
 
 impl fmt::Display for EntryKind {
@@ -83,12 +86,14 @@ pub struct ArchiveEntry {
     pub archive_index: u64,
     pub path: String,
     pub path_encoding: EntryPathEncoding,
+    pub path_raw_hex: String,
     pub kind: EntryKind,
     pub size: u64,
     pub compressed_size: Option<u64>,
     pub modified_time: Option<String>,
+    pub modified_time_local: Option<String>,
     pub encrypted: bool,
-    pub executable: bool,
+    pub executable: Option<bool>,
     pub symlink_target: Option<String>,
     pub crc32: Option<String>,
     pub mime_guess: Option<String>,
@@ -211,5 +216,28 @@ impl ArchiveCapabilities {
             can_verify: true,
             can_seek: false,
         }
+    }
+}
+
+impl ArchiveEntry {
+    pub(crate) fn original_path(&self) -> crate::Result<String> {
+        let bytes = if self.path_raw_hex.is_empty() {
+            crate::archive::names::original_bytes(&self.path, self.path_encoding)?
+        } else {
+            crate::archive::names::unhex(&self.path_raw_hex)?
+        };
+        Ok(crate::archive::backend_display_path(&bytes))
+    }
+}
+
+impl std::fmt::Display for EntryPathEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Utf8 => "utf8",
+            Self::EscapedBytes => "escaped_bytes",
+            Self::Cp437 => "cp437",
+            Self::Gbk => "gbk",
+            Self::ShiftJis => "shift_jis",
+        })
     }
 }

@@ -37,6 +37,8 @@ pub(crate) fn resolve_destination(
     requested: &Path,
     policy: CollisionPolicy,
 ) -> Result<DestinationResolution> {
+    let requested_path = comparable_path(requested)?;
+    let requested = requested_path.as_path();
     let existed = requested
         .try_exists()
         .map_err(|error| ArcthisError::io("checking destination", error))?;
@@ -260,6 +262,15 @@ fn split_archive_suffix(file_name: &str) -> (&str, &str) {
         return (&file_name[..index], &file_name[index..]);
     }
     (file_name, "")
+}
+
+impl std::fmt::Display for OperationStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Completed => "completed",
+            Self::Skipped => "skipped",
+        })
+    }
 }
 
 #[cfg(test)]

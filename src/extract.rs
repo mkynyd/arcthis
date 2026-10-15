@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -59,6 +59,8 @@ pub struct ExtractPlan {
 
 #[derive(Debug, Clone)]
 pub(crate) struct PlannedEntry {
+    pub archive_index: u64,
+    pub path_raw_hex: String,
     pub archive_path: String,
     pub relative_path: PathBuf,
     pub kind: EntryKind,
@@ -109,7 +111,7 @@ pub(crate) fn plan_extract_archive(
             let entries = archive.entries()?;
             enforce_entry_count(entries.len(), &options.limits)?;
             let validated = validate_entries(&entries, &options.limits)?;
-            let (destination, _) = choose_destination(
+            let (destination, strip_root) = choose_destination(
                 archive.path(),
                 archive.format(),
                 options.output.as_deref(),
@@ -124,7 +126,17 @@ pub(crate) fn plan_extract_archive(
                 })?;
             (
                 destination,
-                u64::try_from(entries.len()).unwrap_or(u64::MAX),
+                u64::try_from(
+                    validated
+                        .iter()
+                        .filter(|(entry, path)| {
+                            !(strip_root
+                                && entry.kind == EntryKind::Directory
+                                && path.components().count() == 1)
+                        })
+                        .count(),
+                )
+                .unwrap_or(u64::MAX),
                 size,
             )
         };
@@ -137,7 +149,7 @@ pub(crate) fn plan_extract_archive(
         .map(|warning| format!("{}: {}", warning.code, warning.message))
         .collect();
     Ok(ExtractPlan {
-        source: archive.path().to_path_buf(),
+        source: crate::lifecycle::comparable_path(archive.path())?,
         destination: resolution.path,
         selected_entry: selected_entry.map(str::to_owned),
         entries_to_extract,
@@ -204,10 +216,12 @@ fn extract_single(
             .map_err(|error| ArcthisError::io("flushing extracted entry", error))?;
         writer.bytes_written
     };
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|error| ArcthisError::io("syncing extracted entry", error))?;
+    if options.limits.sync_files {
+        temporary
+            .as_file()
+            .sync_all()
+            .map_err(|error| ArcthisError::io("syncing extracted entry", error))?;
+    }
     if options.delete_source {
         archive.verify()?;
     }
@@ -259,28 +273,28 @@ fn extract_all(archive: &Archive, options: &ExtractOptions) -> Result<ExtractRes
     fs::create_dir_all(parent)
         .map_err(|error| ArcthisError::io("creating output parent directory", error))?;
 
-    let plan = validated
-        .into_iter()
-        .filter_map(|(entry, path)| {
-            let relative_path = if strip_root {
-                let mut components = path.components();
-                components.next()?;
-                components.as_path().to_path_buf()
-            } else {
-                path
-            };
-            if relative_path.as_os_str().is_empty() && entry.kind == EntryKind::Directory {
-                return None;
-            }
-            Some(PlannedEntry {
-                archive_path: entry.path.clone(),
-                relative_path,
-                kind: entry.kind,
-                size: entry.size,
-                executable: entry.executable,
-            })
-        })
-        .collect::<Vec<_>>();
+    let mut plan = Vec::with_capacity(validated.len());
+    for (entry, path) in validated {
+        let relative_path = if strip_root {
+            let mut components = path.components();
+            components.next();
+            components.as_path().to_path_buf()
+        } else {
+            path
+        };
+        if relative_path.as_os_str().is_empty() && entry.kind == EntryKind::Directory {
+            continue;
+        }
+        plan.push(PlannedEntry {
+            archive_index: entry.archive_index,
+            path_raw_hex: entry.path_raw_hex.clone(),
+            archive_path: entry.original_path()?,
+            relative_path,
+            kind: entry.kind,
+            size: entry.size,
+            executable: entry.executable.unwrap_or(false),
+        });
+    }
 
     let staging = Builder::new()
         .prefix(".arcthis-tmp-")
@@ -328,7 +342,7 @@ pub(crate) fn validate_entries<'a>(
     let mut seen = HashMap::with_capacity(entries.len());
     let mut casefolded = HashMap::with_capacity(entries.len());
     for entry in entries {
-        if entry.path_encoding != EntryPathEncoding::Utf8 {
+        if entry.path_encoding == EntryPathEncoding::EscapedBytes {
             return Err(ArcthisError::UnsafePath {
                 path: entry.path.clone(),
                 reason: "non-UTF-8 entry paths cannot be materialized safely".to_owned(),
@@ -341,6 +355,9 @@ pub(crate) fn validate_entries<'a>(
             });
         }
         let relative = validate_entry_path(&entry.path, entry.kind, limits)?;
+        if relative.as_os_str().is_empty() && entry.kind == EntryKind::Directory {
+            continue;
+        }
         if seen.insert(relative.clone(), entry.kind).is_some() {
             return Err(ArcthisError::Collision {
                 message: format!("duplicate archive entry path: {}", entry.path),
@@ -544,12 +561,6 @@ impl<'a> ExtractionWriter<'a> {
         Ok(())
     }
 
-    pub(crate) fn write_file(&mut self, entry: &PlannedEntry, reader: &mut dyn Read) -> Result<()> {
-        self.write_file_with(entry, |writer| {
-            std::io::copy(reader, writer).map_err(map_extraction_io_error)
-        })
-    }
-
     pub(crate) fn write_file_with(
         &mut self,
         entry: &PlannedEntry,
@@ -592,8 +603,10 @@ impl<'a> ExtractionWriter<'a> {
             });
         }
         set_executable(&file, entry.executable)?;
-        file.sync_all()
-            .map_err(|error| ArcthisError::io("syncing extracted file", error))?;
+        if self.limits.sync_files {
+            file.sync_all()
+                .map_err(|error| ArcthisError::io("syncing extracted file", error))?;
+        }
         self.stats.bytes_written += written;
         self.stats.entries_written += 1;
         Ok(())
@@ -664,20 +677,19 @@ impl<W: Write> Write for LimitedWriter<W> {
     }
 }
 
-fn map_extraction_io_error(error: io::Error) -> ArcthisError {
-    if matches!(
-        error.to_string().as_str(),
-        LIMIT_IO_MESSAGE | TIME_LIMIT_IO_MESSAGE
-    ) {
-        ArcthisError::ResourceLimit {
-            message: error.to_string(),
-        }
-    } else {
-        ArcthisError::io("streaming extracted file", error)
+pub(crate) fn map_archive_stream_error(error: ArcthisError) -> ArcthisError {
+    if let ArcthisError::Io { source, .. } = &error
+        && source.kind() == io::ErrorKind::InvalidData
+    {
+        return ArcthisError::VerificationFailed {
+            message: source.to_string(),
+        };
     }
-}
-
-fn map_archive_stream_error(error: ArcthisError) -> ArcthisError {
+    if let ArcthisError::CorruptedArchive { message } | ArcthisError::InvalidArchive { message } =
+        error
+    {
+        return ArcthisError::VerificationFailed { message };
+    }
     let limit_reached = matches!(
         &error,
         ArcthisError::Io { source, .. } | ArcthisError::PermissionDenied { source, .. }

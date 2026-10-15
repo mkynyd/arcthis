@@ -69,7 +69,7 @@ fn find_returns_full_entry_metadata_for_glob_matches() {
         String::from_utf8_lossy(&output.stderr)
     );
     let value: Value = serde_json::from_slice(&output.stdout).expect("parse JSON");
-    assert_eq!(value["schema_version"], "1");
+    assert_eq!(value["schema_version"], "2");
     assert_eq!(value["find"]["matched"], 1);
     assert_eq!(value["find"]["entries"][0]["path"], "src/lib.rs");
     assert_eq!(value["find"]["entries"][0]["kind"], "file");
@@ -114,6 +114,149 @@ fn grep_streams_text_and_reports_binary_and_size_limits() {
     let value: Value = serde_json::from_slice(&limited.stdout).expect("parse limited JSON");
     assert_eq!(value["grep"]["oversized_files_skipped"], 3);
     assert_eq!(value["grep"]["files_scanned"], 0);
+}
+
+#[test]
+fn grep_filters_encrypted_entries_and_stops_before_later_content() {
+    let workspace = TempDir::new().expect("test directory");
+    let archive = workspace.path().join("mixed.zip");
+    let password = workspace.path().join("password.txt");
+    let wrong_password = workspace.path().join("wrong.txt");
+    std::fs::write(&password, b"secret\n").expect("password");
+    std::fs::write(&wrong_password, b"wrong\n").expect("wrong password");
+    let mut writer = ZipWriter::new(File::create(&archive).expect("ZIP"));
+    for (name, encrypted) in [("z.txt", false), ("secret.bin", true), ("a.txt", false)] {
+        let options = if encrypted {
+            SimpleFileOptions::default().with_aes_encryption(zip::AesMode::Aes256, "secret")
+        } else {
+            SimpleFileOptions::default()
+        };
+        writer.start_file(name, options).expect("entry");
+        writer.write_all(b"hit\n").expect("content");
+    }
+    writer.finish().expect("finish ZIP");
+
+    for (args, paths, truncated) in [
+        (vec!["--glob", "*.txt"], vec!["z.txt", "a.txt"], false),
+        (vec!["--max-matches", "1"], vec!["z.txt"], true),
+        (vec!["--max-matches", "0"], vec![], true),
+        (
+            vec!["--password-file", password.to_str().expect("path")],
+            vec!["z.txt", "secret.bin", "a.txt"],
+            false,
+        ),
+    ] {
+        let output = cargo_bin_cmd!("arcthis")
+            .arg("grep")
+            .arg(&archive)
+            .arg("hit")
+            .arg("--json")
+            .args(args)
+            .output()
+            .expect("grep mixed ZIP");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let value: Value = serde_json::from_slice(&output.stdout).expect("JSON");
+        let actual = value["grep"]["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .map(|item| item["path"].as_str().expect("path"))
+            .collect::<Vec<_>>();
+        assert_eq!(actual, paths);
+        assert_eq!(value["grep"]["files_scanned"], paths.len());
+        assert_eq!(value["grep"]["bytes_scanned"], paths.len() * 4);
+        assert_eq!(value["grep"]["matches_truncated"], truncated);
+    }
+    for (args, code) in [
+        (vec![], "password_required"),
+        (
+            vec!["--password-file", wrong_password.to_str().expect("path")],
+            "wrong_password",
+        ),
+    ] {
+        let output = cargo_bin_cmd!("arcthis")
+            .arg("grep")
+            .arg(&archive)
+            .arg("hit")
+            .arg("--json")
+            .args(args)
+            .output()
+            .expect("grep password error");
+        assert_eq!(output.status.code(), Some(10));
+        assert!(output.stdout.is_empty());
+        let error: Value = serde_json::from_slice(&output.stderr).expect("JSON error");
+        assert_eq!(error["error"]["code"], code);
+    }
+}
+
+#[test]
+fn grep_propagates_crc_errors_even_without_matches() {
+    let workspace = TempDir::new().expect("test directory");
+    let archive = workspace.path().join("bad-crc.zip");
+    let mut writer = ZipWriter::new(File::create(&archive).expect("ZIP"));
+    for name in ["a.txt", "b.txt"] {
+        writer
+            .start_file(
+                name,
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+            )
+            .expect("entry");
+        writer.write_all(b"content\n").expect("content");
+    }
+    writer.finish().expect("finish ZIP");
+    let data_start = {
+        let mut zip =
+            zip::ZipArchive::new(File::open(&archive).expect("open ZIP")).expect("metadata");
+        zip.by_index(1)
+            .expect("second entry")
+            .data_start()
+            .expect("data offset")
+    };
+    let mut bytes = std::fs::read(&archive).expect("ZIP bytes");
+    bytes[usize::try_from(data_start).expect("offset")] ^= 0xff;
+    std::fs::write(&archive, bytes).expect("corrupt content");
+    let output = cargo_bin_cmd!("arcthis")
+        .arg("grep")
+        .arg(&archive)
+        .arg("absent")
+        .arg("--json")
+        .output()
+        .expect("grep CRC error");
+    assert_eq!(output.status.code(), Some(4));
+    assert!(output.stdout.is_empty());
+    let error: Value = serde_json::from_slice(&output.stderr).expect("JSON error");
+    assert_eq!(error["error"]["code"], "corrupted_archive");
+}
+
+#[test]
+fn grep_still_rejects_ambiguous_tar_paths_when_scanned() {
+    let workspace = TempDir::new().expect("test directory");
+    let archive = workspace.path().join("duplicates.tar");
+    let mut writer = tar::Builder::new(File::create(&archive).expect("TAR"));
+    for content in [b"first\n".as_slice(), b"second\n".as_slice()] {
+        let mut header = tar::Header::new_gnu();
+        header.set_mode(0o644);
+        header.set_size(content.len().try_into().expect("size"));
+        header.set_cksum();
+        writer
+            .append_data(&mut header, "same.txt", content)
+            .expect("entry");
+    }
+    writer.finish().expect("finish TAR");
+    let output = cargo_bin_cmd!("arcthis")
+        .arg("grep")
+        .arg(&archive)
+        .arg("first")
+        .arg("--json")
+        .output()
+        .expect("grep duplicate path");
+    assert_eq!(output.status.code(), Some(9));
+    let error: Value = serde_json::from_slice(&output.stderr).expect("JSON error");
+    assert_eq!(error["error"]["code"], "collision");
 }
 
 #[test]
@@ -192,7 +335,7 @@ fn grep_byte_budget_counts_escaped_lossy_text_across_files() {
             String::from_utf8_lossy(&output.stderr)
         );
         let value: Value = serde_json::from_slice(&output.stdout).expect("grep result");
-        assert_eq!(value["schema_version"], "1");
+        assert_eq!(value["schema_version"], "2");
         assert_eq!(value["grep"]["matches_truncated"], true);
         assert_eq!(
             value["grep"]["matches"].as_array().expect("matches").len(),

@@ -1,17 +1,14 @@
 use std::io::Write;
-use std::path::Path;
 
 use compress_tools::{ArchiveContents, ArchiveIteratorBuilder, ArchivePassword as LibPassword};
 
 use super::{ArchiveBackend, ArchiveSource};
 use crate::ArchivePassword;
 use crate::error::{ArcthisError, Result};
-use crate::extract::{ExtractionStats, ExtractionWriter, PlannedEntry};
 use crate::model::{
     ArchiveCapabilities, ArchiveEntry, ArchiveFormat, EntryCopyResult, EntryKind,
     EntryPathEncoding, VerificationResult,
 };
-use crate::security::ExtractionLimits;
 
 pub(crate) struct RarBackend {
     source: ArchiveSource,
@@ -37,30 +34,6 @@ impl RarBackend {
                 builder.with_password(LibPassword::new(password).map_err(map_libarchive_error)?);
         }
         builder.build().map_err(map_libarchive_error)
-    }
-
-    fn stream_entry(&self, path: &str, writer: &mut dyn Write) -> Result<u64> {
-        let mut found = false;
-        let mut bytes_written = 0_u64;
-        for item in self.iterator(Some(path.to_owned()))? {
-            match item {
-                ArchiveContents::StartOfEntry(name, _) => found = name == path,
-                ArchiveContents::DataChunk(chunk) if found => {
-                    writer
-                        .write_all(&chunk)
-                        .map_err(|error| ArcthisError::io("streaming RAR entry", error))?;
-                    bytes_written = bytes_written.saturating_add(chunk.len() as u64);
-                }
-                ArchiveContents::EndOfEntry | ArchiveContents::DataChunk(_) => {}
-                ArchiveContents::Err(error) => return Err(map_libarchive_error(error)),
-            }
-        }
-        if !found {
-            return Err(ArcthisError::EntryNotFound {
-                entry: path.to_owned(),
-            });
-        }
-        Ok(bytes_written)
     }
 }
 
@@ -101,9 +74,11 @@ impl ArchiveBackend for RarBackend {
                             .ok()
                             .and_then(super::format_unix_time),
                         encrypted: false,
-                        executable: mode & 0o111 != 0,
+                        executable: (kind == EntryKind::File).then_some(mode & 0o111 != 0),
                         symlink_target: None,
                         crc32: None,
+                        path_raw_hex: String::new(),
+                        modified_time_local: None,
                         mime_guess: None,
                     });
                 }
@@ -114,33 +89,64 @@ impl ArchiveBackend for RarBackend {
         Ok(entries)
     }
 
-    fn copy_entry_to(&self, path: &str, writer: &mut dyn Write) -> Result<EntryCopyResult> {
-        self.stream_entry(path, writer)
-            .map(|bytes_written| EntryCopyResult { bytes_written })
-    }
-
-    fn extract_plan(
+    fn copy_entries_to(
         &self,
-        plan: &[PlannedEntry],
-        staging_root: &Path,
-        limits: &ExtractionLimits,
-    ) -> Result<ExtractionStats> {
-        let mut output = ExtractionWriter::new(staging_root, limits);
-        for entry in plan {
-            match entry.kind {
-                EntryKind::Directory => output.create_directory(entry)?,
-                EntryKind::File => output.write_file_with(entry, |writer| {
-                    self.stream_entry(&entry.archive_path, writer)
-                })?,
-                EntryKind::Symlink | EntryKind::Hardlink | EntryKind::Other => {
-                    return Err(ArcthisError::UnsafePath {
-                        path: entry.archive_path.clone(),
-                        reason: "links and special entries cannot be extracted".to_owned(),
-                    });
+        entries: &[ArchiveEntry],
+        visitor: &mut super::EntryVisitor<'_>,
+    ) -> Result<()> {
+        let targets = entries
+            .iter()
+            .map(|entry| (entry.archive_index, entry))
+            .collect::<std::collections::HashMap<_, _>>();
+        let mut iterator = self.iterator(None)?;
+        let mut index = 0_u64;
+        while let Some(item) = iterator.next() {
+            match item {
+                ArchiveContents::StartOfEntry(name, _) => {
+                    let current = index;
+                    index += 1;
+                    let Some(entry) = targets.get(&current) else {
+                        continue;
+                    };
+                    let mut copy = |writer: &mut dyn Write| {
+                        if name != entry.original_path()? {
+                            return Err(ArcthisError::EntryNotFound {
+                                entry: entry.path.clone(),
+                            });
+                        }
+                        let mut bytes_written = 0_u64;
+                        for part in iterator.by_ref() {
+                            match part {
+                                ArchiveContents::DataChunk(chunk) => {
+                                    writer.write_all(&chunk).map_err(|error| {
+                                        ArcthisError::io("streaming RAR entry", error)
+                                    })?;
+                                    bytes_written = bytes_written.saturating_add(
+                                        u64::try_from(chunk.len()).unwrap_or(u64::MAX),
+                                    );
+                                }
+                                ArchiveContents::EndOfEntry => break,
+                                ArchiveContents::Err(error) => {
+                                    return Err(map_libarchive_error(error));
+                                }
+                                ArchiveContents::StartOfEntry(_, _) => {
+                                    return Err(ArcthisError::InvalidArchive {
+                                        message: "RAR entry ended without a boundary".to_owned(),
+                                    });
+                                }
+                            }
+                        }
+                        Ok(EntryCopyResult { bytes_written })
+                    };
+                    if !visitor(entry, &mut copy)? {
+                        break;
+                    }
                 }
+                ArchiveContents::Err(error) => return Err(map_libarchive_error(error)),
+                ArchiveContents::EndOfEntry | ArchiveContents::DataChunk(_) => {}
             }
         }
-        Ok(output.stats())
+        Ok(())
     }
 
     fn verify(&self) -> Result<VerificationResult> {

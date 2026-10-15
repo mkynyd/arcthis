@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -14,7 +14,7 @@ use crate::error::{ArcthisError, Result};
 use crate::lifecycle::{CollisionPolicy, commit_staged_path};
 use crate::model::{ArchiveEntry, ArchiveFormat};
 
-const INDEX_SCHEMA_VERSION: &str = "1";
+const INDEX_SCHEMA_VERSION: &str = "2";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -44,11 +44,13 @@ struct Fingerprint {
     size: u64,
     modified_seconds: u64,
     modified_nanos: u32,
+    change_identity: Option<[i64; 4]>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct IndexDocument {
     schema_version: String,
+    archive: PathBuf,
     fingerprint: Fingerprint,
     format: ArchiveFormat,
     entries: Vec<ArchiveEntry>,
@@ -61,10 +63,22 @@ pub fn maintain_index(
     delete: bool,
     dry_run: bool,
 ) -> Result<IndexResult> {
+    if open_options.name_encoding.is_some() {
+        return Err(ArcthisError::InvalidArgument {
+            message: "index stores original names; omit --encoding when maintaining a cache"
+                .to_owned(),
+        });
+    }
     let canonical = canonical_archive(archive_path)?;
     let index_path = cache_path(&canonical, open_options.index_directory.as_deref())?;
     let existed = index_path.exists();
     if delete {
+        let count = read_document(&index_path)
+            .ok()
+            .flatten()
+            .map_or(0, |document| {
+                u64::try_from(document.entries.len()).unwrap_or(u64::MAX)
+            });
         if !dry_run && existed {
             fs::remove_file(&index_path)
                 .map_err(|error| ArcthisError::io("deleting archive index", error))?;
@@ -79,7 +93,7 @@ pub fn maintain_index(
             } else {
                 IndexAction::Deleted
             },
-            entries_indexed: 0,
+            entries_indexed: count,
             dry_run,
         });
     }
@@ -150,16 +164,11 @@ pub(crate) fn load_cached_entries(
         return Ok(None);
     };
     let path = cache_path(&canonical, index_directory)?;
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(ArcthisError::io("reading archive index", error)),
-    };
-    let document: IndexDocument = match serde_json::from_slice(&bytes) {
-        Ok(document) => document,
-        Err(_) => return Ok(None),
+    let Some(document) = read_document(&path)? else {
+        return Ok(None);
     };
     if document.schema_version != INDEX_SCHEMA_VERSION
+        || document.archive != canonical
         || document.format != format
         || document.fingerprint != fingerprint(&canonical)?
     {
@@ -185,6 +194,7 @@ fn write_index(
         .map_err(|error| ArcthisError::io("creating temporary archive index", error))?;
     let document = IndexDocument {
         schema_version: INDEX_SCHEMA_VERSION.to_owned(),
+        archive: archive_path.to_path_buf(),
         fingerprint: fingerprint(archive_path)?,
         format,
         entries: entries.to_vec(),
@@ -225,20 +235,12 @@ fn fingerprint(path: &Path) -> Result<Fingerprint> {
         size: metadata.len(),
         modified_seconds: duration.as_secs(),
         modified_nanos: duration.subsec_nanos(),
+        change_identity: change_identity(&metadata),
     })
 }
 
 fn cache_path(canonical: &Path, index_directory: Option<&Path>) -> Result<PathBuf> {
-    let root = if let Some(directory) = index_directory {
-        directory.to_path_buf()
-    } else {
-        ProjectDirs::from("dev", "arcthis", "arcthis")
-            .ok_or_else(|| ArcthisError::UnsupportedOperation {
-                message: "cannot determine the system cache directory".to_owned(),
-            })?
-            .cache_dir()
-            .to_path_buf()
-    };
+    let root = cache_root(index_directory)?;
     let mut hasher = Sha256::new();
     hasher.update(canonical.as_os_str().as_encoded_bytes());
     let digest = hasher.finalize();
@@ -249,4 +251,155 @@ fn cache_path(canonical: &Path, index_directory: Option<&Path>) -> Result<PathBu
             output
         });
     Ok(root.join("indexes").join(format!("{name}.json")))
+}
+
+#[cfg(unix)]
+#[allow(clippy::unnecessary_wraps)] // Same optional return contract as platforms without ctime/inode.
+fn change_identity(metadata: &fs::Metadata) -> Option<[i64; 4]> {
+    use std::os::unix::fs::MetadataExt;
+    Some([
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+        i64::try_from(metadata.dev()).unwrap_or(i64::MAX),
+        i64::try_from(metadata.ino()).unwrap_or(i64::MAX),
+    ])
+}
+#[cfg(not(unix))]
+fn change_identity(_metadata: &fs::Metadata) -> Option<[i64; 4]> {
+    None
+}
+
+fn cache_root(index_directory: Option<&Path>) -> Result<PathBuf> {
+    let root = if let Some(directory) = index_directory {
+        directory.to_path_buf()
+    } else {
+        ProjectDirs::from("dev", "arcthis", "arcthis")
+            .ok_or_else(|| ArcthisError::UnsupportedOperation {
+                message: "cannot determine the system cache directory".to_owned(),
+            })?
+            .cache_dir()
+            .to_path_buf()
+    };
+    Ok(root)
+}
+
+#[derive(Debug, Serialize)]
+pub struct CacheItem {
+    pub index_path: PathBuf,
+    pub archive: Option<PathBuf>,
+    pub entries_indexed: u64,
+    pub bytes: u64,
+    pub stale: bool,
+    pub deleted: bool,
+}
+#[derive(Debug, Serialize)]
+pub struct CacheResult {
+    pub schema_version: &'static str,
+    pub operation: &'static str,
+    pub dry_run: bool,
+    pub items: Vec<CacheItem>,
+}
+/// Enumerate or prune only Arcthis hash-named index documents in its cache subdirectory.
+pub fn manage_cache(
+    index_directory: Option<&Path>,
+    prune: bool,
+    dry_run: bool,
+    max_age_seconds: u64,
+) -> Result<CacheResult> {
+    let directory = cache_root(index_directory)?.join("indexes");
+    let mut items = Vec::new();
+    if directory.exists() {
+        for entry in
+            fs::read_dir(&directory).map_err(|error| ArcthisError::io("listing indexes", error))?
+        {
+            let entry = entry.map_err(|error| ArcthisError::io("listing index", error))?;
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.len() != 69
+                || !name.ends_with(".json")
+                || !name.as_bytes()[..64].iter().all(u8::is_ascii_hexdigit)
+                || !entry
+                    .file_type()
+                    .map_err(|error| ArcthisError::io("reading index type", error))?
+                    .is_file()
+            {
+                continue;
+            }
+            let metadata = entry
+                .metadata()
+                .map_err(|error| ArcthisError::io("reading index metadata", error))?;
+            let document = read_document(&path)?;
+            let expired = metadata
+                .modified()
+                .ok()
+                .and_then(|modified| modified.elapsed().ok())
+                .is_some_and(|age| age.as_secs() >= max_age_seconds);
+            let stale = expired
+                || document.as_ref().is_none_or(|document| {
+                    document.schema_version != INDEX_SCHEMA_VERSION
+                        || fingerprint(&document.archive).ok().as_ref()
+                            != Some(&document.fingerprint)
+                });
+            let deleted = prune && stale && !dry_run;
+            if deleted {
+                fs::remove_file(&path).map_err(|error| ArcthisError::io("pruning index", error))?;
+            }
+            items.push(CacheItem {
+                index_path: path,
+                archive: document.as_ref().map(|document| document.archive.clone()),
+                entries_indexed: document.map_or(0, |document| {
+                    u64::try_from(document.entries.len()).unwrap_or(u64::MAX)
+                }),
+                bytes: metadata.len(),
+                stale,
+                deleted,
+            });
+        }
+    }
+    items.sort_by(|a, b| a.index_path.cmp(&b.index_path));
+    Ok(CacheResult {
+        schema_version: crate::SCHEMA_VERSION,
+        operation: if prune { "index_prune" } else { "index_list" },
+        dry_run,
+        items,
+    })
+}
+
+impl std::fmt::Display for IndexAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Created => "created",
+            Self::Refreshed => "refreshed",
+            Self::Reused => "reused",
+            Self::Deleted => "deleted",
+            Self::WouldCreate => "would create",
+            Self::WouldRefresh => "would refresh",
+            Self::WouldReuse => "would reuse",
+            Self::WouldDelete => "would delete",
+            Self::Missing => "missing",
+        })
+    }
+}
+
+fn read_document(path: &Path) -> Result<Option<IndexDocument>> {
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(ArcthisError::io("opening archive index", error)),
+    };
+    let metadata = file
+        .metadata()
+        .map_err(|error| ArcthisError::io("reading index metadata", error))?;
+    if !metadata.is_file() || metadata.len() > 64 * 1024 * 1024 {
+        return Ok(None);
+    }
+    let mut bytes = Vec::new();
+    file.take(64 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| ArcthisError::io("reading archive index", error))?;
+    if bytes.len() > 64 * 1024 * 1024 {
+        return Ok(None);
+    }
+    Ok(serde_json::from_slice(&bytes).ok())
 }

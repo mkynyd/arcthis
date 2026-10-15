@@ -100,6 +100,10 @@ cargo build --release --locked
 ./target/release/arcthis --help
 ```
 
+The current checkout adds an A2-inspired ASCII logo to root help (`arcthis`, `arcthis -h`, and `arcthis --help`). This addition is not included in the published v0.5.1 binaries.
+
+Current source is **0.6.0-rc.1 / JSON schema 2**, not yet released. It preserves ZIP duplicate instances, fixes solid-7z ratios and TAR dot paths, reuses content-scan readers, and adds bounded stdin, strict filename decoding, verified reads, batch continuation and cache management. Build from source for these options. See the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md) and [schema migration ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
+
 To install a local checkout into Cargo's binary directory:
 
 ```sh
@@ -175,11 +179,13 @@ Extraction first checks metadata and paths, rejects links and special files, enf
 
 Packing writes a temporary sibling archive, finishes it, reopens it through the normal archive interface, verifies every file, and only then saves the requested output. An output inside a directory source, or any source/destination that points to the same place, is rejected. `--delete-source` runs only after that save, and only when deleting the source cannot remove the destination; dry-runs never write or delete.
 
-Nested access decodes the selected inner file into a size-limited read-only memory buffer; it does not create a temporary file. Conversion writes validated files to a system temporary folder, packs, reopens, and verifies before saving. The saved file-list cache is treated as untrusted input and is invalidated by source size and modification time. Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limits.
+Nested access decodes the selected inner file into a size-limited read-only memory buffer; it does not create a temporary file. Conversion writes validated files to a system temporary folder, packs, reopens, and verifies before saving. The saved file-list cache is treated as untrusted input and is invalidated by source size/modification time and Unix change identity. Read [docs/SECURITY.md](./docs/SECURITY.md) for exact guarantees and known limits.
 
 ## Agent interface
 
-- Successful structured output uses `schema_version: "1"`.
+Current checkout uses schema 2; published 0.5.1 remains schema 1.
+
+- Successful structured output uses `schema_version: "2"`.
 - Results go to stdout; warnings and errors go to stderr.
 - Program errors are JSON on stderr when `--json` is active.
 - `read` always emits raw bytes and rejects `--json`.

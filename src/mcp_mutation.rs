@@ -111,36 +111,42 @@ pub(crate) struct ConvertExecuteInput {
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub(crate) struct ExtractPlanOutput {
+    pub schema_version: &'static str,
     pub plan_digest: String,
     pub plan: ExtractPlan,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub(crate) struct PackPlanOutput {
+    pub schema_version: &'static str,
     pub plan_digest: String,
     pub plan: PackPlan,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub(crate) struct ConvertPlanOutput {
+    pub schema_version: &'static str,
     pub plan_digest: String,
     pub plan: ConvertPlan,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub(crate) struct ExtractExecuteOutput {
+    pub schema_version: &'static str,
     pub plan_digest: String,
     pub result: ExtractResult,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub(crate) struct PackExecuteOutput {
+    pub schema_version: &'static str,
     pub plan_digest: String,
     pub result: PackResult,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub(crate) struct ConvertExecuteOutput {
+    pub schema_version: &'static str,
     pub plan_digest: String,
     pub result: ConvertResult,
 }
@@ -155,7 +161,11 @@ pub(crate) fn plan_extract(
     let options = extract_options(output, request, server_limits);
     let plan = archive.plan_extract(request.entry.as_deref(), &options)?;
     let plan_digest = plan_digest("extract", request, &plan, &plan.source, &plan.destination)?;
-    Ok(ExtractPlanOutput { plan_digest, plan })
+    Ok(ExtractPlanOutput {
+        schema_version: crate::SCHEMA_VERSION,
+        plan_digest,
+        plan,
+    })
 }
 
 pub(crate) fn execute_extract(
@@ -175,6 +185,7 @@ pub(crate) fn execute_extract(
         &extract_options(output, &input.request, server_limits),
     )?;
     Ok(ExtractExecuteOutput {
+        schema_version: crate::SCHEMA_VERSION,
         plan_digest: prepared.plan_digest,
         result,
     })
@@ -189,7 +200,11 @@ pub(crate) fn plan_pack(
     let options = pack_options(request, server_limits);
     let plan = crate::pack::plan_pack_source(source, output, &options)?;
     let plan_digest = plan_digest("pack", request, &plan, &plan.source, &plan.destination)?;
-    Ok(PackPlanOutput { plan_digest, plan })
+    Ok(PackPlanOutput {
+        schema_version: crate::SCHEMA_VERSION,
+        plan_digest,
+        plan,
+    })
 }
 
 pub(crate) fn execute_pack(
@@ -209,6 +224,7 @@ pub(crate) fn execute_pack(
         &pack_options(&input.request, server_limits),
     )?;
     Ok(PackExecuteOutput {
+        schema_version: crate::SCHEMA_VERSION,
         plan_digest: prepared.plan_digest,
         result,
     })
@@ -223,7 +239,11 @@ pub(crate) fn plan_convert(
     let options = convert_options(request, server_limits);
     let plan = crate::convert::plan_convert(source, output, &options)?;
     let plan_digest = plan_digest("convert", request, &plan, &plan.source, &plan.destination)?;
-    Ok(ConvertPlanOutput { plan_digest, plan })
+    Ok(ConvertPlanOutput {
+        schema_version: crate::SCHEMA_VERSION,
+        plan_digest,
+        plan,
+    })
 }
 
 pub(crate) fn execute_convert(
@@ -243,6 +263,7 @@ pub(crate) fn execute_convert(
         &convert_options(&input.request, server_limits),
     )?;
     Ok(ConvertExecuteOutput {
+        schema_version: crate::SCHEMA_VERSION,
         plan_digest: prepared.plan_digest,
         result,
     })

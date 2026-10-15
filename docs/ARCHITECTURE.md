@@ -50,7 +50,11 @@ The initial `Archive` module owns these operations:
 - safely extract through an explicit extraction plan;
 - traverse an explicit nested-entry chain through bounded in-memory sources.
 
-`find`, `grep`, and `hash` are format-independent free functions in `src/query.rs` that consume `Archive` metadata and `copy_entry_to` streaming instead of being archive methods.
+`find`, `grep`, and `hash` are format-independent free functions in `src/query.rs`. Hashing uses `copy_entry_to`; grep uses an internal bulk-copy visitor over one metadata snapshot. The visitor receives a deferred writer-based copy and may skip an entry or stop scanning before its content is opened. Archive-level ambiguity checks use one path-count table rather than cloning and searching the metadata snapshot for every file.
+
+ZIP bulk copying reuses one central directory. A bounded central-header scanner retains duplicate instances; a seekable single-entry directory view delegates ZIP/ZIP64 parsing, passwords, decoding and CRC to the existing ZIP crate. TAR-family and RAR iterate one source; 7z reuses native decoding with instance identity and explicit empty-entry ordering/global-stop handling. No query-layer format branches or decoded-file materialization are used.
+
+Full extraction uses that same backend bulk-copy seam and one shared `ExtractionWriter`. Plans carry `archive_index` and original name bytes through decoding and path sanitization; backend display strings are never used as unique extraction keys. This keeps raw byte names distinct from literal `%XX` names after explicit decoding and shares actual-byte/duration/durability enforcement across formats.
 
 The interface intentionally prefers `copy_entry_to` over returning a borrowed decoder. ZIP entry readers often borrow archive state, while TAR readers are sequential. A caller-provided writer gives both adapters one streaming interface without self-referential types, whole-entry buffering, or backend leakage.
 
@@ -72,13 +76,15 @@ Detection is content-first:
 4. Validate TAR headers and checksums. Compressed zero blocks need an explicit TAR suffix to distinguish empty containers from ordinary binary streams.
 5. Use extensions only for `pack` output-format selection, for the empty-container TAR suffix rule in step 4, or as diagnostic context.
 
-A misleading input extension does not override valid magic bytes. A non-TAR compressed stream is exposed as one implicit entry derived from its filename. Because these formats have no entry table, size enumeration requires a sequential decode and `inspect` reports that cost.
+A misleading input extension does not override valid magic bytes. A non-TAR compressed stream is exposed as one implicit entry: Gzip prefers its FNAME header, otherwise the adapter derives a name from the source filename. Because these formats have no entry table, size enumeration requires a sequential decode and `inspect` reports that cost.
 
 ## Normalized entry model
 
 An entry has a stable archive index, normalized archive path, and metadata that can be obtained without content-wide analysis: path encoding, kind, uncompressed size, optional compressed size, optional modified time, encryption indication when available, executable indication, optional link target, optional integrity checksum, and an optional extension-based MIME guess.
 
-Non-UTF-8 entry bytes are exposed with deterministic `%XX` escaping and `path_encoding: escaped_bytes`. Query commands can address the displayed value. Extraction refuses these names rather than silently creating a different filesystem path.
+Every entry carries `path_raw_hex` and `archive_index`. Non-UTF-8 names default to deterministic `%XX` display and `escaped_bytes`, with full extraction refused. Explicit strict utf8/cp437/gbk/shift-jis decoding changes the display/materialization name while preserving original bytes and backend identity. The sanitizer and normalized collision checks run afterward. Unknown executable state is null; unknown ZIP local timestamps live separately from absolute timestamps.
+
+Raw name bytes mean the filename bytes exposed by the adapter: ZIP/TAR/Gzip retain byte names, while Unicode names exposed by the 7z/RAR libraries are represented as UTF-8. This field does not claim to preserve the wire-level UTF-16 representation of 7z names.
 
 The model does not sniff MIME from content and does not compute a content hash during enumeration. Unsupported or unavailable metadata is represented explicitly with nullable fields, not fabricated values.
 
@@ -102,7 +108,7 @@ Content operations use bounded buffers and `Read`/`Write` streaming. They must n
 
 Enumeration builds one in-process metadata index per open `Archive`, avoiding repeated sequential enumeration when one command performs filtering followed by named access. Returned public snapshots remain owned values so backend lifetimes do not leak.
 
-`index` can persist the same normalized metadata under the platform cache root. The cache key hashes the canonical archive path and the document fingerprints source size plus nanosecond modification time. Documents are transactionally replaced and ignored when malformed, schema-mismatched, format-mismatched, or stale. Persistent indexes are metadata caches, not decoded content or TAR seek-point indexes.
+`index` persists original normalized metadata under the platform cache root. Keys hash canonical paths; internal schema 2 fingerprints size/mtime and, on Unix, ctime/dev/inode. This detects ordinary same-size/restored-mtime replacements, not cryptographic authenticity. Cache reads are capped at 64 MiB during actual I/O. `archive.index_used` exposes consumption; list/prune manage only hash-named documents under the index subdirectory, with stale/source/age checks and dry-run. Decoding overrides bypass persistent cache and cannot be used to maintain an index.
 
 `find` filters only this index. `hash` streams one entry into a digest writer. `grep` filters metadata before opening content, enforces size/match/line bounds, performs a bounded binary probe, and streams decoded bytes into a line scanner without materializing files.
 
@@ -111,7 +117,7 @@ Enumeration builds one in-process metadata index per open `Archive`, avoiding re
 Full extraction is plan-driven:
 
 1. enumerate and validate every entry path and declared size;
-2. reject links, special files, duplicate/case-insensitive collisions, non-UTF-8 names, unsafe paths, and resource-limit violations (duplicate detection can only see entries the backend exposes; the ZIP dependency merges same-name central-directory entries, which is tracked in [docs/SECURITY.md](./SECURITY.md));
+2. lexically normalize paths, then reject links/special files, normalized duplicate/case/parent collisions, unresolved names, unsafe paths and resource-limit violations, including all ZIP directory instances;
 3. choose the explicit or intelligent destination;
 4. extract into a temporary sibling staging location;
 5. close and flush all files;

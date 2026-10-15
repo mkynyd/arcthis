@@ -69,9 +69,9 @@
   <main id="main">
     <section class="page-head">
       <div class="wrap">
-        <p class="eyebrow">文档 <span class="sep">·</span> v0.5.1 <span class="sep">·</span> schema_version "1"</p>
+        <p class="eyebrow">文档 <span class="sep">·</span> v0.6.0-rc.1 <span class="sep">·</span> schema_version "2"</p>
         <h1 class="page-title">CLI 用法说明, <span class="tone-2">以已实现的为准。</span></h1>
-        <p class="page-sub">本页描述的都是 Arcthis 0.5.1 已实现、已测试的行为。还在规划中的功能会标记 <span class="pill planned">planned</span>。完整长篇指南是仓库里的 <a href="https://github.com/mkynyd/arcthis/blob/main/START.zh-CN.md" rel="noopener">START.zh-CN.md</a>。</p>
+        <p class="page-sub">本页对应 0.6.0-rc.1 候选版本（schema 2）；当前稳定版为 0.5.1（schema 1）。还在规划中的功能会标记 <span class="pill planned">planned</span>。完整长篇指南是仓库里的 <a href="https://github.com/mkynyd/arcthis/blob/main/START.zh-CN.md" rel="noopener">START.zh-CN.md</a>。</p>
       </div>
     </section>
 
@@ -133,7 +133,7 @@
             <li><code>--json</code> 让支持的命令输出给程序读取的 JSON;<code>read</code> 始终输出原始文件内容,并且拒绝 <code>--json</code>。</li>
             <li>JSON 输出和不接终端时的输出都不含颜色等终端装饰。在终端里可以用 <code>--no-color</code> 或 <code>NO_COLOR</code> 关闭颜色。</li>
             <li>管道另一端的程序提前退出(比如 <code>| head</code>)不算错误 —— <code>arcthis read a.zip big.bin | head</code> 的退出码为 0。</li>
-            <li>非 UTF-8 的文件名会通过 <code>path_encoding</code> 字段如实标出;解压时会拒绝这类转义路径,避免写出文件名错误的文件。</li>
+            <li>非 UTF-8 的文件名会通过 <code>path_encoding</code> 字段如实标出;默认抽取拒绝未解码名字，可显式 --encoding 严格解码后再检查。</li>
           </ul>
         </section>
 
@@ -147,6 +147,12 @@
                 <thead><tr><th>选项</th><th>默认值</th><th>含义</th></tr></thead>
                 <tbody>
                   <tr><td>--json</td><td>关</td><td>在支持的命令上输出稳定的机器可读 JSON</td></tr>
+
+                  <tr><td>--no-sync</td><td>默认逐文件 fsync</td><td>extract/extract-all/convert 跳过逐文件 fsync；保留暂存与回滚，降低掉电耐久性</td></tr>
+                  <tr><td>--entry-index &lt;N&gt;</td><td>—</td><td>精确选择 stat/read/hash/extract 的实例，仅作用于 within 最终层</td></tr>
+                  <tr><td>--encoding &lt;name&gt;</td><td>—</td><td>严格 utf8/cp437/gbk/shift-jis 解码，继续检查路径与冲突</td></tr>
+                  <tr><td>--stdin-name &lt;name&gt;</td><td>stdin</td><td>只读标准输入源 - 的虚拟文件名</td></tr>
+                  <tr><td>--max-stdin-bytes &lt;bytes&gt;</td><td>64 MiB</td><td>限制实际缓冲的 stdin 压缩字节</td></tr>
                   <tr><td>--no-color</td><td>关</td><td>禁用终端颜色装饰</td></tr>
                   <tr><td>--within &lt;entry&gt;</td><td>—</td><td>进入压缩包内的某个压缩包;可重复使用以逐层深入(最多 8 层)</td></tr>
                   <tr><td>--max-nested-entry-size &lt;bytes&gt;</td><td class="num">268435456</td><td>嵌套压缩包中单个文件允许占用的最大内存(字节)</td></tr>
@@ -174,7 +180,7 @@
           <div class="cmd" id="cmd-list">
             <div class="cmd-head"><span class="cmd-name">list</span><span class="cmd-sig">arcthis list &lt;archive&gt; [--json]</span></div>
             <div class="cmd-body">
-              <p>按压缩包内的原始顺序列出所有文件,底层实现暴露的重名条目也会保留;ZIP 依赖会把重复的中央目录路径合并成一个条目,只列出一次。JSON 输出会附带完整的 <code>entries</code> 数组。</p>
+              <p>保留归档顺序与全部重名实例，包括 ZIP。命名访问遇到歧义返回 collision；--entry-index 按 archive_index 选择实例。</p>
             </div>
           </div>
 
@@ -186,17 +192,16 @@
           </div>
 
           <div class="cmd" id="cmd-stat">
-            <div class="cmd-head"><span class="cmd-name">stat</span><span class="cmd-sig">arcthis stat &lt;archive&gt; &lt;entry&gt; [--json]</span></div>
+            <div class="cmd-head"><span class="cmd-name">stat</span><span class="cmd-sig">arcthis stat &lt;archive&gt; [entry] [--verbose] [--json]</span></div>
             <div class="cmd-body">
-              <p>展示单个文件的详细信息:类型、大小、压缩后大小、修改时间、是否加密、CRC-32,以及按扩展名推测的文件类型。路径不存在返回 <code>entry_not_found</code>;路径重复返回 <code>collision</code>,因为无法确定你指的是哪一个。只有当底层实现同时暴露重复条目时才会返回该冲突,具体限制见 <a href="https://github.com/mkynyd/arcthis/blob/main/docs/SECURITY.md" rel="noopener">docs/SECURITY.md</a> 中的 ZIP 说明。</p>
+              <p>展示条目元数据；--verbose 增加原始名、CRC、时间与编码信息。可按 --entry-index 选择；只有一个普通文件时可省略 entry。未知元数据为 null。</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-read">
-            <div class="cmd-head"><span class="cmd-name">read</span><span class="cmd-sig">arcthis read &lt;archive&gt; &lt;entry&gt;</span></div>
+            <div class="cmd-head"><span class="cmd-name">read</span><span class="cmd-sig">arcthis read &lt;archive&gt; [entry] [--verify-first]</span></div>
             <div class="cmd-body">
-              <p>把压缩包里的一个文件直接输出到 stdout,不在磁盘上解压。这让压缩包内容可以直接接进你已有的工具:</p>
-              <p class="flags"><b>arcthis read source.zip src/lib.rs | rg unsafe</b>&nbsp;&nbsp;·&nbsp;&nbsp;<b>arcthis read media.zip video.mp4 | ffprobe -i pipe:0</b></p>
+              <p>默认直接流式输出原始字节；CRC 失败前可能已有部分输出，必须检查退出码。--verify-first 先在匿名临时文件中完整校验，再写 stdout，实际大小默认最多 4 GiB。read --json 在读取源或密码前返回 invalid_argument/2。</p>
             </div>
           </div>
 
@@ -210,42 +215,42 @@
           <div class="cmd" id="cmd-grep">
             <div class="cmd-head"><span class="cmd-name">grep</span><span class="cmd-sig">arcthis grep &lt;archive&gt; &lt;literal&gt; [--glob &lt;pattern&gt;] [--json]</span></div>
             <div class="cmd-body">
-              <p>直接搜索文件中的文字。默认单个文件最多 16 MiB、10,000 条匹配、单行保留 1 MiB。<code>--max-result-bytes</code> 限制跨文件的结果总量,默认 16 MiB;省略的匹配会标记 <code>matches_truncated</code>。默认跳过二进制文件,可用 <code>--binary</code> 开启。</p>
+              <p>直接搜索文件中的文字。默认单个文件最多 16 MiB、10,000 条匹配、单行保留 1 MiB。<code>--max-result-bytes</code> 限制跨文件的结果总量,默认 16 MiB;省略的匹配会标记 <code>matches_truncated</code>。默认跳过二进制文件,可用 <code>--binary</code> 开启。 ZIP/TAR/7z/RAR 复用一次内容遍历与有界结果预算。</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-hash">
-            <div class="cmd-head"><span class="cmd-name">hash</span><span class="cmd-sig">arcthis hash &lt;archive&gt; &lt;entry&gt; [--algorithm sha256|sha512]</span></div>
+            <div class="cmd-head"><span class="cmd-name">hash</span><span class="cmd-sig">arcthis hash &lt;archive&gt; [entry] [--algorithm sha256|sha512]</span></div>
             <div class="cmd-body">
               <p>计算单个文件的校验值,默认 SHA-256,也支持 SHA-512。结果是小写十六进制。</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-index">
-            <div class="cmd-head"><span class="cmd-name">index</span><span class="cmd-sig">arcthis index &lt;archive&gt; [--refresh|--delete] [--dry-run]</span></div>
+            <div class="cmd-head"><span class="cmd-name">index</span><span class="cmd-sig">arcthis index [archive] [--refresh|--delete|--list|--prune] [--dry-run]</span></div>
             <div class="cmd-body">
-              <p>为压缩包创建、刷新、查看或删除一个持久的文件清单索引,加快后续查询。索引只当作缓存:源文件的大小或修改时间一变,索引即失效。</p>
+              <p>有效缓存自动用于查询，archive.index_used 显示命中。--list 列出缓存；--prune 清理失效或过期索引，可配 --dry-run 和 --max-age-seconds（默认 30 天）。只操作索引目录内哈希命名的 JSON；Unix 额外核验 ctime/dev/inode。</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-extract">
             <div class="cmd-head"><span class="cmd-name">extract</span><span class="cmd-sig">arcthis extract &lt;archive&gt; [entry] [--output &lt;path&gt;] [--dry-run]</span></div>
             <div class="cmd-body">
-              <p>安全地解压全部内容或指定的单个文件。先完整检查一遍文件清单;解压结果先写到旁边的临时位置,全部成功后才正式保存。相关选项:<code>--dry-run</code>、<code>--delete-source</code>,以及 <code>--overwrite</code> / <code>--skip-existing</code> / <code>--rename</code> 三选一。</p>
+              <p>安全地解压全部内容或指定的单个文件。先完整检查一遍文件清单;解压结果先写到旁边的临时位置,全部成功后才正式保存。相关选项:<code>--dry-run</code>、<code>--delete-source</code>,以及 <code>--overwrite</code> / <code>--skip-existing</code> / <code>--rename</code> 三选一。 安全规范化 ./；同名与规范化后冲突仍拒绝。--no-sync 可显式降低 fsync 开销，成功删除源文件会有回执。</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-extract-all">
             <div class="cmd-head"><span class="cmd-name">extract-all</span><span class="cmd-sig">arcthis extract-all &lt;directory&gt; [--recursive] [--workers &lt;n&gt;]</span></div>
             <div class="cmd-body">
-              <p>安全地解压目录中找到的每一个受支持的压缩包。多个压缩包并行处理且数量有上限,结果按固定顺序输出;<code>--dry-run</code> 会为找到的每个压缩包给出一份结构化计划。</p>
+              <p>有界并行处理，结果排序固定。--continue-on-error 隔离坏档、规划错误与路径冲突，继续执行独立好档；部分失败返回 12，JSON 保留逐档结果。dry-run 也会报告错误清单。</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-pack">
             <div class="cmd-head"><span class="cmd-name">pack</span><span class="cmd-sig">arcthis pack &lt;source&gt; --output &lt;archive&gt; [--dry-run]</span></div>
             <div class="cmd-body">
-              <p>把文件或目录打包成压缩包并验证。先在旁边生成临时文件,再重新打开逐个校验内容,全部通过后才保存为正式结果。输出路径位于被压缩的目录内部、或与源是同一个文件,都会被拒绝。</p>
+              <p>把文件或目录打包成压缩包并验证。先在旁边生成临时文件,再重新打开逐个校验内容,全部通过后才保存为正式结果。输出路径位于被压缩的目录内部、或与源是同一个文件,都会被拒绝。 --strip-root 只打包目录内容；输出权限遵循 umask，Gzip 写入 FNAME/mtime。</p>
             </div>
           </div>
 
@@ -266,7 +271,7 @@
           <div class="cmd" id="cmd-mcp">
             <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
             <div class="cmd-body">
-              <p>提供本地 MCP 服务,协议版本 <code>2025-06-18</code>。授权输入目录后可用九个只读工具;授权输出目录后增加 extract、pack、convert 的六个计划与执行工具。删除源文件需服务配置和请求同时允许。</p>
+              <p>提供本地 MCP 服务,协议版本 <code>2025-06-18</code>。授权输入目录后可用九个只读工具;授权输出目录后增加 extract、pack、convert 的六个计划与执行工具。删除源文件需服务配置和请求同时允许。 schema 2 与 CLI 共享只读结构和错误信封。只读请求可传授权根内的 password_file（最多 4096 字节），不接受明文 password；支持 entry_index。干净 EOF 退出 0；mcp --json 返回参数错误。</p>
               <p><code>--max-concurrent-requests</code> 默认 4,允许 1–64;<code>--max-response-bytes</code> 默认 16 MiB,计算工具结果中的 JSON 和文本副本。单次请求另有上限:<code>--max-entries</code> 100,000、<code>--max-decoded-bytes</code> 1 GiB、<code>--max-results</code> 10,000 条 find/grep 结果、<code>--max-read-window</code> 1 MiB(单次 <code>archive_read</code> 窗口)。超限返回 <code>resource_limit</code>。客户端无法提高服务端限额,MCP grep 的结果上限还受响应大小约束。</p>
             </div>
           </div>
@@ -278,28 +283,37 @@
           <p class="lead">每个成功的结构化响应都是一份 JSON 文档加一个换行。各命令特有的字段会加在共享的基本结构上。</p>
           <div class="code-frame" style="margin-bottom:24px;">
             <div class="code-head"><span>基本结构 + 文件对象</span></div>
-            <pre><span class="p">{</span>
-  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
-  <span class="s">"archive"</span><span class="p">:</span> <span class="p">{</span> <span class="s">"path"</span><span class="p">:</span> <span class="s">"dataset.zip"</span><span class="p">,</span> <span class="s">"path_lossy"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span> <span class="s">"format"</span><span class="p">:</span> <span class="s">"zip"</span> <span class="p">},</span>
-  <span class="s">"entry"</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s">"archive_index"</span><span class="p">:</span> <span class="n">42</span><span class="p">,</span>        <span class="c">// 在压缩包内的固定顺序</span>
-    <span class="s">"path"</span><span class="p">:</span> <span class="s">"train/data.csv"</span><span class="p">,</span>
-    <span class="s">"path_encoding"</span><span class="p">:</span> <span class="s">"utf8"</span><span class="p">,</span>   <span class="c">// 或 "escaped_bytes"(%XX)</span>
-    <span class="s">"kind"</span><span class="p">:</span> <span class="s">"file"</span><span class="p">,</span>
-    <span class="s">"size"</span><span class="p">:</span> <span class="n">1048576</span><span class="p">,</span>
-    <span class="s">"compressed_size"</span><span class="p">:</span> <span class="n">182341</span><span class="p">,</span>
-    <span class="s">"modified_time"</span><span class="p">:</span> <span class="s">"2026-08-27T12:00:00Z"</span><span class="p">,</span>
-    <span class="s">"encrypted"</span><span class="p">:</span> <span class="k">false</span><span class="p">,</span>
-    <span class="s">"crc32"</span><span class="p">:</span> <span class="s">"c0ffee00"</span><span class="p">,</span>
-    <span class="s">"mime_guess"</span><span class="p">:</span> <span class="s">"text/csv"</span>   <span class="c">// 基于扩展名,绝不读取内容</span>
-  <span class="p">}</span>
-<span class="p">}</span></pre>
+            <pre>{
+  &quot;schema_version&quot;: &quot;2&quot;,
+  &quot;archive&quot;: {
+    &quot;path&quot;: &quot;/data/dataset.zip&quot;,
+    &quot;path_lossy&quot;: false,
+    &quot;index_used&quot;: false,
+    &quot;format&quot;: &quot;zip&quot;
+  },
+  &quot;entry&quot;: {
+    &quot;archive_index&quot;: 42,
+    &quot;path&quot;: &quot;train/data.csv&quot;,
+    &quot;path_encoding&quot;: &quot;utf8&quot;,
+    &quot;path_raw_hex&quot;: &quot;747261696e2f646174612e637376&quot;,
+    &quot;kind&quot;: &quot;file&quot;,
+    &quot;size&quot;: 1048576,
+    &quot;compressed_size&quot;: 182341,
+    &quot;modified_time&quot;: null,
+    &quot;modified_time_local&quot;: &quot;2026-08-27T12:00:00&quot;,
+    &quot;encrypted&quot;: false,
+    &quot;executable&quot;: false,
+    &quot;symlink_target&quot;: null,
+    &quot;crc32&quot;: &quot;c0ffee00&quot;,
+    &quot;mime_guess&quot;: &quot;text/csv&quot;
+  }
+}</pre>
           </div>
           <p>使用 <code>--json</code> 时,命令错误以 JSON 写入 stderr,stdout 保持为空:</p>
           <div class="code-frame" style="margin-bottom:24px;">
             <div class="code-head"><span>机器错误 — stderr</span></div>
             <pre><span class="p">{</span>
-  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"1"</span><span class="p">,</span>
+  <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"2"</span><span class="p">,</span>
   <span class="s">"error"</span><span class="p">:</span> <span class="p">{</span>
     <span class="s">"code"</span><span class="p">:</span> <span class="s">"entry_not_found"</span><span class="p">,</span>
     <span class="s">"message"</span><span class="p">:</span> <span class="s">"archive entry was not found"</span><span class="p">,</span>
@@ -309,6 +323,8 @@
           </div>
           <p>稳定错误类别:</p>
           <div class="chip-row">
+            <span class="chip">invalid_argument</span>
+            <span class="chip">not_an_archive</span>
             <span class="chip">unsupported_format</span>
             <span class="chip">invalid_archive</span>
             <span class="chip">corrupted_archive</span>
@@ -326,6 +342,8 @@
           </div>
         </section>
 
+        <p>schema 2 将 executable 改为可空，modified_time_local 与绝对 RFC3339 时间分开，path_raw_hex 保留 adapter 暴露的名字字节。solid 7z 的共享压缩大小为 null，比例限制按块计算。CLI/MCP 共用只读结构；文件源引用是绝对路径，stdin/nested 保留虚拟引用。 <a href="https://github.com/mkynyd/arcthis/blob/main/docs/ADR-0002-EXPLORATION-CONTRACT.md">ADR 0002</a></p>
+
         <!-- exit codes -->
         <section class="doc-block" id="exit-codes">
           <h2>退出码<a class="anchor" href="#exit-codes" aria-hidden="true">#</a></h2>
@@ -337,8 +355,8 @@
                 <tbody>
                   <tr><td>0</td><td>成功,包括 BrokenPipe 消费方停止</td></tr>
                   <tr><td>1</td><td>一般 I/O 错误</td></tr>
-                  <tr><td>2</td><td>命令行语法或用法错误</td></tr>
-                  <tr><td>3</td><td><span class="mono">unsupported_format</span></td></tr>
+                  <tr><td>2</td><td>命令行语法 / invalid_argument</td></tr>
+                  <tr><td>3</td><td><span class="mono">unsupported_format / not_an_archive</span></td></tr>
                   <tr><td>4</td><td><span class="mono">invalid_archive</span> 或 <span class="mono">corrupted_archive</span></td></tr>
                   <tr><td>5</td><td><span class="mono">entry_not_found</span></td></tr>
                   <tr><td>6</td><td><span class="mono">permission_denied</span></td></tr>
@@ -455,11 +473,11 @@
         </div>
       </div>
       <div class="footer-bottom">
-        <span>Arcthis v0.5.1</span>
+        <span>Arcthis v0.6.0-rc.1</span>
         <span class="sep">·</span>
         <span>MIT</span>
         <span class="sep">·</span>
-        <span>schema_version "1"</span>
+        <span>schema_version "2"</span>
         <span class="push">macOS + Linux</span>
       </div>
     </div>

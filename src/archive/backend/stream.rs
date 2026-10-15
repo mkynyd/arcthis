@@ -4,26 +4,57 @@ use std::path::Path;
 use super::ArchiveSource;
 use crate::archive::codec::{StreamCompression, decoder};
 use crate::error::{ArcthisError, Result};
-use crate::extract::{ExtractionStats, ExtractionWriter, PlannedEntry};
 use crate::model::{
     ArchiveCapabilities, ArchiveEntry, ArchiveFormat, EntryCopyResult, EntryKind,
     EntryPathEncoding, VerificationResult,
 };
-use crate::security::ExtractionLimits;
 
 pub(crate) struct StreamBackend {
     source: ArchiveSource,
     format: ArchiveFormat,
     entry_name: String,
+    path_encoding: EntryPathEncoding,
 }
 
 impl StreamBackend {
     pub(crate) fn new(source: ArchiveSource, format: ArchiveFormat) -> Result<Self> {
-        let entry_name = derive_entry_name(source.name(), format)?;
+        let filename = if format == ArchiveFormat::Gzip {
+            let gzip = flate2::read::GzDecoder::new(source.reader()?);
+            gzip.header()
+                .and_then(|header| header.filename())
+                .filter(|bytes| !bytes.is_empty())
+                .map(super::display_entry_path)
+        } else {
+            None
+        };
+        let (entry_name, path_encoding) = if let Some(filename) = filename {
+            filename
+        } else {
+            let mut name = source.name().to_path_buf();
+            if source.volume_count() > 1 {
+                let suffix = name
+                    .extension()
+                    .and_then(|part| part.to_str())
+                    .unwrap_or("");
+                if (suffix.len() == 2
+                    && suffix.bytes().all(|byte| byte.is_ascii_alphabetic())
+                    && !suffix.eq_ignore_ascii_case("gz")
+                    && !suffix.eq_ignore_ascii_case("xz"))
+                    || (suffix.len() >= 3 && suffix.bytes().all(|byte| byte.is_ascii_digit()))
+                    || suffix.strip_prefix("part").is_some_and(|part| {
+                        !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
+                    })
+                {
+                    name = name.with_extension("");
+                }
+            }
+            (derive_entry_name(&name, format)?, EntryPathEncoding::Utf8)
+        };
         Ok(Self {
             source,
             format,
             entry_name,
+            path_encoding,
         })
     }
 
@@ -48,6 +79,17 @@ impl StreamBackend {
         io::copy(&mut reader, &mut io::sink()).map_err(|error| ArcthisError::InvalidArchive {
             message: format!("invalid {} stream: {error}", self.format),
         })
+    }
+    fn copy_payload(&self, path: &str, writer: &mut dyn Write) -> Result<EntryCopyResult> {
+        if path != self.entry_name {
+            return Err(ArcthisError::EntryNotFound {
+                entry: path.to_owned(),
+            });
+        }
+        let mut reader = self.reader()?;
+        let bytes_written = io::copy(&mut reader, writer)
+            .map_err(|error| ArcthisError::io("streaming compressed payload", error))?;
+        Ok(EntryCopyResult { bytes_written })
     }
 }
 
@@ -76,47 +118,42 @@ impl super::ArchiveBackend for StreamBackend {
         Ok(vec![ArchiveEntry {
             archive_index: 0,
             path: self.entry_name.clone(),
-            path_encoding: EntryPathEncoding::Utf8,
+            path_encoding: self.path_encoding,
             kind: EntryKind::File,
             size: self.decoded_size()?,
             compressed_size: Some(compressed_size),
-            modified_time: None,
+            modified_time: if self.format == ArchiveFormat::Gzip {
+                let gzip = flate2::read::GzDecoder::new(self.source.reader()?);
+                gzip.header()
+                    .map(flate2::GzHeader::mtime)
+                    .filter(|value| *value != 0)
+                    .and_then(|value| super::format_unix_time(u64::from(value)))
+            } else {
+                None
+            },
             encrypted: false,
-            executable: false,
+            executable: None,
             symlink_target: None,
             crc32: None,
+            path_raw_hex: String::new(),
+            modified_time_local: None,
             mime_guess: None,
         }])
     }
 
-    fn copy_entry_to(&self, path: &str, writer: &mut dyn Write) -> Result<EntryCopyResult> {
-        if path != self.entry_name {
-            return Err(ArcthisError::EntryNotFound {
-                entry: path.to_owned(),
-            });
-        }
-        let mut reader = self.reader()?;
-        let bytes_written = io::copy(&mut reader, writer)
-            .map_err(|error| ArcthisError::io("streaming compressed payload", error))?;
-        Ok(EntryCopyResult { bytes_written })
-    }
-
-    fn extract_plan(
+    fn copy_entries_to(
         &self,
-        plan: &[PlannedEntry],
-        staging_root: &Path,
-        limits: &ExtractionLimits,
-    ) -> Result<ExtractionStats> {
-        let Some(entry) = plan
-            .iter()
-            .find(|entry| entry.archive_path == self.entry_name)
-        else {
-            return Ok(ExtractionStats::default());
-        };
-        let mut reader = self.reader()?;
-        let mut writer = ExtractionWriter::new(staging_root, limits);
-        writer.write_file(entry, &mut reader)?;
-        Ok(writer.stats())
+        entries: &[ArchiveEntry],
+        visitor: &mut super::EntryVisitor<'_>,
+    ) -> Result<()> {
+        for entry in entries {
+            let path = entry.original_path()?;
+            let mut copy = |writer: &mut dyn Write| self.copy_payload(&path, writer);
+            if !visitor(entry, &mut copy)? {
+                break;
+            }
+        }
+        Ok(())
     }
 
     fn verify(&self) -> Result<VerificationResult> {

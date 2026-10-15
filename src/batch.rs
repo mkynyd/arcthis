@@ -13,6 +13,7 @@ use crate::lifecycle::{OperationStatus, comparable_path};
 #[derive(Debug, Clone)]
 pub struct ExtractAllOptions {
     pub recursive: bool,
+    pub continue_on_error: bool,
     pub workers: usize,
     pub extract: ExtractOptions,
     pub open: ArchiveOpenOptions,
@@ -25,6 +26,7 @@ pub struct ExtractAllPlan {
     pub workers: usize,
     pub archives: Vec<ExtractPlan>,
     pub destination_conflicts: Vec<String>,
+    pub errors: Vec<ExtractAllItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -51,22 +53,91 @@ pub struct ExtractAllResult {
 
 pub fn plan_extract_all(root: &Path, options: &ExtractAllOptions) -> Result<ExtractAllPlan> {
     let root = canonical_directory(root)?;
-    let paths = discover_archives(&root, options.recursive, &options.open)?;
+    let mut errors = Vec::new();
+    let paths = discover_archives(
+        &root,
+        options.recursive,
+        &options.open,
+        options.continue_on_error,
+        &mut errors,
+    )?;
     let workers = normalized_workers(options.workers);
     let mut archives = Vec::with_capacity(paths.len());
     for path in paths {
-        let archive = Archive::open_with_options(path.as_path(), &options.open)?;
-        let extract_options = per_archive_options(&path, &options.extract);
-        let plan = archive.plan_extract(None, &extract_options)?;
-        archives.push(plan);
+        let result =
+            Archive::open_with_options(path.as_path(), &options.open).and_then(|archive| {
+                archive.plan_extract(None, &per_archive_options(&path, &options.extract))
+            });
+        match result {
+            Ok(plan) => archives.push(plan),
+            Err(error) if options.continue_on_error => errors.push(failed_item(&path, &error)),
+            Err(error) => return Err(error),
+        }
     }
     let destination_conflicts = find_plan_path_conflicts(&archives)?;
+    if options.continue_on_error {
+        let mut sources = BTreeMap::new();
+        for plan in &archives {
+            sources.insert(comparable_path(&plan.source)?, plan.source.clone());
+        }
+        for error in &errors {
+            sources.insert(comparable_path(&error.archive)?, error.archive.clone());
+        }
+        let mut destinations = BTreeMap::new();
+        let mut duplicates = std::collections::HashSet::new();
+        for plan in archives.iter().filter(|plan| !plan.will_skip) {
+            let path = comparable_path(&plan.destination)?;
+            if destinations
+                .insert(path.clone(), plan.source.clone())
+                .is_some()
+            {
+                duplicates.insert(path);
+            }
+        }
+        let mut safe = Vec::new();
+        for plan in archives {
+            let path = comparable_path(&plan.destination)?;
+            let overlapping_source =
+                !plan.will_skip && find_overlapping_path(&sources, &path).is_some();
+            let overlapping_destination = if plan.will_skip {
+                false
+            } else if duplicates.contains(&path) {
+                true
+            } else {
+                let owner = destinations.remove(&path);
+                let overlaps = find_overlapping_path(&destinations, &path).is_some();
+                if let Some(owner) = owner {
+                    destinations.insert(path.clone(), owner);
+                }
+                overlaps
+            };
+            if overlapping_source || overlapping_destination {
+                errors.push(failed_item(
+                    &plan.source,
+                    &ArcthisError::Collision {
+                        message: format!(
+                            "batch destination {} overlaps another source or destination",
+                            path.display()
+                        ),
+                    },
+                ));
+            } else {
+                safe.push(plan);
+            }
+        }
+        archives = safe;
+    }
     Ok(ExtractAllPlan {
         root,
         recursive: options.recursive,
         workers,
         archives,
-        destination_conflicts,
+        destination_conflicts: if options.continue_on_error {
+            Vec::new()
+        } else {
+            destination_conflicts
+        },
+        errors,
     })
 }
 
@@ -126,12 +197,13 @@ pub fn extract_all(root: &Path, options: &ExtractAllOptions) -> Result<ExtractAl
         });
     }
     let root = plan.root;
+    let mut initial_items = plan.errors;
     let paths = plan
         .archives
         .into_iter()
         .map(|archive| archive.source)
         .collect::<Vec<_>>();
-    let discovered = u64::try_from(paths.len()).unwrap_or(u64::MAX);
+    let discovered = u64::try_from(paths.len() + initial_items.len()).unwrap_or(u64::MAX);
     let queue = Arc::new(Mutex::new(VecDeque::from(paths)));
     let (sender, receiver) = mpsc::channel();
     let workers = normalized_workers(options.workers);
@@ -159,7 +231,8 @@ pub fn extract_all(root: &Path, options: &ExtractAllOptions) -> Result<ExtractAl
         }
     });
     drop(sender);
-    let mut items = receiver.into_iter().collect::<Vec<_>>();
+    initial_items.extend(receiver);
+    let mut items = initial_items;
     items.sort_by(|left, right| left.archive.cmp(&right.archive));
     let succeeded = u64::try_from(
         items
@@ -233,6 +306,8 @@ fn discover_archives(
     root: &Path,
     recursive: bool,
     open_options: &ArchiveOpenOptions,
+    continue_on_error: bool,
+    failures: &mut Vec<ExtractAllItem>,
 ) -> Result<Vec<PathBuf>> {
     let max_depth = if recursive { usize::MAX } else { 1 };
     let mut paths = Vec::new();
@@ -256,6 +331,7 @@ fn discover_archives(
         match Archive::open_with_options(entry.path(), open_options) {
             Ok(_) => paths.push(entry.path().to_path_buf()),
             Err(ArcthisError::UnsupportedFormat { .. }) => {}
+            Err(error) if continue_on_error => failures.push(failed_item(entry.path(), &error)),
             Err(error) => return Err(error),
         }
     }
@@ -282,4 +358,17 @@ fn canonical_directory(path: &Path) -> Result<PathBuf> {
 
 fn normalized_workers(workers: usize) -> usize {
     workers.clamp(1, 64)
+}
+
+fn failed_item(path: &Path, error: &ArcthisError) -> ExtractAllItem {
+    ExtractAllItem {
+        archive: path.to_path_buf(),
+        destination: None,
+        status: None,
+        entries_extracted: 0,
+        bytes_written: 0,
+        source_deleted: false,
+        error_code: Some(error.code()),
+        error_message: Some(error.to_string()),
+    }
 }

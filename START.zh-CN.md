@@ -2,11 +2,32 @@
 
 [English](./START.md)
 
-本文说明 v0.5.1 的命令行工具与本地 MCP 服务。产品目标和后续规划见 [docs/PRODUCT.md](./docs/PRODUCT.md) 与 [ROADMAP.md](./ROADMAP.md)。
+本文按尚未发布的 **0.6.0-rc.1 源码（JSON schema 2）** 编写。公开 0.5.1 二进制仍使用 schema 1，不包含下文新增选项；使用前请源码构建。迁移见 [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md)，改动与验证见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)。
 
-v0.5.1 增加写入路径重叠检查、文件树层数限制、MCP 并发与响应大小限制，以及 `grep --max-result-bytes`。命令名称和 JSON 结果字段保持不变。
+v0.5.1 增加写入路径重叠检查、文件树层数限制、MCP 并发与响应大小限制，以及 `grep --max-result-bytes`。这段是公开 0.5.1 的历史说明；当前源码迁移见上方 ADR。
 
 格式识别以内容为主。空的压缩 TAR 只有全零块，需要保留 `.tar.gz`、`.tar.bz2`、`.tar.xz`、`.tar.zst` 或对应缩写后缀。其他以零字节开头的压缩文件保持单文件读取。
+
+## 0.6.0-rc.1 源码新增选项
+
+```sh
+arcthis read bundle.zip --entry-index 3 --verify-first
+arcthis stat legacy.zip --encoding gbk --entry-index 0 --verbose
+cat bundle.zip | arcthis list - --json
+arcthis extract files.tar --output out --no-sync
+arcthis extract-all incoming --continue-on-error --json
+arcthis pack folder --strip-root --output contents.zip
+arcthis index --list --json
+arcthis index --prune --dry-run --max-age-seconds 2592000 --json
+```
+
+index 只选择 within 链最终层的实例。stat/read/hash 只有一个普通文件或指定 index 时可省略 entry。名称编码严格使用 utf8/cp437/gbk/shift-jis，原始字节保留在 path_raw_hex，解码后继续执行路径与冲突检查。modified_time 只放绝对 RFC3339 或 null；ZIP 无时区时间放 modified_time_local。目录 executable/CRC 与未知元数据为 null。
+
+verify-first 使用匿名临时文件，实际字节默认最多 4 GiB；默认 raw streaming 可能在失败前输出部分字节，必须检查退出码。stdin 为支持 seek/重开而缓冲压缩源，默认 max-stdin-bytes 为 64 MiB，stdin-name 可提供名字或空 TAR 后缀；仅限只读，不能与 volume 组合。no-sync 以掉电耐久性换速度，保留 staging 与生命周期检查。continue-on-error 在 plan.errors／逐档结果中记录失败，返回 partial_failure/12，仍隔离 source/destination 重叠。pack 产物遵守 umask，gzip 写 FNAME/mtime，改外层名字后仍能读取原名。
+
+index 清理仅作用于索引缓存中符合哈希命名的文档，默认年龄 30 天，dry-run 不删除，其他文件不动。Unix ctime/dev/inode 补充 size/mtime，能检测常见的同大小／恢复 mtime 替换；archive.index_used 可观察缓存消费，指纹不证明内容真实性。read --json 返回 invalid_argument/2。生命周期 source/destination 在计划与结果中使用同样的规范化绝对路径。
+
+MCP 只读请求可引用授权输入根内的 password_file（最多 4096 字节），不接受明文密码值。正常 EOF 退出 0，JSON-RPC 服务拒绝 --json。CLI/MCP 的成功与错误信封均使用 schema 2。完整格式见 [CLI 契约](./docs/CLI.md)和[迁移 ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md)。
 
 ## 安装
 
@@ -47,7 +68,7 @@ cargo install --path . --locked
 
 stdio 传输固定协议版本 `2025-06-18`，stdout 只允许 JSON-RPC。只读工具包括 `archive_inspect`、`archive_list`、`archive_tree`、`archive_stat`、`archive_read`、`archive_find`、`archive_grep`、`archive_hash` 与 `archive_verify`。所有请求都有有限的文件数（`--max-entries`，100,000）、解码字节数（`--max-decoded-bytes`，1 GiB）和结果数（`--max-results`，10,000）上限；`archive_read` 还强制提供 `offset`（偏移量）与 `length`（长度），默认单次最多返回 1 MiB（`--max-read-window`）。
 
-Extract、pack 与 convert 分别使用独立的 `_plan`（计划）和 `_execute`（执行）工具。未配置 `--allow-output-root` 时，这 6 个工具不会出现在工具列表中。执行必须回传完全一致的 SHA-256 计划摘要；计划后 source 或 destination 发生变化都会拒绝执行。删除 source 只有在服务启用 `--allow-source-deletion` 且请求明确要求删除时才允许。MCP 请求不接受密码值。
+Extract、pack 与 convert 分别使用独立的 `_plan`（计划）和 `_execute`（执行）工具。未配置 `--allow-output-root` 时，这 6 个工具不会出现在工具列表中。执行必须回传完全一致的 SHA-256 计划摘要；计划后 source 或 destination 发生变化都会拒绝执行。删除 source 只有在服务启用 `--allow-source-deletion` 且请求明确要求删除时才允许。MCP 不接受明文密码值；只读请求可引用授权根内的 password_file。
 
 ```sh
 ./target/release/arcthis mcp \
@@ -77,6 +98,10 @@ arcthis read dataset.tar.gz train/data.csv | head -n 20
 ```
 
 输入格式根据内容识别。当前支持 ZIP、7z、RAR/RAR5、TAR、使用 Gzip/Bzip2/XZ/Zstandard 的压缩 TAR，以及这四种压缩算法的单文件格式。压缩 TAR、单文件格式、RAR 和 solid 7z 可能需要扫描或解码前面的数据；`inspect` 会报告实际的访问成本。
+
+## 当前源码的根帮助
+
+运行 `arcthis`、`arcthis -h` 或 `arcthis --help` 可查看 ASCII Logo、简介与根命令列表。无参数运行保留缺少命令的行为：帮助写入 stderr，退出码为 2；显式帮助写入 stdout，退出码为 0。子命令帮助、版本信息、压缩包结果和 MCP 响应不含 Logo。标志只使用 ASCII 字符，不含 ANSI 颜色。这是当前源码新增的表现，已发布的 v0.5.1 二进制尚不包含。
 
 ## 命令形式与全局选项
 
@@ -108,9 +133,9 @@ arcthis inspect archive.tar.gz --json
 重要的警告代码（warning code）：
 
 - `sequential_access`：目标读取可能需要从头顺序扫描。
+- `duplicate_entry_paths`：包含 ZIP 在内的重复显示路径需要显式 index 选择，整体解压会拒绝。
 - `encrypted_entries`：存在加密内容，读取内容需要正确密码。
 - `non_regular_entries`：存在解压时会拒绝的链接/特殊条目。
-- `duplicate_entry_paths`：命名访问有歧义，解压会拒绝。该检查只能看到底层实现暴露的条目；ZIP 中重复的中央目录路径会被 ZIP 依赖合并，因此不会出现此警告。见 [docs/SECURITY.md](./docs/SECURITY.md)。
 - `unsafe_entry_paths`：至少一个路径无法通过安全解压校验。
 - `default_extraction_limits_exceeded`：声明文件信息超过默认资源限制。
 - `high_compression_ratio`：至少一个文件声明的展开比超过 1000:1。
@@ -127,12 +152,12 @@ arcthis list archive.zip
 arcthis list archive.zip --json
 ```
 
-普通模式输出 `KIND`、`SIZE`、`PATH` 三列；JSON 保留压缩包内顺序，并保留底层实现暴露的重复文件；ZIP 中重复的中央目录路径会被 ZIP 依赖合并，只出现一次。见 [docs/SECURITY.md](./docs/SECURITY.md)。
+普通模式输出 `KIND`、`SIZE`、`PATH` 三列；JSON 保留全部实例，包括 ZIP 的重复中央目录名称。使用 `archive_index` / `--entry-index` 选择实例，按名称访问遇到歧义时返回 collision。
 
 每个文件对象包含：
 
 - `archive_index`，保持源压缩包内顺序；
-- `path` 与 `path_encoding`（`utf8` 或 `escaped_bytes`）；
+- `path`、`path_raw_hex` 与 `path_encoding`（utf8/escaped_bytes/cp437/gbk/shift_jis）；
 - `kind`：`file`、`directory`、`symlink`、`hardlink`、`other`；
 - `size` 与可选 `compressed_size`；
 - 可选 `modified_time`；
@@ -157,7 +182,7 @@ arcthis stat archive.zip README.md
 arcthis stat archive.zip README.md --json
 ```
 
-路径必须与 `list` 显示一致。不存在时返回 `entry_not_found`；同名文件超过一个时返回 `collision`，不会静默选择。底层实现只暴露一个同名条目时（例如 ZIP 依赖合并了重复的中央目录路径）不会触发该冲突，见 [docs/SECURITY.md](./docs/SECURITY.md)。
+路径须与 `list` 一致。不存在时返回 entry_not_found，同显示名重复时返回 collision。`--entry-index N` 精确选择实例；stat/read/hash 在只有一个普通文件或指定 index 时可省略 entry。配合 `--within` 时，index 只作用于最终内层压缩包。
 
 ## `read`：直接读取一个文件
 
@@ -167,7 +192,7 @@ arcthis read source.tar.gz src/lib.rs | rg unsafe
 arcthis read media.zip video.mp4 | ffprobe -i pipe:0
 ```
 
-`read` 是核心的内容读取命令，只向 stdout 写原始文件字节，诊断写 stderr。它不会把字节包装进 JSON，因此 `--json` 会返回 `unsupported_operation`。
+`read` 是核心的内容读取命令，只向 stdout 写原始文件字节，诊断写 stderr。它不会把字节包装进 JSON，因此 `--json` 会返回 `invalid_argument`（退出 2）。
 
 只支持普通文件；目录、链接和特殊条目会被拒绝。BrokenPipe 视为接收方正常提前结束，所以 `arcthis read ... | head` 可以自然工作。
 
@@ -190,6 +215,8 @@ arcthis grep papers.zip transformer --glob '**/*.md' --json
 ```
 
 匹配内容是一段原始字节序列，不是正则表达式。超过 `--max-entry-size` 的文件会跳过（默认 16 MiB），达到 `--max-matches` 后停止收集（默认 10,000），单行最多保留 1 MiB。前 8 KiB 出现 NUL 会判定为二进制文件；默认跳过，只有显式 `--binary` 才扫描。JSON 会报告扫描、跳过、字节和截断计数。
+
+ZIP 搜索复用中央目录；TAR 系列、7z 和 RAR 搜索复用一次内容遍历。通配符与声明大小过滤先于条目内容复制。顺序格式访问选中条目仍可能解码前面的字节；visitor 保留扫描／结果预算与实例身份，不把文件解压到磁盘。
 
 `--max-result-bytes` 限制跨文件累计的匹配行 JSON 大小，默认 16 MiB，计入路径、转义和 UTF-8 替换字节。完整匹配行放不下时会省略该行，并设置 `matches_truncated: true`；设为 0 则不保留匹配。如需更多输出，可以显式提高此上限。
 
@@ -326,7 +353,7 @@ arcthis extract archive.tar.zst --dry-run --delete-source --json
 
 ### 解压安全
 
-解压会拒绝绝对路径、`.`/`..`、反斜杠、Windows 盘符/UNC 前缀、NUL、重复路径、大小写不敏感冲突、文件与父目录同名、超长路径、无效 UTF-8 名称、符号链接、硬链接与特殊文件。重复检查只能看到底层实现暴露的条目，因此 [docs/SECURITY.md](./docs/SECURITY.md) 记录的 ZIP 合并限制同样适用。内容写入目标同文件系统的临时目录，所有计划文件成功后才保存。精确定义见 [docs/SECURITY.md](./docs/SECURITY.md)。
+解压先丢弃 `.` 与冗余内部 `/`，再拒绝每个 `..`、绝对路径、drive/UNC、NUL、反斜杠、规范化后的重复／大小写／父子冲突、超长路径、未解码名称及 links/special files。ZIP 重复实例也会拒绝。默认逐文件 fsync；显式 `--no-sync` 可以降低掉电耐久性以换取速度，staging、失败回滚和验证后删除 source 的规则保留。
 
 ## `extract-all`：批量处理目录中的压缩包
 
@@ -392,7 +419,7 @@ ZIP、7z 与 RAR 会通过底层完整性检查逐个读取每个可读文件。
 
 ## 机器可读输出
 
-所有成功的结构化文档都以 `"schema_version": "1"` 开始。基于压缩包的结果包含：
+所有成功的结构化文档都以 `"schema_version": "2"` 开始。基于压缩包的结果包含：
 
 ```json
 {
@@ -410,7 +437,7 @@ ZIP、7z 与 RAR 会通过底层完整性检查逐个读取每个可读文件。
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "error": {
     "code": "entry_not_found",
     "message": "archive entry not found: missing.txt",
@@ -428,7 +455,7 @@ ZIP、7z 与 RAR 会通过底层完整性检查逐个读取每个可读文件。
 | 0 | 成功，包括 BrokenPipe consumer stop |
 | 1 | 通用 I/O error |
 | 2 | clap 命令语法/用法错误 |
-| 3 | `unsupported_format` |
+| 3 | `unsupported_format`, `not_an_archive` |
 | 4 | `invalid_archive` / `corrupted_archive` |
 | 5 | `entry_not_found` |
 | 6 | `permission_denied` |

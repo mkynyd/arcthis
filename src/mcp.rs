@@ -69,6 +69,15 @@ struct SourceInput {
     /// Explicit nested archive entry chain.
     #[serde(default)]
     within: Vec<String>,
+    /// Password file inside an authorized input root; values are never accepted inline.
+    #[serde(default)]
+    password_file: Option<String>,
+    /// Exact instance selection for `archive_stat`, `archive_read` and `archive_hash`.
+    #[serde(default)]
+    entry_index: Option<u64>,
+    /// Strict name decoding: utf8, cp437, gbk or shift-jis.
+    #[serde(default)]
+    encoding: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -231,6 +240,11 @@ impl McpServer {
             })
             .collect::<ArcthisResult<Vec<_>>>()?;
         let mut tool_router = Self::tool_router();
+        for route in tool_router.map.values_mut() {
+            if let Some(schema) = &mut route.attr.output_schema {
+                *schema = versioned_output_schema(schema);
+            }
+        }
         if output_roots.is_empty() {
             for name in MUTATION_TOOL_NAMES {
                 tool_router.disable_route(name);
@@ -259,6 +273,36 @@ impl McpServer {
         }
         let mut source = ArchiveSourceRequest::file(canonical);
         source.within = input.within;
+        source.open_options.entry_index = input.entry_index;
+        source.open_options.name_encoding = input.encoding;
+        if let Some(path) = input.password_file {
+            use std::io::Read;
+            let path = self.authorize_input(&path, false)?;
+            let file = fs::File::open(path)
+                .map_err(|error| ArcthisError::io("opening password file", error))?;
+            if !file
+                .metadata()
+                .map_err(|error| ArcthisError::io("reading password file metadata", error))?
+                .is_file()
+            {
+                return Err(ArcthisError::InvalidArgument {
+                    message: "password file must be a regular file".to_owned(),
+                });
+            }
+            let mut bytes = Vec::new();
+            file.take(4097)
+                .read_to_end(&mut bytes)
+                .map_err(|error| ArcthisError::io("reading password file", error))?;
+            if bytes.len() > 4096 {
+                return Err(ArcthisError::ResourceLimit {
+                    message: "password file exceeds 4096 bytes".to_owned(),
+                });
+            }
+            while matches!(bytes.last(), Some(b'\n' | b'\r')) {
+                bytes.pop();
+            }
+            source.open_options.password = Some(crate::ArchivePassword::new(bytes));
+        }
         Ok(source)
     }
 
@@ -811,12 +855,44 @@ impl ServerHandler for McpServer {
         request: CallToolRequestParams,
         context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> std::result::Result<CallToolResponse, rmcp::ErrorData> {
+        if let Some(arguments) = &request.arguments {
+            if arguments
+                .get("entry_index")
+                .is_some_and(|value| !value.is_null())
+                && !matches!(
+                    request.name.as_ref(),
+                    "archive_stat" | "archive_read" | "archive_hash"
+                )
+            {
+                return Ok(mcp_error(ArcthisError::InvalidArgument {
+                    message: "entry_index applies only to stat/read/hash tools".to_owned(),
+                })
+                .into());
+            }
+            if arguments.contains_key("password") {
+                return Ok(mcp_error(ArcthisError::InvalidArgument {
+                    message:
+                        "inline passwords are not accepted; use password_file on read-only tools"
+                            .to_owned(),
+                })
+                .into());
+            }
+            if MUTATION_TOOL_NAMES.contains(&request.name.as_ref())
+                && arguments.contains_key("password_file")
+            {
+                return Ok(mcp_error(ArcthisError::InvalidArgument {
+                    message: "password_file is supported only by read-only tools".to_owned(),
+                })
+                .into());
+            }
+        }
         let Ok(permit) = Arc::clone(&self.request_slots).try_acquire_owned() else {
-            return Ok(CallToolResult::error(vec![ContentBlock::text(tool_error(
-                ArcthisError::ResourceLimit {
-                    message: "MCP concurrent request limit reached; retry after an active request completes".to_owned(),
-                },
-            ))]).into());
+            return Ok(mcp_error(ArcthisError::ResourceLimit {
+                message:
+                    "MCP concurrent request limit reached; retry after an active request completes"
+                        .to_owned(),
+            })
+            .into());
         };
         let server = self.clone();
         let runtime = tokio::runtime::Handle::current();
@@ -825,16 +901,39 @@ impl ServerHandler for McpServer {
             let _permit = permit;
             runtime.block_on(async {
                 let context = ToolCallContext::new(&server, request, context);
-                let response = server.tool_router.call(context).await?;
+                let Ok(mut response) = server.tool_router.call(context).await else {
+                    return Ok(mcp_error(ArcthisError::InvalidArgument {
+                        message: "invalid tool arguments or unknown tool name".to_owned(),
+                    })
+                    .into());
+                };
+                if let CallToolResponse::Complete(result) = &mut response
+                    && result.is_error == Some(true)
+                {
+                    let value = result
+                        .content
+                        .iter()
+                        .find_map(|content| content.as_text())
+                        .and_then(|text| {
+                            serde_json::from_str::<serde_json::Value>(&text.text).ok()
+                        });
+                    if let Some(value) = value.filter(|value| {
+                        value.get("schema_version").is_some() && value.get("error").is_some()
+                    }) {
+                        result.structured_content = Some(value);
+                    } else {
+                        *result = mcp_error(ArcthisError::InvalidArgument {
+                            message: "invalid tool arguments".to_owned(),
+                        });
+                    }
+                }
                 // Include tool errors too, which can quote an untrusted path/input.
                 if let CallToolResponse::Complete(result) = &response
                     && crate::budget::json_bytes(result, server.max_response_bytes).is_err()
                 {
-                    return Ok(CallToolResult::error(vec![ContentBlock::text(tool_error(
-                        ArcthisError::ResourceLimit {
-                            message: "MCP response exceeds the serialized byte budget".to_owned(),
-                        },
-                    ))])
+                    return Ok(mcp_error(ArcthisError::ResourceLimit {
+                        message: "MCP response exceeds the serialized byte budget".to_owned(),
+                    })
                     .into());
                 }
                 Ok(response)
@@ -867,12 +966,18 @@ pub fn run_stdio(config: McpConfig) -> ArcthisResult<()> {
         .build()
         .map_err(|error| ArcthisError::io("creating MCP runtime", error))?;
     runtime.block_on(async move {
-        let running = server
-            .serve(rmcp::transport::stdio())
-            .await
-            .map_err(|error| ArcthisError::UnsupportedOperation {
-                message: format!("starting MCP stdio transport: {error}"),
-            })?;
+        let running = match server.serve(rmcp::transport::stdio()).await {
+            Ok(running) => running,
+            Err(
+                rmcp::service::ServerInitializeError::ConnectionClosed(_)
+                | rmcp::service::ServerInitializeError::ExpectedInitializeRequest(None),
+            ) => return Ok(()),
+            Err(error) => {
+                return Err(ArcthisError::UnsupportedOperation {
+                    message: format!("starting MCP stdio transport: {error}"),
+                });
+            }
+        };
         running
             .waiting()
             .await
@@ -885,13 +990,7 @@ pub fn run_stdio(config: McpConfig) -> ArcthisResult<()> {
 
 #[allow(clippy::needless_pass_by_value)] // Required as a reusable `Result::map_err` function.
 fn tool_error(error: ArcthisError) -> String {
-    let value = serde_json::json!({
-        "schema_version": SCHEMA_VERSION,
-        "error": {
-            "code": error.code(),
-            "message": error.to_string(),
-        }
-    });
+    let value = crate::error::envelope(&error);
     serde_json::to_string(&value).unwrap_or_else(|_| "arcthis tool error".to_owned())
 }
 
@@ -915,4 +1014,39 @@ const fn default_grep_matches() -> u64 {
 
 const fn default_grep_result_bytes() -> u64 {
     16 * 1024 * 1024
+}
+
+fn mcp_error(error: ArcthisError) -> CallToolResult {
+    let text = tool_error(error);
+    let value = serde_json::from_str(&text).ok();
+    let mut result = CallToolResult::error(vec![ContentBlock::text(text)]);
+    result.structured_content = value;
+    result
+}
+
+fn versioned_output_schema(
+    schema: &serde_json::Map<String, serde_json::Value>,
+) -> Arc<serde_json::Map<String, serde_json::Value>> {
+    let mut success = schema.clone();
+    let definitions = success.remove("$defs");
+    let dialect = success.remove("$schema");
+    let error = serde_json::json!({"type":"object","required":["schema_version","error"],"properties":{
+        "schema_version":{"type":"string","const":SCHEMA_VERSION},
+        "error":{"type":"object","required":["code","message","details"],"properties":{"code":{"type":"string"},"message":{"type":"string"},"details":{"type":"object"}}}
+    }});
+    let mut envelope = serde_json::Map::new();
+    envelope.insert("type".to_owned(), serde_json::json!("object"));
+    envelope.insert("required".to_owned(), serde_json::json!(["schema_version"]));
+    envelope.insert(
+        "properties".to_owned(),
+        serde_json::json!({"schema_version":{"type":"string","const":SCHEMA_VERSION}}),
+    );
+    envelope.insert("anyOf".to_owned(), serde_json::json!([success, error]));
+    if let Some(definitions) = definitions {
+        envelope.insert("$defs".to_owned(), definitions);
+    }
+    if let Some(dialect) = dialect {
+        envelope.insert("$schema".to_owned(), dialect);
+    }
+    Arc::new(envelope)
 }
