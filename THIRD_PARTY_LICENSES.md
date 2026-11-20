@@ -12,7 +12,9 @@ Direct dependencies and their declared licenses:
 | --- | --- | --- | --- |
 | `bzip2` | 0.6 | MIT OR Apache-2.0 | Bzip2 single-stream codec (delegates to pure-Rust `libbz2-rs-sys`) |
 | `base64` | 0.23 | MIT OR Apache-2.0 | Optional MCP binary-window encoding |
+| `blake3` | 1.8 | CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception | Optional BLAKE3 digest algorithm |
 | `clap` | 4.6 | MIT OR Apache-2.0 | CLI grammar and help |
+| `clap_complete` | 4.6 | MIT OR Apache-2.0 | Shell completion generation from the CLI grammar |
 | `compress-tools` | 0.16 | MIT OR Apache-2.0 | libarchive adapter used by the RAR backend |
 | `directories` | 6.0 | MIT OR Apache-2.0 | Platform cache directory for persistent indexes |
 | `encoding_rs` | 0.8 | (Apache-2.0 OR MIT) AND BSD-3-Clause | Strict opt-in legacy filename decoding; never compression |
@@ -20,6 +22,7 @@ Direct dependencies and their declared licenses:
 | `globset` | 0.4 | Unlicense OR MIT | Glob matching for `find`/`grep` |
 | `lzma-rust2` | 0.20 | Apache-2.0 | Pure-Rust XZ/LZMA codec |
 | `mime_guess` | 2.0 | MIT | Lightweight MIME guess on entry names |
+| `regex` | 1 | MIT OR Apache-2.0 | Bounded regular expressions and Unicode case folding for grep |
 | `rmcp` | 3.1 | Apache-2.0 | Optional MCP `2025-06-18` server and stdio transport |
 | `schemars` | 1.2 | MIT | Optional MCP input/output JSON Schema generation |
 | `serde` / `serde_json` | 1.0 | MIT OR Apache-2.0 | Stable JSON schema serialization |

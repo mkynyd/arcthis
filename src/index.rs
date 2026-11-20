@@ -16,6 +16,20 @@ use crate::model::{ArchiveEntry, ArchiveFormat};
 
 const INDEX_SCHEMA_VERSION: &str = "2";
 
+/// State of the persistent metadata cache for a read operation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum IndexStatus {
+    #[default]
+    NotChecked,
+    Bypassed,
+    Miss,
+    Invalid,
+    Stale,
+    Hit,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IndexAction {
@@ -75,7 +89,7 @@ pub fn maintain_index(
     if delete {
         let count = read_document(&index_path)
             .ok()
-            .flatten()
+            .and_then(IndexDocumentState::into_document)
             .map_or(0, |document| {
                 u64::try_from(document.entries.len()).unwrap_or(u64::MAX)
             });
@@ -99,7 +113,7 @@ pub fn maintain_index(
     }
 
     if !refresh
-        && let Some(entries) = load_cached_entries(
+        && let (IndexStatus::Hit, Some(entries)) = load_cached_entries(
             &canonical,
             detect_archive_format(&canonical, open_options)?,
             open_options.index_directory.as_deref(),
@@ -159,22 +173,25 @@ pub(crate) fn load_cached_entries(
     archive_path: &Path,
     format: ArchiveFormat,
     index_directory: Option<&Path>,
-) -> Result<Option<Vec<ArchiveEntry>>> {
+) -> Result<(IndexStatus, Option<Vec<ArchiveEntry>>)> {
     let Ok(canonical) = archive_path.canonicalize() else {
-        return Ok(None);
+        return Ok((IndexStatus::Bypassed, None));
     };
     let path = cache_path(&canonical, index_directory)?;
-    let Some(document) = read_document(&path)? else {
-        return Ok(None);
+    let document = match read_document(&path)? {
+        IndexDocumentState::Missing => return Ok((IndexStatus::Miss, None)),
+        IndexDocumentState::Invalid => return Ok((IndexStatus::Invalid, None)),
+        IndexDocumentState::Outdated => return Ok((IndexStatus::Stale, None)),
+        IndexDocumentState::Valid(document) => document,
     };
     if document.schema_version != INDEX_SCHEMA_VERSION
         || document.archive != canonical
         || document.format != format
         || document.fingerprint != fingerprint(&canonical)?
     {
-        return Ok(None);
+        return Ok((IndexStatus::Stale, None));
     }
-    Ok(Some(document.entries))
+    Ok((IndexStatus::Hit, Some(document.entries)))
 }
 
 fn write_index(
@@ -329,7 +346,7 @@ pub fn manage_cache(
             let metadata = entry
                 .metadata()
                 .map_err(|error| ArcthisError::io("reading index metadata", error))?;
-            let document = read_document(&path)?;
+            let document = read_document(&path)?.into_document();
             let expired = metadata
                 .modified()
                 .ok()
@@ -382,24 +399,55 @@ impl std::fmt::Display for IndexAction {
     }
 }
 
-fn read_document(path: &Path) -> Result<Option<IndexDocument>> {
+enum IndexDocumentState {
+    Missing,
+    Invalid,
+    Outdated,
+    Valid(IndexDocument),
+}
+
+impl IndexDocumentState {
+    fn into_document(self) -> Option<IndexDocument> {
+        match self {
+            Self::Valid(document) => Some(document),
+            Self::Missing | Self::Invalid | Self::Outdated => None,
+        }
+    }
+}
+
+fn read_document(path: &Path) -> Result<IndexDocumentState> {
+    #[derive(Deserialize)]
+    struct IndexVersion<'a> {
+        schema_version: &'a str,
+    }
+
     let file = match fs::File::open(path) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(IndexDocumentState::Missing);
+        }
         Err(error) => return Err(ArcthisError::io("opening archive index", error)),
     };
     let metadata = file
         .metadata()
         .map_err(|error| ArcthisError::io("reading index metadata", error))?;
     if !metadata.is_file() || metadata.len() > 64 * 1024 * 1024 {
-        return Ok(None);
+        return Ok(IndexDocumentState::Invalid);
     }
     let mut bytes = Vec::new();
     file.take(64 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|error| ArcthisError::io("reading archive index", error))?;
     if bytes.len() > 64 * 1024 * 1024 {
-        return Ok(None);
+        return Ok(IndexDocumentState::Invalid);
     }
-    Ok(serde_json::from_slice(&bytes).ok())
+    if let Ok(document) = serde_json::from_slice(&bytes) {
+        return Ok(IndexDocumentState::Valid(document));
+    }
+    if serde_json::from_slice::<IndexVersion<'_>>(&bytes)
+        .is_ok_and(|version| version.schema_version != INDEX_SCHEMA_VERSION)
+    {
+        return Ok(IndexDocumentState::Outdated);
+    }
+    Ok(IndexDocumentState::Invalid)
 }

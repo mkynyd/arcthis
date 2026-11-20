@@ -1,6 +1,6 @@
 [package]
 name = "arcthis"
-version = "0.6.0"
+version = "0.7.0-rc.1"
 edition = "2024"
 rust-version = "1.98"
 description = "A command-line tool for reading and managing compressed files"
@@ -32,8 +32,10 @@ categories = ["command-line-utilities", "compression"]
 [dependencies]
 bzip2 = "0.6"
 base64 = { version = "0.23", optional = true }
+blake3 = "1.8"
 clap = { version = "4.6", features = ["derive"] }
 compress-tools = { version = "0.16", default-features = false, features = ["static"] }
+clap_complete = "4.6"
 directories = "6.0"
 # Explicit, strict legacy filename decoding; never used for archive compression.
 encoding_rs = "0.8"
@@ -41,6 +43,7 @@ flate2 = "1.1"
 globset = "0.4"
 lzma-rust2 = "0.20"
 mime_guess = "2.0"
+regex = "1.12"
 rmcp = { version = "=3.1.4", optional = true, default-features = false, features = ["base64", "macros", "server", "transport-io"] }
 schemars = { version = "1.2", optional = true }
 serde = { version = "1.0", features = ["derive"] }

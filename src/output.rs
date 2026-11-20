@@ -9,7 +9,7 @@ use crate::batch::{ExtractAllPlan, ExtractAllResult};
 use crate::convert::{ConvertPlan, ConvertResult};
 use crate::error::{ArcthisError, Result};
 use crate::extract::{ExtractPlan, ExtractResult};
-use crate::index::IndexResult;
+use crate::index::{IndexAction, IndexResult};
 use crate::model::{ArchiveEntry, ArchiveFormat, ArchiveInspection, VerificationResult};
 use crate::pack::{PackPlan, PackResult};
 use crate::query::{FindResult, GrepResult, HashResult};
@@ -631,6 +631,18 @@ pub(crate) fn write_index(writer: &mut impl Write, result: &IndexResult, json: b
                 index: result,
             },
         )
+    } else if matches!(
+        result.action,
+        IndexAction::Deleted | IndexAction::WouldDelete | IndexAction::Missing
+    ) {
+        writeln!(
+            writer,
+            "{} index {} at {}",
+            result.action,
+            result.archive.display(),
+            result.index_path.display()
+        )
+        .map_err(|error| ArcthisError::io("writing index result", error))
     } else {
         writeln!(
             writer,

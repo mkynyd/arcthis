@@ -153,7 +153,7 @@ Single-stream targets require one root-level regular entry. Nested conversion an
 
 ## Batch orchestration
 
-`extract-all` discovers supported archives by opening content rather than trusting extensions. It completes per-archive planning before execution and rejects equal or nested destination conflicts, including a destination that would replace another discovered archive source. Independent plans then run through a bounded synchronous worker pool. Each worker calls the same `Archive::extract` path used by the single-archive command. Results are sorted for deterministic machine output; partial failures use the stable `partial_failure` category.
+`extract-all` discovers supported archives by opening content rather than trusting extensions. It protects every discovered source, then reserves canonical destinations in discovery order. `--rename` considers disk paths and earlier reservations. With `--continue-on-error`, plans that conflict with an earlier reservation or any source become per-archive errors. Independent plans run through a bounded synchronous worker pool. Workers use the reserved destinations and share single-archive validation, root stripping, staging and commit logic. Results are sorted for deterministic machine output; partial failures use the stable `partial_failure` category.
 
 ## Error model
 

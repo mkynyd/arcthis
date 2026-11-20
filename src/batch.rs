@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 use crate::archive::{Archive, ArchiveOpenOptions};
 use crate::error::{ArcthisError, ErrorCode, Result};
 use crate::extract::{ExtractOptions, ExtractPlan, ExtractResult};
-use crate::lifecycle::{OperationStatus, comparable_path};
+use crate::lifecycle::{CollisionPolicy, OperationStatus, comparable_path};
 
 #[derive(Debug, Clone)]
 pub struct ExtractAllOptions {
@@ -61,113 +61,101 @@ pub fn plan_extract_all(root: &Path, options: &ExtractAllOptions) -> Result<Extr
         options.continue_on_error,
         &mut errors,
     )?;
-    let workers = normalized_workers(options.workers);
+    // All discovered sources, including archives that fail validation, remain protected.
+    let sources = paths
+        .iter()
+        .chain(errors.iter().map(|item| &item.archive))
+        .map(|path| comparable_path(path).map(|path| (path_key(&path), path)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let mut destinations = BTreeMap::new();
+    let mut destination_conflicts = Vec::new();
     let mut archives = Vec::with_capacity(paths.len());
     for path in paths {
+        let archive_options = per_archive_options(&path, &options.extract);
         let result =
             Archive::open_with_options(path.as_path(), &options.open).and_then(|archive| {
-                archive.plan_extract(None, &per_archive_options(&path, &options.extract))
+                archive.plan_extract_reserved(None, &archive_options, &|candidate| {
+                    let key = path_key(candidate);
+                    find_overlapping_path(&sources, &key).is_some()
+                        || find_overlapping_path(&destinations, &key).is_some()
+                })
             });
-        match result {
-            Ok(plan) => archives.push(plan),
-            Err(error) if options.continue_on_error => errors.push(failed_item(&path, &error)),
-            Err(error) => return Err(error),
-        }
-    }
-    let destination_conflicts = find_plan_path_conflicts(&archives)?;
-    if options.continue_on_error {
-        let mut sources = BTreeMap::new();
-        for plan in &archives {
-            sources.insert(comparable_path(&plan.source)?, plan.source.clone());
-        }
-        for error in &errors {
-            sources.insert(comparable_path(&error.archive)?, error.archive.clone());
-        }
-        let mut destinations = BTreeMap::new();
-        let mut duplicates = std::collections::HashSet::new();
-        for plan in archives.iter().filter(|plan| !plan.will_skip) {
-            let path = comparable_path(&plan.destination)?;
-            if destinations
-                .insert(path.clone(), plan.source.clone())
-                .is_some()
-            {
-                duplicates.insert(path);
+        let plan = match result {
+            Ok(plan) => plan,
+            Err(error) if options.continue_on_error => {
+                errors.push(failed_item(&path, &error));
+                continue;
             }
-        }
-        let mut safe = Vec::new();
-        for plan in archives {
-            let path = comparable_path(&plan.destination)?;
-            let overlapping_source =
-                !plan.will_skip && find_overlapping_path(&sources, &path).is_some();
-            let overlapping_destination = if plan.will_skip {
-                false
-            } else if duplicates.contains(&path) {
-                true
-            } else {
-                let owner = destinations.remove(&path);
-                let overlaps = find_overlapping_path(&destinations, &path).is_some();
-                if let Some(owner) = owner {
-                    destinations.insert(path.clone(), owner);
+            Err(error) => return Err(error),
+        };
+        if !plan.will_skip {
+            let key = path_key(&plan.destination);
+            let conflict = find_overlapping_path(&sources, &key)
+                .map(|source| {
+                    format!(
+                        "destination {} overlaps archive source {}",
+                        plan.destination.display(),
+                        source.display()
+                    )
+                })
+                .or_else(|| {
+                    find_overlapping_path(&destinations, &key).map(|destination| {
+                        format!(
+                            "destinations {} and {} overlap",
+                            destination.display(),
+                            plan.destination.display()
+                        )
+                    })
+                });
+            if let Some(message) = conflict {
+                if options.continue_on_error {
+                    errors.push(failed_item(&path, &ArcthisError::Collision { message }));
+                    continue;
                 }
-                overlaps
-            };
-            if overlapping_source || overlapping_destination {
+                destination_conflicts.push(message);
+            }
+            if options.continue_on_error
+                && plan.collision
+                && archive_options.collision_policy == CollisionPolicy::Refuse
+            {
                 errors.push(failed_item(
-                    &plan.source,
+                    &path,
                     &ArcthisError::Collision {
                         message: format!(
-                            "batch destination {} overlaps another source or destination",
-                            path.display()
+                            "destination already exists: {}",
+                            plan.destination.display()
                         ),
                     },
                 ));
-            } else {
-                safe.push(plan);
+                continue;
             }
+            destinations.insert(key, plan.destination.clone());
         }
-        archives = safe;
+        archives.push(plan);
     }
+    errors.sort_by(|left, right| left.archive.cmp(&right.archive));
     Ok(ExtractAllPlan {
         root,
         recursive: options.recursive,
-        workers,
+        workers: normalized_workers(options.workers),
         archives,
-        destination_conflicts: if options.continue_on_error {
-            Vec::new()
-        } else {
-            destination_conflicts
-        },
+        destination_conflicts,
         errors,
     })
 }
 
-fn find_plan_path_conflicts(archives: &[ExtractPlan]) -> Result<Vec<String>> {
-    let mut sources = BTreeMap::<PathBuf, PathBuf>::new();
-    for plan in archives {
-        sources.insert(comparable_path(&plan.source)?, plan.source.clone());
-    }
-
-    let mut destinations = BTreeMap::<PathBuf, PathBuf>::new();
-    let mut conflicts = Vec::new();
-    for plan in archives.iter().filter(|plan| !plan.will_skip) {
-        let destination = comparable_path(&plan.destination)?;
-        if let Some(source) = find_overlapping_path(&sources, &destination) {
-            conflicts.push(format!(
-                "destination {} overlaps archive source {}",
-                plan.destination.display(),
-                source.display()
-            ));
-        }
-        if let Some(previous) = find_overlapping_path(&destinations, &destination) {
-            conflicts.push(format!(
-                "destinations {} and {} overlap",
-                previous.display(),
-                plan.destination.display()
-            ));
-        }
-        destinations.insert(destination, plan.destination.clone());
-    }
-    Ok(conflicts)
+fn path_key(path: &Path) -> PathBuf {
+    // Absent destinations cannot be canonicalized to filesystem spelling. Reserve
+    // case variants together so parallel workers remain independent on macOS too.
+    path.components()
+        .map(|component| {
+            let name = component.as_os_str();
+            name.to_str().map_or_else(
+                || name.to_ascii_lowercase(),
+                |name| name.to_lowercase().into(),
+            )
+        })
+        .collect()
 }
 
 fn find_overlapping_path<'a>(
@@ -201,7 +189,7 @@ pub fn extract_all(root: &Path, options: &ExtractAllOptions) -> Result<ExtractAl
     let paths = plan
         .archives
         .into_iter()
-        .map(|archive| archive.source)
+        .map(|archive| (archive.source, archive.destination))
         .collect::<Vec<_>>();
     let discovered = u64::try_from(paths.len() + initial_items.len()).unwrap_or(u64::MAX);
     let queue = Arc::new(Mutex::new(VecDeque::from(paths)));
@@ -219,10 +207,10 @@ pub fn extract_all(root: &Path, options: &ExtractAllOptions) -> Result<ExtractAl
                         Ok(mut queue) => queue.pop_front(),
                         Err(_) => None,
                     };
-                    let Some(path) = path else {
+                    let Some((path, destination)) = path else {
                         break;
                     };
-                    let result = execute_one(&path, &extract_options, &open_options);
+                    let result = execute_one(&path, &destination, &extract_options, &open_options);
                     if sender.send(result).is_err() {
                         break;
                     }
@@ -267,11 +255,13 @@ pub fn extract_all(root: &Path, options: &ExtractAllOptions) -> Result<ExtractAl
 
 fn execute_one(
     path: &Path,
+    destination: &Path,
     options: &ExtractOptions,
     open_options: &ArchiveOpenOptions,
 ) -> ExtractAllItem {
-    let result = Archive::open_with_options(path, open_options)
-        .and_then(|archive| archive.extract(None, &per_archive_options(path, options)));
+    let result = Archive::open_with_options(path, open_options).and_then(|archive| {
+        archive.extract_to_planned(&per_archive_options(path, options), destination)
+    });
     match result {
         Ok(ExtractResult {
             destination,
@@ -289,16 +279,7 @@ fn execute_one(
             error_code: None,
             error_message: None,
         },
-        Err(error) => ExtractAllItem {
-            archive: path.to_path_buf(),
-            destination: None,
-            status: None,
-            entries_extracted: 0,
-            bytes_written: 0,
-            source_deleted: false,
-            error_code: Some(error.code()),
-            error_message: Some(error.to_string()),
-        },
+        Err(error) => failed_item(path, &error),
     }
 }
 

@@ -25,7 +25,7 @@
 - `src/security.rs` 是 entry path 和 extraction 安全规则的单一真相源；先规范化安全的 `.`／冗余分隔符，再做重复、大小写和父子冲突检查。原始路径字节与显式解码集中在 `src/archive/names.rs`。
 - 全量抽取复用 backend 批量复制和统一 `ExtractionWriter`；计划以 `archive_index` 传递实例身份，禁止用可能有转义歧义的显示字符串作为唯一抽取键。
 - `src/lifecycle.rs` 统一管理 collision policy、staged commit、rollback 与 post-commit source deletion；pack/extract/batch 不得各自发明生命周期语义。
-- `src/batch.rs` 只编排独立 archive，必须复用单 archive 的 planning/extraction 路径，并保持有界 worker 与确定性结果顺序。
+- `src/batch.rs` 只编排独立 archive，必须复用单 archive 的 planning/extraction 路径，并保持有界 worker 与确定性结果顺序。批量规划先保护所有已发现源路径，再按发现顺序预留目标。worker 使用规划出的路径。
 - `src/query.rs` 管理 find/grep/hash 的格式无关 streaming 语义；内容扫描必须具备 entry、line、match 与 binary 限制。多条目扫描通过 archive/backend 批量复制接口复用读取状态，不得在 query 层加入格式分支或逐文件复制整张元数据表。
 - `src/budget.rs` 统一计算结果 JSON 字节；MCP 同时限制活跃请求、工具响应与服务端资源上限。
 - Nested archive 必须通过显式 `--within` 与受限 reader/source abstraction 实现，不得使用歧义 path grammar，也不得静默创建具名临时 inner archive。
@@ -54,7 +54,7 @@
 - 命令语法优先保持 `arcthis <command> <archive> [entry] [options]`，禁止加入格式专属一级命令。
 - stdout 仅输出结果数据，stderr 仅输出诊断、警告和进度。`read` 的 stdout 是原始 entry bytes。
 - 非 TTY、`--json`、`NO_COLOR` 或 `--no-color` 模式不得输出 ANSI decoration。BrokenPipe 必须按 Unix 惯例正常退出。
-- 当前版本为 `0.6.0` / JSON schema 2；旧版 0.5.1 为 schema 1，迁移见 ADR-0002。
+- 当前版本为 `0.7.0-rc.1` / JSON schema 2；旧版 0.5.1 为 schema 1，迁移见 ADR-0002。
 - JSON 是公共 interface。已发布 schema 的字段名、类型、含义和 `schema_version` 不得静默改变；破坏性改动必须写 RFC/ADR 并升级 schema version。
 - Machine mode 错误写入 stderr，使用稳定 error code 和合理的 process exit code，不暴露 crate 或 Rust backtrace。
 

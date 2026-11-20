@@ -31,7 +31,11 @@ ZIP 通常可以直接读取目标文件；TAR 和 TAR.GZ 按顺序扫描。`ins
 
 Arcthis v0.6.0 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。发布来源、平台和安装验收见 [0.6.0 发布记录](./docs/RELEASE-0.6.0.md)。
 
-### v0.6.0 更新
+### v0.7.0 更新
+
+批量解压按发现顺序预留目标路径。使用 `extract-all --rename --continue-on-error` 可为同名顶层目录分配不同目标，并逐包报告失败。本版还增加了搜索模式和无匹配退出选项、Shell 补全、BLAKE3 与索引诊断。详见[变更记录](./CHANGELOG.md)。
+
+### Schema 2 迁移
 
 版本 **0.6.0 使用 JSON schema 2**，保留 ZIP 重名实例，修复 solid 7z 比例与 TAR dot 路径，复用扫描 reader，并提供有界 stdin、严格编码、先校验读取、逐档继续和缓存管理。详见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)和[schema 迁移 ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md)。
 
@@ -163,7 +167,7 @@ arcthis extract archive.zip README.md --output ./README.md
 arcthis extract archive.tar.gz
 
 # 在执行会删除文件的批量操作前，先查看结构化计划
-arcthis extract-all ./downloads --recursive --delete-source --dry-run --json
+arcthis extract-all ./downloads --recursive --rename --continue-on-error --dry-run --json
 
 # 创建、重新打开、验证并保存新压缩包
 arcthis pack ./project --output project.tar.gz
@@ -187,7 +191,7 @@ arcthis convert project.zip --output project.tar.zst --dry-run --json
 
 ## Agent 接口
 
-0.6.0 使用 schema 2；0.5.1 使用 schema 1。
+0.6.0 和 0.7.0 使用 schema 2。从 0.5.x 升级时，运行时错误从 stderr 读取，结果从 stdout 读取。
 
 - 成功的结构化输出使用 `schema_version: "2"`。
 - 结果写 stdout；警告与错误写 stderr。

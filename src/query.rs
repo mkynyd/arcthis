@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 
 use globset::{Glob, GlobMatcher};
+use regex::bytes::{Regex, RegexBuilder};
 use serde::Serialize;
 use sha2::{Digest, Sha256, Sha512};
 
@@ -25,6 +26,7 @@ pub struct FindResult {
 pub enum HashAlgorithm {
     Sha256,
     Sha512,
+    Blake3,
 }
 
 impl HashAlgorithm {
@@ -32,6 +34,7 @@ impl HashAlgorithm {
         match self {
             Self::Sha256 => "sha256",
             Self::Sha512 => "sha512",
+            Self::Blake3 => "blake3",
         }
     }
 }
@@ -48,6 +51,8 @@ pub struct HashResult {
 #[derive(Debug, Clone)]
 pub struct GrepOptions {
     pub glob: Option<String>,
+    pub ignore_case: bool,
+    pub regex: bool,
     pub max_entry_size: u64,
     pub max_matches: u64,
     pub scan_binary: bool,
@@ -61,6 +66,8 @@ impl Default for GrepOptions {
     fn default() -> Self {
         Self {
             glob: None,
+            ignore_case: false,
+            regex: false,
             max_entry_size: 16 * 1024 * 1024,
             max_matches: 10_000,
             scan_binary: false,
@@ -84,6 +91,8 @@ pub struct GrepMatch {
 pub struct GrepResult {
     pub pattern: String,
     pub glob: Option<String>,
+    pub ignore_case: bool,
+    pub regex: bool,
     pub files_scanned: u64,
     pub binary_files_skipped: u64,
     pub oversized_files_skipped: u64,
@@ -120,10 +129,13 @@ pub fn hash(archive: &Archive, entry: &str, algorithm: HashAlgorithm) -> Result<
 
 pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<GrepResult> {
     let matcher = options.glob.as_deref().map(build_matcher).transpose()?;
+    let pattern_matcher = LineMatcher::new(pattern, options)?;
     let entries = archive.entries()?;
     let mut result = GrepResult {
         pattern: pattern.to_owned(),
         glob: options.glob.clone(),
+        ignore_case: options.ignore_case,
+        regex: options.regex,
         files_scanned: 0,
         binary_files_skipped: 0,
         oversized_files_skipped: 0,
@@ -153,7 +165,7 @@ pub fn grep(archive: &Archive, pattern: &str, options: &GrepOptions) -> Result<G
         }
         let mut scanner = GrepWriter::new(
             &entry.path,
-            pattern,
+            &pattern_matcher,
             remaining,
             options,
             options.max_result_bytes.saturating_sub(result_bytes),
@@ -197,6 +209,7 @@ fn build_matcher(pattern: &str) -> Result<GlobMatcher> {
 enum HashState {
     Sha256(Sha256),
     Sha512(Sha512),
+    Blake3(Box<blake3::Hasher>),
 }
 
 struct HashWriter {
@@ -209,6 +222,7 @@ impl HashWriter {
         let state = match algorithm {
             HashAlgorithm::Sha256 => HashState::Sha256(Sha256::new()),
             HashAlgorithm::Sha512 => HashState::Sha512(Sha512::new()),
+            HashAlgorithm::Blake3 => HashState::Blake3(Box::default()),
         };
         Self { state, bytes: 0 }
     }
@@ -217,6 +231,7 @@ impl HashWriter {
         match self.state {
             HashState::Sha256(state) => hex(&state.finalize()),
             HashState::Sha512(state) => hex(&state.finalize()),
+            HashState::Blake3(state) => state.finalize().to_hex().to_string(),
         }
     }
 }
@@ -226,6 +241,9 @@ impl Write for HashWriter {
         match &mut self.state {
             HashState::Sha256(state) => state.update(buffer),
             HashState::Sha512(state) => state.update(buffer),
+            HashState::Blake3(state) => {
+                state.update(buffer);
+            }
         }
         self.bytes = self.bytes.saturating_add(buffer.len() as u64);
         Ok(buffer.len())
@@ -233,6 +251,45 @@ impl Write for HashWriter {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+enum LineMatcher<'a> {
+    Literal(&'a [u8]),
+    Regex(Regex),
+}
+
+impl<'a> LineMatcher<'a> {
+    fn new(pattern: &'a str, options: &GrepOptions) -> Result<Self> {
+        if !options.ignore_case && !options.regex {
+            return Ok(Self::Literal(pattern.as_bytes()));
+        }
+        let expression = if options.regex {
+            std::borrow::Cow::Borrowed(pattern)
+        } else {
+            regex::escape(pattern).into()
+        };
+        RegexBuilder::new(&expression)
+            .case_insensitive(options.ignore_case)
+            .size_limit(2 * 1024 * 1024)
+            .dfa_size_limit(2 * 1024 * 1024)
+            .build()
+            .map(Self::Regex)
+            .map_err(|error| match error {
+                regex::Error::CompiledTooBig(_) => ArcthisError::ResourceLimit {
+                    message: "compiled grep pattern exceeds 2 MiB".to_owned(),
+                },
+                _ => ArcthisError::InvalidArgument {
+                    message: "invalid grep regular expression".to_owned(),
+                },
+            })
+    }
+
+    fn is_match(&self, line: &[u8]) -> bool {
+        match self {
+            Self::Literal(pattern) => contains_bytes(line, pattern),
+            Self::Regex(regex) => regex.is_match(line),
+        }
     }
 }
 
@@ -247,7 +304,7 @@ struct GrepScan {
 #[allow(clippy::struct_excessive_bools)] // Independent streaming scan facts are clearer than an artificial state enum.
 struct GrepWriter<'a> {
     path: &'a str,
-    pattern: &'a [u8],
+    matcher: &'a LineMatcher<'a>,
     scan_binary: bool,
     binary: bool,
     probe_complete: bool,
@@ -268,7 +325,7 @@ struct GrepWriter<'a> {
 impl<'a> GrepWriter<'a> {
     fn new(
         path: &'a str,
-        pattern: &'a str,
+        matcher: &'a LineMatcher<'a>,
         max_matches: u64,
         options: &GrepOptions,
         max_result_bytes: u64,
@@ -276,7 +333,7 @@ impl<'a> GrepWriter<'a> {
     ) -> Self {
         Self {
             path,
-            pattern: pattern.as_bytes(),
+            matcher,
             scan_binary: options.scan_binary,
             binary: false,
             probe_complete: false,
@@ -314,7 +371,7 @@ impl<'a> GrepWriter<'a> {
     }
 
     fn finish_line(&mut self) {
-        if !self.truncated && contains_bytes(&self.line, self.pattern) {
+        if !self.truncated && self.matcher.is_match(&self.line) {
             let matched = GrepMatch {
                 path: self.path.to_owned(),
                 line_number: self.line_number,

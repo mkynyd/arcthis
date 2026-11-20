@@ -12,7 +12,7 @@ use crate::error::{ArcthisError, Result};
 use crate::lifecycle::{
     CollisionPolicy, OperationStatus, commit_staged_path, delete_source,
     ensure_executable_resolution, ensure_source_and_destination_do_not_overlap,
-    resolve_destination,
+    resolve_destination, resolve_destination_reserved,
 };
 use crate::model::{ArchiveEntry, ArchiveFormat, EntryKind, EntryPathEncoding};
 use crate::security::{ExtractionLimits, validate_entry_path};
@@ -82,13 +82,14 @@ pub(crate) fn extract_archive(
     if let Some(entry) = selected_entry {
         return extract_single(archive, entry, options);
     }
-    extract_all(archive, options)
+    extract_all(archive, options, None)
 }
 
 pub(crate) fn plan_extract_archive(
     archive: &Archive,
     selected_entry: Option<&str>,
     options: &ExtractOptions,
+    reserved: &dyn Fn(&Path) -> bool,
 ) -> Result<ExtractPlan> {
     let (requested, entries_to_extract, estimated_uncompressed_size) =
         if let Some(selected_entry) = selected_entry {
@@ -140,7 +141,7 @@ pub(crate) fn plan_extract_archive(
                 size,
             )
         };
-    let resolution = resolve_destination(&requested, options.collision_policy)?;
+    let resolution = resolve_destination_reserved(&requested, options.collision_policy, reserved)?;
     ensure_source_and_destination_do_not_overlap(archive.path(), &resolution.path)?;
     let warnings = archive
         .inspect()?
@@ -244,7 +245,11 @@ fn extract_single(
     })
 }
 
-fn extract_all(archive: &Archive, options: &ExtractOptions) -> Result<ExtractResult> {
+pub(crate) fn extract_all(
+    archive: &Archive,
+    options: &ExtractOptions,
+    planned_destination: Option<&Path>,
+) -> Result<ExtractResult> {
     let entries = archive.entries()?;
     enforce_entry_count(entries.len(), &options.limits)?;
     let validated = validate_entries(&entries, &options.limits)?;
@@ -256,9 +261,18 @@ fn extract_all(archive: &Archive, options: &ExtractOptions) -> Result<ExtractRes
         options.base_directory.as_deref(),
         &validated,
     )?;
-    let resolution = resolve_destination(&requested, options.collision_policy)?;
+    let policy = match (planned_destination, options.collision_policy) {
+        (Some(_), CollisionPolicy::Rename) => CollisionPolicy::Refuse,
+        (_, policy) => policy,
+    };
+    let resolution = resolve_destination(planned_destination.unwrap_or(&requested), policy)?;
+    if planned_destination.is_some_and(|path| path != resolution.path) {
+        return Err(ArcthisError::Collision {
+            message: format!("batch destination changed: {}", resolution.path.display()),
+        });
+    }
     ensure_source_and_destination_do_not_overlap(archive.path(), &resolution.path)?;
-    ensure_executable_resolution(&resolution, options.collision_policy)?;
+    ensure_executable_resolution(&resolution, policy)?;
     if resolution.skip {
         return Ok(ExtractResult {
             destination: resolution.path,
@@ -314,7 +328,7 @@ fn extract_all(archive: &Archive, options: &ExtractOptions) -> Result<ExtractRes
         archive.verify()?;
     }
     let staging_path = staging.keep();
-    if let Err(error) = commit_staged_path(&staging_path, &destination, options.collision_policy) {
+    if let Err(error) = commit_staged_path(&staging_path, &destination, policy) {
         let _cleanup_result = fs::remove_dir_all(&staging_path);
         return Err(error);
     }

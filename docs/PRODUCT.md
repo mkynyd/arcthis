@@ -71,7 +71,7 @@ v0.2 extends the trusted tool without changing the access-first workflow:
 
 - Formats: 7z, TAR.BZ2/TBZ2, TAR.XZ/TXZ, TAR.ZST/TZST, plus GZIP, BZIP2, XZ, and Zstandard single-file formats.
 - Creation: all implemented container and single-file formats can be produced through `pack`, finished, reopened, and verified before saving.
-- Batch extraction: `extract-all` performs capped parallel work across independent archives and supports recursive discovery.
+- Batch extraction: `extract-all` performs capped parallel work, supports recursive discovery, and can reserve numbered destinations and continue independent work after per-archive failures.
 - Planning: `extract`, `extract-all`, and `pack` expose structured `--dry-run` plans.
 - Lifecycle: `--delete-source` runs only after successful verification and destination save; skipped and failed operations retain the source.
 - Collisions: refusal remains the default, with explicit mutually exclusive overwrite, skip, and rename choices.
@@ -82,7 +82,7 @@ v0.2 extends the trusted tool without changing the access-first workflow:
 v0.3 adds agent-native discovery while preserving capped read behavior:
 
 - Path discovery: `find` applies glob filters to normalized file metadata without content decoding.
-- Content discovery: literal `grep` reads regular files with binary, file-size, line-size, and match-count limits.
+- Content discovery: `grep` supports literal and regular expression search with binary, file-size, line-size and match-count limits.
 - Integrity commands: `hash` checksums one file through SHA-256 or SHA-512.
 - Metadata: files expose stable archive order and lightweight extension-based MIME guesses through a reusable in-process metadata index.
 - Nested access: repeatable `--within` chains open selected inner archive files through capped read-only memory buffers without named temporary files.

@@ -1,6 +1,6 @@
 # Arcthis 发布流程
 
-当前版本为 `0.6.0` / JSON schema 2。候选版本为 `v0.6.0-rc.1`；每次后续发布仍需完整执行候选、三平台、CI、Secret 与渠道验收门禁，不得复用旧 Tag。
+当前候选版本为 `v0.7.0-rc.1` / JSON schema 2，上一正式版为 `v0.6.0`；每次后续发布仍需完整执行候选、三平台、CI、Secret 与渠道验收门禁，不得复用旧 Tag。
 
 本文记录公开版本的固定发布步骤。正式发布不可覆盖；任何一项未满足都应停止，不应通过 `--allow-dirty`、跳过验证或手工修改生成产物绕过。
 
@@ -46,14 +46,14 @@ dist plan
 
 - `Cargo.toml`、`Cargo.lock`、`CHANGELOG.md`、网站与文档版本一致；
 - GitHub 的 `CI` 和 `Release` pull request 检查全部通过；
-- 发布计划只包含已支持的三个 target；
+- 发布计划只包含已支持的三个 target。Apple Silicon 发布和下载包验证使用 `macos-15`，Intel 使用 `macos-15-intel`；
 - macOS release 二进制的 `otool -L` 只列出系统库；Linux x86_64 用 `readelf -d` 限制直接依赖为 glibc 基础库及 `libnettle.so.8`、`liblzma.so.5`、`liblz4.so.1`、`libz.so.1`、`libxml2.so.2`。`ldd` 必须全部解析为系统库；系统 libxml2 带来的 ICU 与 C++ 运行库须能通过实际 ELF 依赖链追溯，不得误认为是二进制新增的直接依赖。同一下载包在 Ubuntu 22.04 与 24.04 上实际运行；
 - crates.io 与 npm 上的目标版本尚不存在；
 - GitHub Release、Tag 和 Homebrew Formula 中不存在同版本产物。
 
 ## 候选版本验证
 
-正式版之前先把 `Cargo.toml` 与 `Cargo.lock` 中的项目版本改为 `0.6.0-rc.1` 之类的候选版本，提交并等待 main 的 CI 全绿，再创建完全一致的 `v0.6.0-rc.1` Tag。cargo-dist 不接受 Tag 与包版本不一致。默认配置不会把候选版本发布到 npm 或覆盖 Homebrew Formula。
+正式版之前先把 `Cargo.toml` 与 `Cargo.lock` 中的项目版本改为 `0.7.0-rc.1` 之类的候选版本，提交并等待 main 的 CI 全绿，再创建完全一致的 `v0.7.0-rc.1` Tag。cargo-dist 不接受 Tag 与包版本不一致。默认配置不会把候选版本发布到 npm 或覆盖 Homebrew Formula。
 
 候选产物必须实际完成：
 
@@ -63,16 +63,16 @@ dist plan
 - 检查 macOS `otool -L` 与 Linux `ldd`；
 - 检查生成的 npm 包与 Homebrew Formula 指向同一 GitHub Release。
 
-仓库提供独立的 `Release smoke` 手动 workflow。在候选 Release workflow 成功后运行 `gh workflow run release-smoke.yml -f tag=v0.6.0-rc.1`，检查三个 target 的四个原生 runner（macOS arm64/x64、Ubuntu 22.04/24.04）全部成功；该 workflow 下载已发布的实际产物，核对校验和、原生架构、直接及系统传递依赖、默认 MCP、ZIP/TAR.GZ/7z 的 pack/list/read/grep/verify，以及 npm/Homebrew 生成文件的版本和 Release URL。正式版本也应重复此检查，macOS arm64 runner 还会在干净环境实际 Homebrew 安装并复测归档访问。
+仓库提供独立的 `Release smoke` 手动 workflow。在候选 Release workflow 成功后运行 `gh workflow run release-smoke.yml -f tag=v0.7.0-rc.1`，检查三个 target 的四个原生 runner（macOS arm64/x64、Ubuntu 22.04/24.04）全部成功；该 workflow 下载已发布的实际产物，核对校验和、原生架构、直接及系统传递依赖、默认 MCP、ZIP/TAR.GZ/7z 的 pack/list/read/grep/verify，以及 npm/Homebrew 生成文件的版本和 Release URL。正式版本也应重复此检查，macOS arm64 runner 还会在干净环境实际 Homebrew 安装并复测归档访问。
 
-候选验证结束后，把项目版本改回正式的 `0.6.0`，再进入正式发布步骤；不得移动、删除或复用已经推送的候选 Tag。
+候选验证结束后，把项目版本改回正式的 `0.7.0`，再进入正式发布步骤；不得移动、删除或复用已经推送的候选 Tag。
 
 ## 正式发布
 
 1. 把 `CHANGELOG.md` 的 `Unreleased` 改为发布日期，提交并等待 main 的 CI 全绿。
 2. 在干净且与 `origin/main` 一致的 main 上再次运行全部发布前命令。
 3. 人工执行 `cargo publish --locked` 并确认 crates.io 页面与 `cargo install arcthis --locked` 可用。这一步不会由发布 workflow 代劳，每次发布都要重新执行。
-4. 创建签名 Tag `v0.6.0` 并只推送该 Tag；cargo-dist workflow 随后创建 GitHub Release，并发布 npm 包与 Homebrew Formula。
+4. 创建签名 Tag `v0.7.0` 并只推送该 Tag；cargo-dist workflow 随后创建 GitHub Release，并发布 npm 包与 Homebrew Formula。
 5. 等待 Release workflow 全部成功，不以 GitHub Release 已出现代替 npm/Homebrew Job 成功。
 6. 在干净环境分别执行 Cargo、Homebrew、npm、pnpm 安装，并重复版本、MCP 和归档 smoke test。
 7. 更新中英文 README 与网站，把“尚未发布”替换为已经真实验证的安装命令，再部署网站。

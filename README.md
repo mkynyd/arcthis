@@ -31,7 +31,11 @@ ZIP can usually read a selected file directly. TAR and TAR.GZ scan in order. `in
 
 Arcthis v0.6.0 includes the CLI and local MCP server. Every installation channel provides the same commands. See [0.6.0 release verification](./docs/RELEASE-0.6.0.md) for provenance, platforms and channel checks.
 
-### Changes in v0.6.0
+### Changes in v0.7.0
+
+Batch extraction reserves destinations in discovery order. Use `extract-all --rename --continue-on-error` to unpack archives with shared top-level names while reporting individual failures. This version also adds opt-in search modes and exit status, completion scripts, BLAKE3, and index diagnostics. See the [changelog](./CHANGELOG.md).
+
+### Schema 2 migration
 
 Version **0.6.0 uses JSON schema 2**. It preserves ZIP duplicate instances, fixes solid-7z ratios and TAR dot paths, reuses scan readers, and adds bounded stdin, strict name decoding, verified reads, batch continuation and cache management. See the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md) and [schema migration ADR](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
 
@@ -163,7 +167,7 @@ arcthis extract archive.zip README.md --output ./README.md
 arcthis extract archive.tar.gz
 
 # Review a destructive batch plan before anything runs
-arcthis extract-all ./downloads --recursive --delete-source --dry-run --json
+arcthis extract-all ./downloads --recursive --rename --continue-on-error --dry-run --json
 
 # Create, reopen, verify, and save a new archive
 arcthis pack ./project --output project.tar.gz
@@ -187,7 +191,7 @@ Nested access decodes the selected inner file into a size-limited read-only memo
 
 ## Agent interface
 
-0.6.0 uses schema 2; 0.5.1 uses schema 1.
+Versions 0.6.0 and 0.7.0 use schema 2. When migrating from 0.5.x, capture runtime errors on stderr and result data on stdout.
 
 - Successful structured output uses `schema_version: "2"`.
 - Results go to stdout; warnings and errors go to stderr.
