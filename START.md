@@ -2,7 +2,7 @@
 
 [简体中文](./START.zh-CN.md)
 
-This guide covers **0.7.0-rc.1 (JSON schema 2)**. Version 0.5.1 used schema 1; migrate consumers using [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). Changes and validation are recorded in the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md).
+This guide covers **0.7.0 (JSON schema 2)**. Version 0.5.1 used schema 1; migrate consumers using [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). Changes and validation are recorded in the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md).
 
 v0.5.1 added write-path overlap checks, file-tree depth limits, MCP concurrent-call and response limits, and `grep --max-result-bytes`. That release retained its prior command names and JSON fields; the current source migration is described above.
 
@@ -46,7 +46,7 @@ pnpm 11 may hold packages published less than 24 hours ago. On release day, appe
 
 The npm/pnpm installer downloads the binary from GitHub. On networks requiring a proxy, pass the actual proxy address through `HTTPS_PROXY`/`HTTP_PROXY` for the installation command; Node does not automatically inherit macOS system proxy settings.
 
-Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [v0.6.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.6.0).
+Prebuilt archives for Apple Silicon macOS, Intel macOS, and x86_64 Linux are attached to the [latest GitHub Release](https://github.com/mkynyd/arcthis/releases/latest).
 
 ### Build from source
 
@@ -80,6 +80,7 @@ The stdio transport uses protocol revision `2025-06-18` and reserves stdout for 
 Extract, pack, and convert each use separate `_plan` and `_execute` tools. The tools require at least one `--allow-output-root`. Create that directory before starting the server. Execution requires the exact SHA-256 plan digest and rejects source or destination changes since planning. Source deletion is disabled unless both `--allow-source-deletion` is present at server launch and the request explicitly asks for deletion. Password values are not accepted in MCP requests.
 
 ```sh
+mkdir -p ./outputs
 ./target/release/arcthis mcp \
   --allow-root ./archives \
   --allow-output-root ./outputs
@@ -460,7 +461,7 @@ Archive-based results include:
 
 Command-specific fields include `entries`, `tree`, `entry`, inspect fields, `find`, `grep`, `hash`, `extraction`, `verification`, `pack`, `index`, and `convert`. Dry-runs use `operation` plus a structured `plan`; batch execution uses `result`. `pack`, `index`, and `convert` use operation-specific outer structures instead of pretending their inputs are ordinary file-query results.
 
-With `--json`, runtime errors are one JSON document on stderr and stdout remains empty:
+With `--json`, runtime errors are written as one JSON document on stderr. An `extract-all` partial failure also returns a result on stdout. The following error reports a missing entry.
 
 ```json
 {

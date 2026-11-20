@@ -2,7 +2,7 @@
 
 ## Command syntax
 
-This document covers **0.7.0-rc.1 / schema 2**. Version 0.6.0 also uses schema 2. Migration from 0.5.x is documented in [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md); complete report acceptance is in [EXPLORATION-ITERATION-PLAN.md](./EXPLORATION-ITERATION-PLAN.md).
+This document covers **0.7.0 / schema 2**. Version 0.6.0 also uses schema 2. Migration from 0.5.x is documented in [ADR 0002](./ADR-0002-EXPLORATION-CONTRACT.md); complete report acceptance is in [EXPLORATION-ITERATION-PLAN.md](./EXPLORATION-ITERATION-PLAN.md).
 
 The preferred syntax is:
 
