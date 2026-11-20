@@ -63,7 +63,7 @@ The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-
 
 Further performance work remains planned: wide-directory tree lookup, metadata reuse, and fewer sequential scans. Remote sources remain part of v0.6+.
 
-## v0.7.0 — Batch extraction and CLI discoverability (release candidate)
+## v0.7.0 — Batch extraction and CLI discoverability
 
 - [x] Reserve same-name batch destinations with `--rename` and use the chosen paths during extraction.
 - [x] Keep the first eligible plan with `--continue-on-error` and report later collisions per archive.
@@ -84,7 +84,7 @@ Further performance work remains planned: wide-directory tree lookup, metadata r
 
 Publication, native platform and installation-channel evidence is recorded in [release verification](./docs/RELEASE-0.6.0.md).
 
-The [report acceptance ledger](./docs/EXPLORATION-ITERATION-PLAN.md) records all 28 findings, corrections and scope decisions. Schema migration is documented in [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). The published 0.5.1 ZIP merge limitation is fixed only in version 0.6.0. Earlier raw ZIP/TAR access semantics otherwise remain streaming and guarded. Further wide-tree lookup, preemptible decoding and remote-source work remain independent future work.
+The [report acceptance ledger](./docs/EXPLORATION-ITERATION-PLAN.md) records all 28 findings, corrections and scope decisions. Schema migration is documented in [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). The published 0.5.1 ZIP merge limitation is fixed starting in version 0.6.0. Earlier raw ZIP/TAR access semantics otherwise remain streaming and guarded. Further wide-tree lookup, preemptible decoding and remote-source work remain independent future work.
 
 ## After the local 0.6 iteration — Further integrations
 

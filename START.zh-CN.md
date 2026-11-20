@@ -2,7 +2,7 @@
 
 [English](./START.md)
 
-本文对应 **0.7.0-rc.1（JSON schema 2）**。旧版 0.5.1 使用 schema 1，消费者升级需参考 [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md)；改动与验证见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)。
+本文对应 **0.7.0（JSON schema 2）**。旧版 0.5.1 使用 schema 1，消费者升级需参考 [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md)；改动与验证见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)。
 
 v0.5.1 增加写入路径重叠检查、文件树层数限制、MCP 并发与响应大小限制，以及 `grep --max-result-bytes`。这段是公开 0.5.1 的历史说明；当前源码迁移见上方 ADR。
 
@@ -46,7 +46,7 @@ pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果�
 
 npm/pnpm 安装器从 GitHub 下载二进制。在依赖代理的网络中，需要为安装命令显式设置实际的 `HTTPS_PROXY`/`HTTP_PROXY`；Node 不会自动读取 macOS 系统代理设置。
 
-Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [v0.6.0 GitHub Release](https://github.com/mkynyd/arcthis/releases/tag/v0.6.0) 下载。
+Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品可从 [GitHub 最新正式版](https://github.com/mkynyd/arcthis/releases/latest) 下载。
 
 ### 从源码构建
 
@@ -75,6 +75,7 @@ stdio 传输固定协议版本 `2025-06-18`，stdout 只允许 JSON-RPC。只读
 Extract、pack 与 convert 分别使用独立的 `_plan`（计划）和 `_execute`（执行）工具。启动前请创建 `--allow-output-root` 指定的目录。未配置该选项时，这 6 个工具不会出现在工具列表中。执行必须回传完全一致的 SHA-256 计划摘要；计划后 source 或 destination 发生变化都会拒绝执行。删除 source 只有在服务启用 `--allow-source-deletion` 且请求明确要求删除时才允许。MCP 不接受明文密码值；只读请求可引用授权根内的 password_file。
 
 ```sh
+mkdir -p ./outputs
 ./target/release/arcthis mcp \
   --allow-root ./archives \
   --allow-output-root ./outputs
@@ -443,7 +444,7 @@ ZIP、7z 与 RAR 会通过底层完整性检查逐个读取每个可读文件。
 
 命令专属字段包括 `entries`、`tree`、`entry`、inspect 字段、`find`、`grep`、`hash`、`extraction`、`verification`、`pack`、`index` 与 `convert`。Dry-run 使用 `operation` 和结构化 `plan`，批量执行使用 `result`。`pack`、`index` 与 `convert` 使用各自的操作外层结构，不伪装成普通的文件查询。
 
-启用 `--json` 后，运行时错误作为单个 JSON 文档写入 stderr，stdout 保持为空：
+启用 `--json` 后，运行时错误作为单个 JSON 文档写入 stderr。`extract-all` 部分失败时，stdout 还会保留结果。
 
 ```json
 {
