@@ -34,7 +34,7 @@ pub use batch::{
 pub use convert::{ConvertOptions, ConvertPlan, ConvertResult, convert_archive, plan_convert};
 pub use error::{ArcthisError, ErrorCode, Result};
 pub use extract::{ExtractOptions, ExtractPlan, ExtractResult};
-pub use index::{IndexAction, IndexResult, maintain_index};
+pub use index::{IndexAction, IndexResult, IndexStatus, maintain_index};
 pub use lifecycle::{CollisionPolicy, OperationStatus};
 pub use model::{
     ArchiveCapabilities, ArchiveEntry, ArchiveFormat, ArchiveInspection, ArchiveWarning,

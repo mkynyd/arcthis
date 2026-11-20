@@ -2,11 +2,30 @@
 
 This file records user-visible changes to Arcthis. The project follows semantic versioning after the first public release.
 
+## Unreleased
+
+### Fixed
+
+- Reserve batch extraction destinations in discovery order. `extract-all --rename` handles other planned destinations and existing paths, and workers use the exact planned destinations. With `--continue-on-error`, the first eligible plan keeps a shared destination and later conflicts are reported individually.
+- Scope source, selection and durability options to the applicable command help. `pack -` and `pack /dev/stdin` explain how to use a filesystem input.
+- Report missing MCP output directories with a creation hint. Remove entry counts from human index deletion messages.
+
+### Added
+
+- `grep -i` for Unicode case-insensitive matching, `-E` for Rust regular expressions, and `--exit-code` for a no-match exit status. The default remains a case-sensitive literal search with exit 0 on an empty result.
+- `archive.index_status` exposes stale, invalid, missing and bypassed metadata indexes in schema 2. `archive.index_used` still reports hits.
+- Shell completion generation, streaming BLAKE3 and opt-in AppleDouble-name filtering for `list`. MCP exposes the search modes, BLAKE3 and list filtering.
+
+### JSON compatibility
+
+- Upgrades from 0.5.x should parse success data on stdout and versioned CLI runtime errors on stderr under `--json`. Batch exit 12 can include a result on stdout and an error on stderr. See [the schema 2 migration](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
+- Schema 2 keys and error codes are retained. For errors with `details.message`, that field holds the specific diagnostic and `error.message` holds the category summary. Rust callers constructing `GrepOptions` or exhaustively matching `HashAlgorithm` should account for the additions.
+
 ## 0.6.0 — 2026-10-16
 
 ### Compatibility
 
-- Public JSON moves to schema `2`; published 0.5.1 remains schema `1`. CLI and MCP share read-only structures and typed error envelopes. Original name bytes, nullable executable state and timezone-less ZIP timestamps have explicit representations. See [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
+- Public JSON moves to schema `2`; published 0.5.1 remains schema `1`. CLI and MCP share read-only structures and typed error envelopes. Original name bytes, nullable executable state and timezone-less ZIP timestamps have explicit representations. Under `--json`, parse runtime errors from stderr and results from stdout. See [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md).
 - Filesystem result/plan references are canonical absolute paths; virtual stdin/nested names stay explicit. Existing named access rejects duplicate instances; `--entry-index` selects exactly one.
 - Rust callers constructing complete `ArchiveOpenOptions`, `ExtractionLimits`, `ExtractAllOptions` or `ArchiveEntry` literals must account for the new fields/types.
 

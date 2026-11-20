@@ -15,4 +15,6 @@ Version 0.6.0 moves the public result `schema_version` from `"1"` to `"2"`. Publ
 - Raw `read` remains streaming by default and may emit bytes before failure. `--verify-first` stages a bounded entry in an anonymous temporary file and emits only after successful validation. Source deletion is never implied.
 - Explicit name decoding, stdin spooling, durability reduction, batch continuation and per-request MCP password files retain finite limits and existing root/path/lifecycle checks. No unsafe-path skipping or link restoration is added.
 
+For CLI integrations upgrading from 0.5.x, capture stdout and stderr separately. With `--json`, read successful results from stdout and the schema 2 runtime error envelope from stderr. Check the process exit status and branch on `error.code`. On `extract-all` exit 12, also read the structured partial result from stdout. Clap usage errors can still emit plain-text stderr.
+
 Index documents use a separate updated internal version and invalidate old metadata. Release notes and bilingual guides describe migration and cost tradeoffs.

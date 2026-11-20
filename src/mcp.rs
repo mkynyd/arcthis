@@ -106,10 +106,26 @@ struct FindInput {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
+struct ListInput {
+    #[serde(flatten)]
+    source: SourceInput,
+    /// Omit regular files with AppleDouble-style names (`._*`).
+    #[serde(default)]
+    exclude_appledouble: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 struct GrepInput {
     #[serde(flatten)]
     source: SourceInput,
+    /// Case-sensitive literal substring by default.
     pattern: String,
+    /// Use Unicode case-insensitive matching.
+    #[serde(default)]
+    ignore_case: bool,
+    /// Interpret pattern as a Rust regular expression.
+    #[serde(default)]
+    regex: bool,
     #[serde(default)]
     glob: Option<String>,
     #[serde(default = "default_grep_entry_size")]
@@ -129,6 +145,7 @@ enum HashInputAlgorithm {
     #[default]
     Sha256,
     Sha512,
+    Blake3,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -226,8 +243,17 @@ impl McpServer {
         let output_roots = allowed_output_roots
             .into_iter()
             .map(|root| {
-                let canonical = fs::canonicalize(&root)
-                    .map_err(|error| ArcthisError::io("canonicalizing MCP output root", error))?;
+                let canonical = fs::canonicalize(&root).map_err(|error| {
+                    let context = if error.kind() == std::io::ErrorKind::NotFound {
+                        format!(
+                            "opening MCP output root {}; create the directory before passing --allow-output-root",
+                            root.display()
+                        )
+                    } else {
+                        format!("resolving MCP output root {}", root.display())
+                    };
+                    ArcthisError::io(context, error)
+                })?;
                 if !canonical.is_dir() {
                     return Err(ArcthisError::UnsupportedOperation {
                         message: format!(
@@ -476,12 +502,12 @@ impl McpServer {
     )]
     fn list(
         &self,
-        Parameters(input): Parameters<SourceInput>,
+        Parameters(input): Parameters<ListInput>,
         McpCancellation(cancellation): McpCancellation,
     ) -> std::result::Result<Json<ListResult>, String> {
-        let source = self.source(input).map_err(tool_error)?;
+        let source = self.source(input.source).map_err(tool_error)?;
         self.service(cancellation)
-            .list(&source)
+            .list_filtered(&source, input.exclude_appledouble)
             .map_err(tool_error)
             .and_then(|value| self.bounded_json(value))
     }
@@ -619,6 +645,8 @@ impl McpServer {
                 &input.pattern,
                 &GrepOptions {
                     glob: input.glob,
+                    ignore_case: input.ignore_case,
+                    regex: input.regex,
                     max_entry_size: input.max_entry_size,
                     max_matches: input.max_matches,
                     scan_binary: input.binary,
@@ -632,7 +660,7 @@ impl McpServer {
 
     #[tool(
         name = "archive_hash",
-        description = "Hash one archive entry with SHA-256 or SHA-512.",
+        description = "Hash one archive entry with SHA-256, SHA-512, or BLAKE3.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -649,6 +677,7 @@ impl McpServer {
         let algorithm = match input.algorithm {
             HashInputAlgorithm::Sha256 => HashAlgorithm::Sha256,
             HashInputAlgorithm::Sha512 => HashAlgorithm::Sha512,
+            HashInputAlgorithm::Blake3 => HashAlgorithm::Blake3,
         };
         self.service(cancellation)
             .hash(&source, &input.entry, algorithm)

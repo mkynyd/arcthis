@@ -39,7 +39,7 @@ Extraction uses enforced limits with conservative defaults:
 
 Declared metadata is checked during planning. Actual bytes are counted while reading because metadata can be missing or false. A limit violation aborts the temporary write and leaves no saved destination.
 
-`extract-all --recursive` recurses through filesystem directories, not into archive contents.
+`extract-all --recursive` recurses through filesystem directories, not into archive contents. Batch planning protects every discovered source from writes, including corrupt archives when continuing after failures. Parallel workers use reserved destinations. Collision handling does not relax path validation or verified source deletion.
 
 Nested query traversal is separately capped to depth 8 and 256 MiB decoded bytes per inner archive by default. `--max-nested-entry-size` can lower or raise the per-level cap. Allocation uses fallible reservation and actual read bytes are checked. Nested extraction and source deletion are not supported.
 

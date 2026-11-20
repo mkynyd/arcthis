@@ -100,6 +100,7 @@ impl CancellationToken {
 #[cfg_attr(feature = "mcp", derive(rmcp::schemars::JsonSchema))]
 pub struct ArchiveReference {
     pub index_used: bool,
+    pub index_status: crate::index::IndexStatus,
     pub path_lossy: bool,
     #[serde(serialize_with = "serialize_archive_path")]
     pub path: PathBuf,
@@ -242,8 +243,26 @@ impl ApplicationService {
     }
 
     pub fn list(&self, source: &ArchiveSourceRequest) -> Result<ListResult> {
+        self.list_filtered(source, false)
+    }
+
+    pub fn list_filtered(
+        &self,
+        source: &ArchiveSourceRequest,
+        exclude_appledouble: bool,
+    ) -> Result<ListResult> {
         let archive = self.open(source)?;
-        let entries = self.entries(&archive)?;
+        let mut entries = self.entries(&archive)?;
+        if exclude_appledouble {
+            entries.retain(|entry| {
+                entry.kind != EntryKind::File
+                    || !entry
+                        .path
+                        .rsplit('/')
+                        .next()
+                        .is_some_and(|name| name.starts_with("._"))
+            });
+        }
         Ok(ListResult {
             schema_version: crate::SCHEMA_VERSION,
             archive: reference(&archive),
@@ -659,8 +678,10 @@ pub(crate) fn build_tree(entries: &[ArchiveEntry]) -> Result<Vec<TreeNode>> {
 
 fn reference(archive: &Archive) -> ArchiveReference {
     let path = archive.reference_path();
+    let index_status = archive.index_status();
     ArchiveReference {
-        index_used: archive.index_used(),
+        index_used: index_status == crate::index::IndexStatus::Hit,
+        index_status,
         path_lossy: path.to_str().is_none(),
         path,
         format: archive.format(),

@@ -1,7 +1,7 @@
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 
 use crate::error::{ArcthisError, Result};
 use crate::{
@@ -30,7 +30,9 @@ const EXIT_CODES: &str = "Exit codes (runtime errors use stable JSON error.code 
   9 collision
  10 unsupported_operation / password_required / wrong_password
  11 verification_failed
- 12 partial_failure";
+ 12 partial_failure
+
+grep --exit-code also returns 1 for zero matches without an error diagnostic.";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -103,7 +105,7 @@ enum Command {
         /// Canonical filesystem root allowed for archive reads; repeat as needed.
         #[arg(long = "allow-root", required = true)]
         allow_roots: Vec<PathBuf>,
-        /// Canonical filesystem root allowed for mutation outputs; repeat as needed.
+        /// Existing directory allowed for mutation outputs; repeat as needed.
         #[arg(long = "allow-output-root")]
         allow_output_roots: Vec<PathBuf>,
         /// Permit explicitly requested source deletion after verified commit.
@@ -129,7 +131,12 @@ enum Command {
         max_response_bytes: u64,
     },
     /// List archive entries in archive order.
-    List { archive: PathBuf },
+    List {
+        archive: PathBuf,
+        /// Omit regular files with AppleDouble-style names (`._*`).
+        #[arg(long)]
+        exclude_appledouble: bool,
+    },
     /// Display archive entries as a file tree.
     Tree { archive: PathBuf },
     /// Show metadata for one archive entry.
@@ -155,15 +162,25 @@ enum Command {
     /// Find archive entries whose paths match a glob.
     Find {
         archive: PathBuf,
-        /// Glob matched against complete archive entry paths.
+        /// Case-sensitive glob over the complete entry path; * can cross '/'.
         #[arg(long)]
         glob: String,
     },
     /// Search regular-file contents without extracting them.
     Grep {
         archive: PathBuf,
+        /// Case-sensitive literal substring unless --regex is given.
         pattern: String,
-        /// Restrict scanning to matching archive entry paths.
+        /// Match without regard to Unicode case.
+        #[arg(short = 'i', long)]
+        ignore_case: bool,
+        /// Interpret PATTERN as a Rust regular expression.
+        #[arg(short = 'E', long)]
+        regex: bool,
+        /// Exit 1 with no diagnostic when no match is found. A truncated empty result is an error.
+        #[arg(long)]
+        exit_code: bool,
+        /// Case-sensitive glob over the complete entry path; * can cross '/'.
         #[arg(long)]
         glob: Option<String>,
         /// Skip regular files larger than this many bytes.
@@ -271,7 +288,7 @@ enum Command {
         /// Leave existing destinations unchanged and report skipped operations.
         #[arg(long, conflicts_with = "rename")]
         skip_existing: bool,
-        /// Select the first available numbered destination for each collision.
+        /// Assign numbered destinations in discovery order for existing or batch conflicts.
         #[arg(long)]
         rename: bool,
         /// Maximum number of entries allowed per archive.
@@ -317,6 +334,8 @@ enum Command {
         #[arg(long)]
         rename: bool,
     },
+    /// Generate a shell completion script on stdout.
+    Completions { shell: clap_complete::Shell },
     /// Convert an archive through safe staged extraction and verified packing.
     Convert {
         archive: PathBuf,
@@ -360,6 +379,7 @@ enum Command {
 enum CliHashAlgorithm {
     Sha256,
     Sha512,
+    Blake3,
 }
 
 impl From<CliHashAlgorithm> for crate::query::HashAlgorithm {
@@ -367,15 +387,54 @@ impl From<CliHashAlgorithm> for crate::query::HashAlgorithm {
         match value {
             CliHashAlgorithm::Sha256 => Self::Sha256,
             CliHashAlgorithm::Sha512 => Self::Sha512,
+            CliHashAlgorithm::Blake3 => Self::Blake3,
         }
     }
 }
 
+fn command_definition() -> clap::Command {
+    let command = Cli::command();
+    let globals = command
+        .get_arguments()
+        .filter(|arg| arg.is_global_set())
+        .cloned()
+        .collect::<Vec<_>>();
+    command.mut_subcommands(|subcommand| {
+        let name = subcommand.get_name();
+        let read_only = matches!(
+            name,
+            "list" | "tree" | "stat" | "inspect" | "read" | "find" | "grep" | "hash" | "verify"
+        );
+        let extraction = matches!(name, "extract" | "extract-all" | "convert");
+        let hidden = globals
+            .iter()
+            .filter(|arg| match arg.get_id().as_str() {
+                "json" => matches!(name, "read" | "mcp" | "completions"),
+                "no_sync" => !extraction,
+                "entry_index" => !matches!(name, "stat" | "read" | "hash" | "extract"),
+                "encoding" => !read_only && !extraction,
+                "stdin_name" | "max_stdin_bytes" | "within" | "max_nested_entry_size" => !read_only,
+                "password_file" | "index_directory" => !read_only && !extraction && name != "index",
+                "volume" => !read_only && !matches!(name, "extract" | "convert"),
+                _ => false,
+            })
+            .cloned()
+            .map(|arg| arg.hide(true))
+            .collect::<Vec<_>>();
+        // Preserve parsing compatibility for globals before or after the subcommand.
+        // Clap keeps these overrides instead of copying the visible root arguments.
+        subcommand.args(hidden)
+    })
+}
+
 pub fn main_entry() -> i32 {
-    let mut cli = Cli::parse();
+    let mut command = command_definition();
+    let matches = command.get_matches_mut();
+    let mut cli =
+        Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.format(&mut command).exit());
     let result = prepare_stdin(&mut cli).and_then(|()| run(&cli));
     match result {
-        Ok(()) => 0,
+        Ok(code) => code,
         Err(error) if error.is_broken_pipe() => 0,
         Err(error) => {
             let code = i32::from(error.code().exit_code());
@@ -395,7 +454,7 @@ pub fn main_entry() -> i32 {
 }
 
 #[allow(clippy::too_many_lines)] // Keeping top-level command dispatch in one exhaustive match is clearer.
-fn run(cli: &Cli) -> Result<()> {
+fn run(cli: &Cli) -> Result<i32> {
     if cli.entry_index.is_some()
         && !matches!(
             cli.command,
@@ -473,10 +532,10 @@ fn run(cli: &Cli) -> Result<()> {
                 },
             })
         }
-        Command::List { archive } => {
-            let result = service.list(&archive_source_request(cli, archive)?)?;
+        Command::List { archive, exclude_appledouble } => {
+            let result = service.list_filtered(&archive_source_request(cli, archive)?, *exclude_appledouble)?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                return output::write_service(&mut stdout, &result).map(|()| 0);
             }
             output::write_list(
                 &mut stdout,
@@ -489,7 +548,7 @@ fn run(cli: &Cli) -> Result<()> {
         Command::Tree { archive } => {
             let result = service.tree(&archive_source_request(cli, archive)?)?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                return output::write_service(&mut stdout, &result).map(|()| 0);
             }
             output::write_tree(
                 &mut stdout,
@@ -507,7 +566,7 @@ fn run(cli: &Cli) -> Result<()> {
             let entry = selected_entry(cli, archive, entry.as_deref())?;
             let result = service.stat(&archive_source_request(cli, archive)?, &entry)?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                return output::write_service(&mut stdout, &result).map(|()| 0);
             }
             output::write_stat(
                 &mut stdout,
@@ -521,7 +580,7 @@ fn run(cli: &Cli) -> Result<()> {
         Command::Inspect { archive } => {
             let result = service.inspect(&archive_source_request(cli, archive)?)?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                return output::write_service(&mut stdout, &result).map(|()| 0);
             }
             output::write_inspect(
                 &mut stdout,
@@ -557,7 +616,7 @@ fn run(cli: &Cli) -> Result<()> {
         Command::Find { archive, glob } => {
             let result = service.find(&archive_source_request(cli, archive)?, glob)?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                return output::write_service(&mut stdout, &result).map(|()| 0);
             }
             output::write_find(
                 &mut stdout,
@@ -571,6 +630,9 @@ fn run(cli: &Cli) -> Result<()> {
             archive,
             pattern,
             glob,
+            ignore_case,
+            regex,
+            exit_code,
             max_entry_size,
             max_matches,
             max_result_bytes,
@@ -581,6 +643,8 @@ fn run(cli: &Cli) -> Result<()> {
                 pattern,
                 &crate::query::GrepOptions {
                     glob: glob.clone(),
+                    ignore_case: *ignore_case,
+                    regex: *regex,
                     max_entry_size: *max_entry_size,
                     max_matches: *max_matches,
                     scan_binary: *binary,
@@ -589,15 +653,26 @@ fn run(cli: &Cli) -> Result<()> {
                 },
             )?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                output::write_service(&mut stdout, &result)?;
+            } else {
+                output::write_grep(
+                    &mut stdout,
+                    &result.archive.path,
+                    result.archive.format,
+                    &result.grep,
+                    false,
+                )?;
             }
-            output::write_grep(
-                &mut stdout,
-                &result.archive.path,
-                result.archive.format,
-                &result.grep,
-                cli.json,
-            )
+            if *exit_code && result.grep.matches.is_empty() {
+                if result.grep.matches_truncated {
+                    return Err(ArcthisError::ResourceLimit {
+                        message: "grep result was truncated before a match could be returned"
+                            .to_owned(),
+                    });
+                }
+                return Ok(1);
+            }
+            Ok(())
         }
         Command::Hash {
             archive,
@@ -611,7 +686,7 @@ fn run(cli: &Cli) -> Result<()> {
                 (*algorithm).into(),
             )?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                return output::write_service(&mut stdout, &result).map(|()| 0);
             }
             output::write_hash(
                 &mut stdout,
@@ -644,7 +719,7 @@ fn run(cli: &Cli) -> Result<()> {
                     *max_age_seconds,
                 )?;
                 if cli.json {
-                    return output::write_service(&mut stdout, &result);
+                    return output::write_service(&mut stdout, &result).map(|()| 0);
                 }
                 for item in result.items {
                     writeln!(
@@ -663,7 +738,7 @@ fn run(cli: &Cli) -> Result<()> {
                     )
                     .map_err(|error| ArcthisError::io("writing cache inventory", error))?;
                 }
-                return Ok(());
+                return Ok(0);
             }
             let archive = archive
                 .as_deref()
@@ -729,7 +804,7 @@ fn run(cli: &Cli) -> Result<()> {
             };
             if *dry_run {
                 let plan = archive.plan_extract(selected.as_deref(), &options)?;
-                return output::write_extract_plan(&mut stdout, &plan, cli.json);
+                return output::write_extract_plan(&mut stdout, &plan, cli.json).map(|()| 0);
             }
             let source_path = archive.reference_path();
             let result = archive.extract(selected.as_deref(), &options)?;
@@ -744,7 +819,7 @@ fn run(cli: &Cli) -> Result<()> {
         Command::Verify { archive } => {
             let result = service.verify(&archive_source_request(cli, archive)?)?;
             if cli.json {
-                return output::write_service(&mut stdout, &result);
+                return output::write_service(&mut stdout, &result).map(|()| 0);
             }
             output::write_verify(
                 &mut stdout,
@@ -809,7 +884,7 @@ fn run(cli: &Cli) -> Result<()> {
                         message: format!("{} archive plan(s) failed", plan.errors.len()),
                     });
                 }
-                return Ok(());
+                return Ok(0);
             }
             let result = crate::batch::extract_all(directory, &options)?;
             output::write_extract_all(&mut stdout, &result, cli.json)?;
@@ -836,6 +911,12 @@ fn run(cli: &Cli) -> Result<()> {
                         .to_owned(),
                 });
             }
+            if source == Path::new("-") || source == Path::new("/dev/stdin") {
+                return Err(ArcthisError::UnsupportedOperation {
+                    message: "pack requires a regular file or directory; save stdin to a file first"
+                        .to_owned(),
+                });
+            }
             let options = crate::pack::PackOptions {
                 collision_policy: collision_policy(*overwrite, *skip_existing, *rename),
                 delete_source: *delete_source,
@@ -844,10 +925,22 @@ fn run(cli: &Cli) -> Result<()> {
             };
             if *dry_run {
                 let plan = crate::pack::plan_pack_source(source, destination, &options)?;
-                return output::write_pack_plan(&mut stdout, &plan, cli.json);
+                return output::write_pack_plan(&mut stdout, &plan, cli.json).map(|()| 0);
             }
             let result = crate::pack::pack_source_with_options(source, destination, &options)?;
             output::write_pack(&mut stdout, &result, cli.json)
+        }
+        Command::Completions { shell } => {
+            if cli.json {
+                return Err(ArcthisError::InvalidArgument {
+                    message: "completions writes a shell script; --json does not apply".to_owned(),
+                });
+            }
+            let mut script = Vec::new();
+            clap_complete::generate(*shell, &mut command_definition(), "arcthis", &mut script);
+            stdout
+                .write_all(&script)
+                .map_err(|error| ArcthisError::io("writing shell completions", error))
         }
         Command::Convert {
             archive,
@@ -885,12 +978,12 @@ fn run(cli: &Cli) -> Result<()> {
             };
             if *dry_run {
                 let plan = crate::convert::plan_convert(archive, destination, &options)?;
-                return output::write_convert_plan(&mut stdout, &plan, cli.json);
+                return output::write_convert_plan(&mut stdout, &plan, cli.json).map(|()| 0);
             }
             let result = crate::convert::convert_archive(archive, destination, &options)?;
             output::write_convert(&mut stdout, &result, cli.json)
         }
-    }
+    }.map(|()| 0)
 }
 
 fn archive_source_request(cli: &Cli, path: &Path) -> Result<ArchiveSourceRequest> {
@@ -1032,7 +1125,7 @@ fn prepare_stdin(cli: &mut Cli) -> Result<()> {
 impl Command {
     fn read_archive_path(&self) -> Option<&Path> {
         match self {
-            Command::List { archive }
+            Command::List { archive, .. }
             | Command::Tree { archive }
             | Command::Inspect { archive }
             | Command::Verify { archive }

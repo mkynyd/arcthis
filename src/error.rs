@@ -199,11 +199,27 @@ pub(crate) fn envelope(error: &ArcthisError) -> ErrorEnvelope<'_> {
         | ArcthisError::WrongPassword
         | ArcthisError::Io { .. } => ErrorDetails::Empty {},
     };
+    // Keep schema-2 details intact and put the specific reason in one field.
+    let summary = match error {
+        ArcthisError::InvalidArgument { .. } => "invalid argument",
+        ArcthisError::InvalidArchive { .. } => "invalid archive",
+        ArcthisError::CorruptedArchive { .. } => "corrupted archive",
+        ArcthisError::ResourceLimit { .. } => "resource limit exceeded",
+        ArcthisError::Collision { .. } => "destination or entry collision",
+        ArcthisError::UnsupportedOperation { .. } => "unsupported operation",
+        ArcthisError::VerificationFailed { .. } => "archive verification failed",
+        ArcthisError::PartialFailure { .. } => "operation completed only partially",
+        _ => "",
+    };
     ErrorEnvelope {
         schema_version: crate::SCHEMA_VERSION,
         error: ErrorObject {
             code: error.code(),
-            message: error.to_string(),
+            message: if summary.is_empty() {
+                error.to_string()
+            } else {
+                summary.to_owned()
+            },
             details,
         },
     }

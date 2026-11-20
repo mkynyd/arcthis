@@ -707,12 +707,65 @@ fn batch_continue_keeps_cross_plan_overlap_protection() {
         .expect("batch conflicts");
     error(&output, "partial_failure", 12);
     let value: Value = serde_json::from_slice(&output.stdout).expect("batch JSON");
-    assert_eq!(value["result"]["succeeded"], 1);
-    assert_eq!(value["result"]["failed"], 2);
-    assert!(!work.path().join("shared").exists());
+    assert_eq!(value["result"]["succeeded"], 2);
+    assert_eq!(value["result"]["failed"], 1);
+    assert_eq!(
+        fs::read(work.path().join("shared/a.txt")).expect("first destination"),
+        b"a"
+    );
+    assert!(!work.path().join("shared/b.txt").exists());
     assert_eq!(
         fs::read(work.path().join("good/file.txt")).expect("independent result"),
         b"good"
+    );
+}
+
+#[test]
+fn batch_rename_reserves_destinations_before_parallel_extraction() {
+    let work = TempDir::new().expect("workspace");
+    let root = work.path();
+    for (archive, bytes) in [("a.zip", b"a"), ("b.zip", b"b"), ("c.zip", b"c")] {
+        zip(&root.join(archive), &[("src/file.txt", bytes)], false);
+    }
+    fs::create_dir(root.join("src.1")).expect("existing numbered destination");
+    fs::write(root.join("src.1/keep.txt"), b"keep").expect("preexisting data");
+    let batch = |dry: bool| {
+        let mut command = cargo_bin_cmd!("arcthis");
+        command.arg("extract-all").arg(root).args([
+            "--rename",
+            "--workers",
+            "4",
+            "--no-sync",
+            "--json",
+        ]);
+        if dry {
+            command.arg("--dry-run");
+        }
+        json(&command.output().expect("run batch"))
+    };
+    let plan = batch(true);
+    let planned = plan["plan"]["archives"].as_array().expect("plans");
+    assert_eq!(planned.len(), 3);
+    assert_eq!(planned[0]["renamed_destination"], false);
+    assert_eq!(planned[1]["renamed_destination"], true);
+    assert_eq!(planned[2]["renamed_destination"], true);
+    assert!(!root.join("src").exists());
+    let result = batch(false);
+    assert_eq!(result["result"]["succeeded"], 3);
+    let items = result["result"]["items"].as_array().expect("items");
+    for (index, (destination, data)) in [("src", b"a"), ("src.2", b"b"), ("src.3", b"c")]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(planned[index]["destination"], items[index]["destination"]);
+        assert_eq!(
+            fs::read(root.join(destination).join("file.txt")).expect("extracted file"),
+            data
+        );
+    }
+    assert_eq!(
+        fs::read(root.join("src.1/keep.txt")).expect("original"),
+        b"keep"
     );
 }
 #[test]
@@ -1013,4 +1066,154 @@ fn decoded_materialization_uses_instance_identity_instead_of_escaped_display_pat
             b"literal"
         );
     }
+}
+
+#[test]
+fn grep_modes_keep_literal_default_and_expose_optional_no_match_status() {
+    let work = TempDir::new().expect("workspace");
+    let archive = work.path().join("sample.zip");
+    zip(
+        &archive,
+        &[("src/docs/example.txt", "Needle\nCafé\n".as_bytes())],
+        false,
+    );
+    let grep = |pattern: &str, flags: &[&str]| {
+        cargo_bin_cmd!("arcthis")
+            .arg("grep")
+            .arg(&archive)
+            .arg(pattern)
+            .args(["--glob", "*.txt", "--json"])
+            .args(flags)
+            .output()
+            .expect("grep")
+    };
+    assert_eq!(
+        json(&grep("n.edle", &[]))["grep"]["matches"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        json(&grep("CAFÉ", &["-i"]))["grep"]["matches"][0]["line_number"],
+        2
+    );
+    assert_eq!(
+        json(&grep("^n.edle$", &["-Ei"]))["grep"]["matches"][0]["text"],
+        "Needle"
+    );
+    let empty = grep("needle", &["--exit-code"]);
+    assert_eq!(empty.status.code(), Some(1));
+    assert!(empty.stderr.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&empty.stdout).expect("empty result")["grep"]["matches"],
+        serde_json::json!([])
+    );
+    error(&grep("[", &["-E"]), "invalid_argument", 2);
+    error(
+        &grep("Needle", &["--exit-code", "--max-result-bytes", "1"]),
+        "resource_limit",
+        8,
+    );
+}
+
+#[test]
+fn help_uses_only_applicable_options_while_pack_keeps_legacy_diagnostics() {
+    for args in [["help", "pack"], ["pack", "--help"]] {
+        let help = cargo_bin_cmd!("arcthis")
+            .args(args)
+            .output()
+            .expect("pack help");
+        assert!(help.status.success());
+        let text = String::from_utf8(help.stdout).expect("help text");
+        for hidden in [
+            "--stdin-name",
+            "--max-stdin-bytes",
+            "--password-file",
+            "--within",
+            "--volume",
+            "--no-sync",
+            "--entry-index",
+            "--encoding",
+            "--index-directory",
+        ] {
+            assert!(!text.contains(hidden), "{text}");
+        }
+        assert!(text.contains("--strip-root"));
+    }
+    let help = cargo_bin_cmd!("arcthis")
+        .args(["grep", "--help"])
+        .output()
+        .expect("grep help");
+    let text = String::from_utf8(help.stdout).expect("help text");
+    for flag in [
+        "--stdin-name",
+        "--within",
+        "--password-file",
+        "--ignore-case",
+        "--exit-code",
+        "--regex",
+    ] {
+        assert!(text.contains(flag), "{text}");
+    }
+    assert!(!text.contains("--no-sync"));
+    assert!(!text.contains("--entry-index"));
+
+    for source in ["-", "/dev/stdin"] {
+        let rejected = cargo_bin_cmd!("arcthis")
+            .args(["--json", "pack", source, "--output", "unused.zip"])
+            .output()
+            .expect("reject stdin for pack");
+        error(&rejected, "unsupported_operation", 10);
+        let envelope: Value = serde_json::from_slice(&rejected.stderr).expect("diagnostic");
+        assert_eq!(envelope["error"]["message"], "unsupported operation");
+        assert!(
+            envelope["error"]["details"]["message"]
+                .as_str()
+                .expect("reason")
+                .contains("save stdin to a file")
+        );
+    }
+}
+
+#[test]
+fn list_reports_stale_indexes_and_preserves_entry_identity_when_filtering() {
+    let work = TempDir::new().expect("workspace");
+    let root = work.path();
+    let index = root.join("cache");
+    let archive = root.join("source.zip");
+    zip(
+        &archive,
+        &[("src/._file.txt", b"sidecar"), ("src/file.txt", b"abc")],
+        false,
+    );
+    let run = |verb: &str, flags: &[&str]| {
+        cargo_bin_cmd!("arcthis")
+            .arg(verb)
+            .arg(&archive)
+            .arg("--index-directory")
+            .arg(&index)
+            .args(flags)
+            .output()
+            .expect("run command")
+    };
+    let unfiltered = json(&run("list", &["--json"]));
+    assert_eq!(unfiltered["archive"]["index_status"], "miss");
+    let built = json(&run("index", &["--json"]));
+    let index_file = Path::new(built["index"]["index_path"].as_str().expect("index path"));
+    let filtered = json(&run("list", &["--json", "--exclude-appledouble"]));
+    assert_eq!(filtered["archive"]["index_used"], true);
+    assert_eq!(filtered["archive"]["index_status"], "hit");
+    assert_eq!(
+        filtered["entries"],
+        serde_json::json!([unfiltered["entries"][1]])
+    );
+    fs::write(index_file, br#"{"schema_version":"1","entries":[]}"#).expect("old index");
+    let stale = json(&run("list", &["--json"]));
+    assert_eq!(stale["archive"]["index_used"], false);
+    assert_eq!(stale["archive"]["index_status"], "stale");
+    assert_eq!(stale["entries"], unfiltered["entries"]);
+    let delete = run("index", &["--delete"]);
+    assert!(delete.status.success());
+    let display = String::from_utf8(delete.stdout).expect("deleted");
+    assert!(display.starts_with("deleted index "));
+    assert!(!display.contains("entries"));
+    assert!(!index_file.exists());
 }

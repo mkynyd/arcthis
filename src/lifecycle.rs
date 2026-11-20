@@ -37,39 +37,30 @@ pub(crate) fn resolve_destination(
     requested: &Path,
     policy: CollisionPolicy,
 ) -> Result<DestinationResolution> {
+    resolve_destination_reserved(requested, policy, &|_| false)
+}
+
+pub(crate) fn resolve_destination_reserved(
+    requested: &Path,
+    policy: CollisionPolicy,
+    reserved: &dyn Fn(&Path) -> bool,
+) -> Result<DestinationResolution> {
     let requested_path = comparable_path(requested)?;
     let requested = requested_path.as_path();
     let existed = requested
         .try_exists()
         .map_err(|error| ArcthisError::io("checking destination", error))?;
-    if !existed {
-        return Ok(DestinationResolution {
-            path: requested.to_path_buf(),
-            existed: false,
-            skip: false,
-            renamed: false,
-        });
-    }
-    match policy {
-        CollisionPolicy::Refuse | CollisionPolicy::Overwrite => Ok(DestinationResolution {
-            path: requested.to_path_buf(),
-            existed: true,
-            skip: false,
-            renamed: false,
-        }),
-        CollisionPolicy::SkipExisting => Ok(DestinationResolution {
-            path: requested.to_path_buf(),
-            existed: true,
-            skip: true,
-            renamed: false,
-        }),
-        CollisionPolicy::Rename => Ok(DestinationResolution {
-            path: first_available_renamed_path(requested)?,
-            existed: true,
-            skip: false,
-            renamed: true,
-        }),
-    }
+    let renamed = policy == CollisionPolicy::Rename && (existed || reserved(requested));
+    Ok(DestinationResolution {
+        path: if renamed {
+            first_available_renamed_path(requested, reserved)?
+        } else {
+            requested.to_path_buf()
+        },
+        existed: existed || renamed,
+        skip: existed && policy == CollisionPolicy::SkipExisting,
+        renamed,
+    })
 }
 
 pub(crate) fn ensure_executable_resolution(
@@ -219,7 +210,7 @@ fn remove_path(path: &Path) -> std::io::Result<()> {
     }
 }
 
-fn first_available_renamed_path(path: &Path) -> Result<PathBuf> {
+fn first_available_renamed_path(path: &Path, reserved: &dyn Fn(&Path) -> bool) -> Result<PathBuf> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let file_name = path
         .file_name()
@@ -231,9 +222,10 @@ fn first_available_renamed_path(path: &Path) -> Result<PathBuf> {
     for index in 1..=10_000_u32 {
         let name = format!("{stem}.{index}{suffix}");
         let candidate = parent.join(name);
-        if !candidate
-            .try_exists()
-            .map_err(|error| ArcthisError::io("checking renamed destination", error))?
+        if !reserved(&candidate)
+            && !candidate
+                .try_exists()
+                .map_err(|error| ArcthisError::io("checking renamed destination", error))?
         {
             return Ok(candidate);
         }

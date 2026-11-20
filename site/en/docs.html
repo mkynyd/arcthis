@@ -69,9 +69,9 @@
   <main id="main">
     <section class="page-head">
       <div class="wrap">
-        <p class="eyebrow">Documentation <span class="sep">·</span> v0.6.0 <span class="sep">·</span> schema_version "2"</p>
+        <p class="eyebrow">Documentation <span class="sep">·</span> v0.7.0-rc.1 <span class="sep">·</span> schema_version "2"</p>
         <h1 class="page-title">The CLI reference, <span class="tone-2">as implemented.</span></h1>
-        <p class="page-sub">This page covers 0.6.0 (schema 2); 0.5.1 used schema 1. Check the interface migration before upgrading. Features that are still planned are marked <span class="pill planned">planned</span>. The full long-form guide is <a href="https://github.com/mkynyd/arcthis/blob/main/START.md" rel="noopener">START.md</a> in the repository.</p>
+        <p class="page-sub">This page covers 0.7.0-rc.1 (schema 2); 0.5.1 used schema 1. Check the interface migration before upgrading. Features that are still planned are marked <span class="pill planned">planned</span>. The full long-form guide is <a href="https://github.com/mkynyd/arcthis/blob/main/START.md" rel="noopener">START.md</a> in the repository.</p>
       </div>
     </section>
 
@@ -96,6 +96,7 @@
           <a class="mono" href="#cmd-index">index</a>
           <a class="mono" href="#cmd-extract">extract</a>
           <a class="mono" href="#cmd-extract-all">extract-all</a>
+          <a class="mono" href="#cmd-completions">completions</a>
           <a class="mono" href="#cmd-pack">pack</a>
           <a class="mono" href="#cmd-verify">verify</a>
           <a class="mono" href="#cmd-convert">convert</a>
@@ -178,9 +179,9 @@
           </div>
 
           <div class="cmd" id="cmd-list">
-            <div class="cmd-head"><span class="cmd-name">list</span><span class="cmd-sig">arcthis list &lt;archive&gt; [--json]</span></div>
+            <div class="cmd-head"><span class="cmd-name">list</span><span class="cmd-sig">arcthis list &lt;archive&gt; [--exclude-appledouble] [--json]</span></div>
             <div class="cmd-body">
-              <p>Preserve archive order and all duplicate instances, including ZIP. Ambiguous name selection returns collision; --entry-index selects by archive_index.</p>
+              <p>Preserve archive order and all duplicate instances, including ZIP. Ambiguous name selection returns collision; <code>--entry-index</code> selects by <code>archive_index</code>. Use <code>--exclude-appledouble</code> to hide regular files with names beginning with <code>._</code>.</p>
             </div>
           </div>
 
@@ -208,28 +209,29 @@
           <div class="cmd" id="cmd-find">
             <div class="cmd-head"><span class="cmd-name">find</span><span class="cmd-sig">arcthis find &lt;archive&gt; --glob &lt;pattern&gt; [--json]</span></div>
             <div class="cmd-body">
-              <p>Find files whose paths match a wildcard pattern. Only full paths are matched; file contents are never read.</p>
+              <p>Match the complete entry path, case-sensitively. <code>*</code> can cross <code>/</code>, so <code>'*.json'</code> also matches <code>src/docs/data.json</code>. Use <code>'src/docs/**'</code> for a specific prefix.</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-grep">
-            <div class="cmd-head"><span class="cmd-name">grep</span><span class="cmd-sig">arcthis grep &lt;archive&gt; &lt;literal&gt; [--glob &lt;pattern&gt;] [--json]</span></div>
+            <div class="cmd-head"><span class="cmd-name">grep</span><span class="cmd-sig">arcthis grep &lt;archive&gt; &lt;pattern&gt; [-i] [-E] [--exit-code] [--glob &lt;pattern&gt;] [--json]</span></div>
             <div class="cmd-body">
-              <p>Search literal text directly. Defaults: 16 MiB per file, 10,000 matches and 1 MiB per retained line. <code>--max-result-bytes</code> limits total match output across files to 16 MiB; omitted matches set <code>matches_truncated</code>. Binary files are skipped unless you pass <code>--binary</code>. ZIP/TAR/7z/RAR reuse content traversal and bounded result budgets.</p>
+              <p>Search case-sensitive literal substrings by default. Use <code>-i</code> for Unicode case-insensitive matching or <code>-E</code> for a Rust regular expression. <code>--exit-code</code> returns 1 with empty stderr for an empty, untruncated result and 8 for an empty truncated result. A successful scan defaults to exit 0.</p>
+              <p>Defaults: 16 MiB per file, 10,000 matches and 1 MiB per retained line. <code>--max-result-bytes</code> limits total match output across files to 16 MiB; omitted matches set <code>matches_truncated</code>. Binary files are skipped unless you pass <code>--binary</code>. ZIP/TAR/7z/RAR reuse content traversal and bounded result budgets.</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-hash">
-            <div class="cmd-head"><span class="cmd-name">hash</span><span class="cmd-sig">arcthis hash &lt;archive&gt; [entry] [--algorithm sha256|sha512]</span></div>
+            <div class="cmd-head"><span class="cmd-name">hash</span><span class="cmd-sig">arcthis hash &lt;archive&gt; [entry] [--algorithm sha256|sha512|blake3]</span></div>
             <div class="cmd-body">
-              <p>Compute a file's checksum. SHA-256 is the default; SHA-512 is also supported. The result is lowercase hexadecimal.</p>
+              <p>Compute a file's checksum. SHA-256 is the default. SHA-512 and BLAKE3 are also supported. The result is lowercase hexadecimal.</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-index">
             <div class="cmd-head"><span class="cmd-name">index</span><span class="cmd-sig">arcthis index [archive] [--refresh|--delete|--list|--prune] [--dry-run]</span></div>
             <div class="cmd-body">
-              <p>Queries consume valid caches; archive.index_used reports hits. --list inventories caches; --prune removes stale/expired indexes with --dry-run and --max-age-seconds (30 days by default). Only hash-named index JSON is managed; Unix also checks ctime/dev/inode.</p>
+              <p><code>archive.index_used</code> reports a cache hit. <code>archive.index_status</code> explains a miss, including <code>stale</code> for an outdated cache. Run <code>index --refresh</code> to rebuild. --list inventories caches; --prune removes stale/expired indexes with --dry-run and --max-age-seconds (30 days by default). Only hash-named index JSON is managed; Unix also checks ctime/dev/inode.</p>
             </div>
           </div>
 
@@ -241,16 +243,16 @@
           </div>
 
           <div class="cmd" id="cmd-extract-all">
-            <div class="cmd-head"><span class="cmd-name">extract-all</span><span class="cmd-sig">arcthis extract-all &lt;directory&gt; [--recursive] [--workers &lt;n&gt;]</span></div>
+            <div class="cmd-head"><span class="cmd-name">extract-all</span><span class="cmd-sig">arcthis extract-all &lt;directory&gt; [--rename] [--continue-on-error] [--dry-run]</span></div>
             <div class="cmd-body">
-              <p>Use bounded workers and deterministic results. --continue-on-error isolates corrupt archives, planning errors and path conflicts while independent archives proceed. Partial failure exits 12 with per-archive JSON; dry-run also reports errors.</p>
+              <p><code>--rename</code> reserves destinations such as <code>src</code>, <code>src.1</code>, and <code>src.2</code> in discovery order, skipping existing and reserved paths. <code>--continue-on-error</code> keeps the first eligible plan and reports later conflicts and corrupt archives individually. Partial failure exits 12 with item results on stdout and a diagnostic on stderr.</p>
             </div>
           </div>
 
           <div class="cmd" id="cmd-pack">
             <div class="cmd-head"><span class="cmd-name">pack</span><span class="cmd-sig">arcthis pack &lt;source&gt; --output &lt;archive&gt; [--dry-run]</span></div>
             <div class="cmd-body">
-              <p>Pack files or a directory into an archive, then verify it. A temporary archive is built next to the destination, reopened and checked file by file, and only then saved as the final result. An output path inside the source directory, or one that points at the same file as the source, is rejected. --strip-root packs directory contents; output follows umask, and Gzip writes FNAME/mtime.</p>
+              <p>Pack files or a directory on disk, then verify the archive. Save piped input to a file first. A temporary archive is built next to the destination, reopened and checked file by file, and only then saved as the final result. An output path inside the source directory, or one that points at the same file as the source, is rejected. --strip-root packs directory contents; output follows umask, and Gzip writes FNAME/mtime.</p>
             </div>
           </div>
 
@@ -268,10 +270,17 @@
             </div>
           </div>
 
+          <div class="cmd" id="cmd-completions">
+            <div class="cmd-head"><span class="cmd-name">completions</span><span class="cmd-sig">arcthis completions zsh &gt; _arcthis</span></div>
+            <div class="cmd-body">
+              <p>Generate completions for Zsh, Bash, Fish, Elvish or PowerShell. For Zsh, put the generated <code>_arcthis</code> in a directory on <code>fpath</code> before running <code>compinit</code>.</p>
+            </div>
+          </div>
+
           <div class="cmd" id="cmd-mcp">
             <div class="cmd-head"><span class="cmd-name">mcp</span><span class="cmd-sig">arcthis mcp --allow-root &lt;path&gt; [--allow-output-root &lt;path&gt;]</span></div>
             <div class="cmd-body">
-              <p>Serve local MCP clients using protocol revision <code>2025-06-18</code>. Input roots enable nine read-only tools. Output roots enable six plan-and-execute tools for extract, pack and convert. Source deletion requires both server and request permission. Schema 2 shares read-only structures and typed error envelopes with CLI. Read-only requests accept root-authorized password_file references (at most 4096 bytes), never inline password values; entry_index is supported. Clean EOF exits 0; mcp --json is invalid.</p>
+              <p>Serve local MCP clients using protocol revision <code>2025-06-18</code>. Input roots enable nine read-only tools. Create the directory before granting <code>--allow-output-root</code>. Output roots enable six plan-and-execute tools for extract, pack and convert. Source deletion requires both server and request permission. Schema 2 shares read-only structures and typed error envelopes with CLI. Read-only requests accept root-authorized password_file references (at most 4096 bytes), never inline password values; entry_index is supported. Clean EOF exits 0; mcp --json is invalid.</p>
               <p><code>--max-concurrent-requests</code> defaults to 4 (range 1–64) and <code>--max-response-bytes</code> to 16 MiB, counting the tool result's JSON and text copies. Per-request ceilings are <code>--max-entries</code> 100,000, <code>--max-decoded-bytes</code> 1 GiB, <code>--max-results</code> 10,000 find/grep results, and <code>--max-read-window</code> 1 MiB per <code>archive_read</code> window. Excess calls or oversized results return <code>resource_limit</code>. Clients cannot raise server limits; MCP grep also fits within the response limit.</p>
             </div>
           </div>
@@ -309,14 +318,14 @@
   }
 }</pre>
           </div>
-          <p>With <code>--json</code>, command errors are JSON on stderr and stdout stays empty:</p>
+          <p>When migrating from 0.5.x, capture stdout and stderr separately. Under schema 2, <code>--json</code> sends runtime errors to stderr and results to stdout. A partial batch failure can produce output on both streams.</p>
           <div class="code-frame" style="margin-bottom:24px;">
             <div class="code-head"><span>machine error — stderr</span></div>
             <pre><span class="p">{</span>
   <span class="s">"schema_version"</span><span class="p">:</span> <span class="s">"2"</span><span class="p">,</span>
   <span class="s">"error"</span><span class="p">:</span> <span class="p">{</span>
     <span class="s">"code"</span><span class="p">:</span> <span class="s">"entry_not_found"</span><span class="p">,</span>
-    <span class="s">"message"</span><span class="p">:</span> <span class="s">"archive entry was not found"</span><span class="p">,</span>
+    <span class="s">"message"</span><span class="p">:</span> <span class="s">"archive entry not found: README.md"</span><span class="p">,</span>
     <span class="s">"details"</span><span class="p">:</span> <span class="p">{</span> <span class="s">"entry"</span><span class="p">:</span> <span class="s">"README.md"</span> <span class="p">}</span>
   <span class="p">}</span>
 <span class="p">}</span></pre>
@@ -354,7 +363,7 @@
                 <thead><tr><th>Exit</th><th>Category</th></tr></thead>
                 <tbody>
                   <tr><td>0</td><td>Success, including BrokenPipe consumer stop</td></tr>
-                  <tr><td>1</td><td>General I/O error</td></tr>
+                  <tr><td>1</td><td>General I/O error, or no grep matches with <code>--exit-code</code> and empty stderr</td></tr>
                   <tr><td>2</td><td>Command-line syntax or usage error</td></tr>
                   <tr><td>3</td><td><span class="mono">unsupported_format / not_an_archive</span></td></tr>
                   <tr><td>4</td><td><span class="mono">invalid_archive</span> or <span class="mono">corrupted_archive</span></td></tr>
@@ -473,7 +482,7 @@
         </div>
       </div>
       <div class="footer-bottom">
-        <span>Arcthis v0.6.0</span>
+        <span>Arcthis v0.7.0-rc.1</span>
         <span class="sep">·</span>
         <span>MIT</span>
         <span class="sep">·</span>

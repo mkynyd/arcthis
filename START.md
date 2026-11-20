@@ -2,20 +2,20 @@
 
 [简体中文](./START.zh-CN.md)
 
-This guide covers **0.6.0 (JSON schema 2)**. Version 0.5.1 used schema 1; migrate consumers using [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). Changes and validation are recorded in the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md).
+This guide covers **0.7.0-rc.1 (JSON schema 2)**. Version 0.5.1 used schema 1; migrate consumers using [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md). Changes and validation are recorded in the [iteration acceptance](./docs/EXPLORATION-ITERATION-PLAN.md).
 
 v0.5.1 added write-path overlap checks, file-tree depth limits, MCP concurrent-call and response limits, and `grep --max-result-bytes`. That release retained its prior command names and JSON fields; the current source migration is described above.
 
 Detection uses file content. Empty compressed TAR files have only zero blocks, so keep their `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst` or shorthand suffix. Other zero-prefixed compressed files remain single-file streams.
 
-## Source-checkout additions in 0.6.0
+## Archive access examples
 
 ```sh
 arcthis read bundle.zip --entry-index 3 --verify-first
 arcthis stat legacy.zip --encoding gbk --entry-index 0 --verbose
 cat bundle.zip | arcthis list - --json
 arcthis extract files.tar --output out --no-sync
-arcthis extract-all incoming --continue-on-error --json
+arcthis extract-all incoming --rename --continue-on-error --json
 arcthis pack folder --strip-root --output contents.zip
 arcthis index --list --json
 arcthis index --prune --dry-run --max-age-seconds 2592000 --json
@@ -77,7 +77,7 @@ Library users can still opt out with `cargo build --no-default-features`.
 
 The stdio transport uses protocol revision `2025-06-18` and reserves stdout for JSON-RPC. It exposes `archive_inspect`, `archive_list`, `archive_tree`, `archive_stat`, `archive_read`, `archive_find`, `archive_grep`, `archive_hash`, and `archive_verify`. Every request has finite limits on files (`--max-entries`, 100,000), decoded bytes (`--max-decoded-bytes`, 1 GiB), and results (`--max-results`, 10,000); `archive_read` additionally requires `offset` and `length` and defaults to a 1 MiB maximum window (`--max-read-window`).
 
-Extract, pack, and convert each use separate `_plan` and `_execute` tools. They are absent unless at least one `--allow-output-root` is configured. Execution requires the exact SHA-256 plan digest and rejects source or destination changes since planning. Source deletion is disabled unless both `--allow-source-deletion` is present at server launch and the request explicitly asks for deletion. Password values are not accepted in MCP requests.
+Extract, pack, and convert each use separate `_plan` and `_execute` tools. The tools require at least one `--allow-output-root`. Create that directory before starting the server. Execution requires the exact SHA-256 plan digest and rejects source or destination changes since planning. Source deletion is disabled unless both `--allow-source-deletion` is present at server launch and the request explicitly asks for deletion. Password values are not accepted in MCP requests.
 
 ```sh
 ./target/release/arcthis mcp \
@@ -216,29 +216,35 @@ arcthis find dataset.7z --glob '**/*.json'
 arcthis find dataset.7z --glob '**/*.json' --json
 ```
 
-`find` matches the full normalized archive path and returns complete file metadata without decoding file content.
+`find` matches the complete entry path, case-sensitively. The `*` wildcard can cross `/`, so `*.json` matches `src/docs/data.json`. Use `src/docs/**` for a specific prefix and quote the glob to avoid shell expansion.
 
 ## `grep` — capped content search
 
 ```sh
 arcthis grep source.tar.gz TODO --glob '**/*.rs'
-arcthis grep papers.zip transformer --glob '**/*.md' --json
+arcthis grep papers.zip -i transformer --glob '**/*.md' --json
 ```
 
-The pattern is a raw byte sequence, not a regular expression. Files above `--max-entry-size` are skipped (16 MiB default), collection stops at `--max-matches` (10,000 default), and retained lines are capped at 1 MiB. A NUL in the first 8 KiB classifies a file as binary; binary files are skipped unless `--binary` is set. JSON reports scan, skip, byte, and truncation counters.
+The default matcher searches for a case-sensitive literal substring. Use `-i` for Unicode case-insensitive matching and `-E` for a Rust regular expression. Use `--exit-code` for exit 1 with empty stderr when an untruncated scan returns no matches. An empty truncated result exits 8 in this mode. Successful scans default to exit 0, including when there are no matches.
+
+Files above `--max-entry-size` are skipped (16 MiB default), collection stops at `--max-matches` (10,000 default), and retained lines are capped at 1 MiB. A NUL in the first 8 KiB classifies a file as binary; binary files are skipped unless `--binary` is set. JSON reports scan, skip, byte, and truncation counters.
 
 ZIP searches reuse one central directory; TAR-family, 7z and RAR searches reuse one content traversal. Glob/declared-size filtering runs before selected entry content is copied. Sequential formats may still decode preceding bytes to reach selected entries. The visitor preserves scan/result budgets and archive instance identity without materializing files.
 
 `--max-result-bytes` caps serialized matching-line objects across files (16 MiB default), including path overhead, escaping, and UTF-8 replacements. If a complete match cannot fit, it is omitted and `matches_truncated` becomes `true`; zero collects no matches. Increase this limit explicitly when more output is needed.
 
+## Shell completions
+
+Run `arcthis completions zsh > _arcthis` and place the output in a directory on `fpath` before calling `compinit`. Bash, Fish, Elvish and PowerShell are also supported.
+
 ## `hash` — checksum one file
 
 ```sh
 arcthis hash models.zip model.bin
-arcthis hash models.zip model.bin --algorithm sha512 --json
+arcthis hash models.zip model.bin --algorithm blake3 --json
 ```
 
-SHA-256 is the default and SHA-512 is available. The file is streamed into the checksum and never written to disk.
+SHA-256 is the default. SHA-512 and BLAKE3 are also available. The file is streamed into the checksum and never written to disk.
 
 ## Encrypted archives with `--password-file`
 
@@ -371,14 +377,14 @@ Extraction normalizes `.` and redundant internal separators, then rejects every 
 ## `extract-all` — process a directory of archives
 
 ```sh
-arcthis extract-all ./downloads --dry-run --json
+arcthis extract-all ./downloads --rename --continue-on-error --dry-run --json
 arcthis extract-all ./downloads --recursive --workers 4
 arcthis extract-all ./downloads --recursive --delete-source
 ```
 
 Discovery identifies supported archives by content rather than suffix. The default scans only the named directory; `--recursive` descends through filesystem directories, not archives nested inside archives. `--workers` caps concurrent independent archive operations from 1 to 64.
 
-The command plans every archive before execution and rejects equal or nested destination conflicts across the batch, including a destination that contains another discovered archive source. Each archive receives the same resource limits and collision handling as `extract`. A mixed outcome returns `partial_failure`; JSON reports a deterministic, path-sorted item result for every discovered archive.
+The command plans all destinations before execution. `--rename` assigns `src`, `src.1`, and `src.2` in discovery order for shared root names, skipping existing paths and earlier reservations. `--continue-on-error` keeps the first eligible reservation and reports subsequent collisions and bad archives per item. Every discovered source is protected from overlapping destinations. A partial failure exits 12 with item results on stdout and a `partial_failure` diagnostic on stderr.
 
 ## `pack` — create and verify an archive
 
@@ -391,7 +397,7 @@ arcthis pack ./report.txt --output report.txt.xz
 
 The output suffix selects ZIP, 7z, TAR, TAR.GZ/TGZ, TAR.BZ2/TBZ2, TAR.XZ/TXZ, TAR.ZST/TZST, or a single Gzip/Bzip2/XZ/Zstandard compressed file. Single compressed files require a regular source file. Directory packing includes the source directory itself as the top-level entry, preserving empty directories and regular files. ZIP output uses Deflate.
 
-`pack` currently creates unencrypted output. Passing `--password-file`, `--volume`, or `--within` returns `unsupported_operation` instead of silently ignoring the option.
+`pack` takes a regular file or directory on disk and creates unencrypted output. Save piped data to a file before packing. Passing `--password-file`, `--volume`, or `--within` returns `unsupported_operation` instead of silently ignoring the option.
 
 Symlinks and special files are rejected. The default destination policy refuses a collision; `--overwrite`, `--skip-existing`, and `--rename` have the same meanings as extraction. `--dry-run` returns the resolved plan. The process is:
 
@@ -474,7 +480,7 @@ The complete JSON format is in [docs/CLI.md](./docs/CLI.md).
 | Exit | Category |
 | ---: | --- |
 | 0 | Success, including BrokenPipe consumer stop |
-| 1 | General I/O error |
+| 1 | General I/O error, or no matches with `grep --exit-code` and empty stderr |
 | 2 | CLI syntax/usage error from clap |
 | 3 | `unsupported_format`, `not_an_archive` |
 | 4 | `invalid_archive` or `corrupted_archive` |

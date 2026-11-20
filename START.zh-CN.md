@@ -2,20 +2,20 @@
 
 [English](./START.md)
 
-本文对应 **0.6.0（JSON schema 2）**。旧版 0.5.1 使用 schema 1，消费者升级需参考 [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md)；改动与验证见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)。
+本文对应 **0.7.0-rc.1（JSON schema 2）**。旧版 0.5.1 使用 schema 1，消费者升级需参考 [ADR 0002](./docs/ADR-0002-EXPLORATION-CONTRACT.md)；改动与验证见[迭代验收](./docs/EXPLORATION-ITERATION-PLAN.md)。
 
 v0.5.1 增加写入路径重叠检查、文件树层数限制、MCP 并发与响应大小限制，以及 `grep --max-result-bytes`。这段是公开 0.5.1 的历史说明；当前源码迁移见上方 ADR。
 
 格式识别以内容为主。空的压缩 TAR 只有全零块，需要保留 `.tar.gz`、`.tar.bz2`、`.tar.xz`、`.tar.zst` 或对应缩写后缀。其他以零字节开头的压缩文件保持单文件读取。
 
-## 0.6.0 源码新增选项
+## 归档访问示例
 
 ```sh
 arcthis read bundle.zip --entry-index 3 --verify-first
 arcthis stat legacy.zip --encoding gbk --entry-index 0 --verbose
 cat bundle.zip | arcthis list - --json
 arcthis extract files.tar --output out --no-sync
-arcthis extract-all incoming --continue-on-error --json
+arcthis extract-all incoming --rename --continue-on-error --json
 arcthis pack folder --strip-root --output contents.zip
 arcthis index --list --json
 arcthis index --prune --dry-run --max-age-seconds 2592000 --json
@@ -72,7 +72,7 @@ cargo install --path . --locked
 
 stdio 传输固定协议版本 `2025-06-18`，stdout 只允许 JSON-RPC。只读工具包括 `archive_inspect`、`archive_list`、`archive_tree`、`archive_stat`、`archive_read`、`archive_find`、`archive_grep`、`archive_hash` 与 `archive_verify`。所有请求都有有限的文件数（`--max-entries`，100,000）、解码字节数（`--max-decoded-bytes`，1 GiB）和结果数（`--max-results`，10,000）上限；`archive_read` 还强制提供 `offset`（偏移量）与 `length`（长度），默认单次最多返回 1 MiB（`--max-read-window`）。
 
-Extract、pack 与 convert 分别使用独立的 `_plan`（计划）和 `_execute`（执行）工具。未配置 `--allow-output-root` 时，这 6 个工具不会出现在工具列表中。执行必须回传完全一致的 SHA-256 计划摘要；计划后 source 或 destination 发生变化都会拒绝执行。删除 source 只有在服务启用 `--allow-source-deletion` 且请求明确要求删除时才允许。MCP 不接受明文密码值；只读请求可引用授权根内的 password_file。
+Extract、pack 与 convert 分别使用独立的 `_plan`（计划）和 `_execute`（执行）工具。启动前请创建 `--allow-output-root` 指定的目录。未配置该选项时，这 6 个工具不会出现在工具列表中。执行必须回传完全一致的 SHA-256 计划摘要；计划后 source 或 destination 发生变化都会拒绝执行。删除 source 只有在服务启用 `--allow-source-deletion` 且请求明确要求删除时才允许。MCP 不接受明文密码值；只读请求可引用授权根内的 password_file。
 
 ```sh
 ./target/release/arcthis mcp \
@@ -209,29 +209,35 @@ arcthis find dataset.7z --glob '**/*.json'
 arcthis find dataset.7z --glob '**/*.json' --json
 ```
 
-`find` 匹配完整的规范化压缩包内路径，返回完整文件信息，且不会解码文件内容。
+`find` 按大小写匹配完整的条目路径。通配符 `*` 可跨 `/`，例如 `*.json` 能匹配 `src/docs/data.json`，限定目录时用 `src/docs/**`。给模式加引号可避免 Shell 提前展开。
 
 ## `grep`：有上限的内容搜索
 
 ```sh
 arcthis grep source.tar.gz TODO --glob '**/*.rs'
-arcthis grep papers.zip transformer --glob '**/*.md' --json
+arcthis grep papers.zip -i transformer --glob '**/*.md' --json
 ```
 
-匹配内容是一段原始字节序列，不是正则表达式。超过 `--max-entry-size` 的文件会跳过（默认 16 MiB），达到 `--max-matches` 后停止收集（默认 10,000），单行最多保留 1 MiB。前 8 KiB 出现 NUL 会判定为二进制文件；默认跳过，只有显式 `--binary` 才扫描。JSON 会报告扫描、跳过、字节和截断计数。
+默认匹配区分大小写的字面子串。`-i` 启用 Unicode 大小写忽略，`-E` 启用 Rust 正则表达式。`--exit-code` 在结果为空且未截断时退出 1，stderr 为空。若结果为空且已截断则返回 8。默认成功搜索退出 0，包括无匹配。
+
+超过 `--max-entry-size` 的文件会跳过（默认 16 MiB），达到 `--max-matches` 后停止收集（默认 10,000），单行最多保留 1 MiB。前 8 KiB 出现 NUL 会判定为二进制文件；默认跳过，只有显式 `--binary` 才扫描。JSON 会报告扫描、跳过、字节和截断计数。
 
 ZIP 搜索复用中央目录；TAR 系列、7z 和 RAR 搜索复用一次内容遍历。通配符与声明大小过滤先于条目内容复制。顺序格式访问选中条目仍可能解码前面的字节；visitor 保留扫描／结果预算与实例身份，不把文件解压到磁盘。
 
 `--max-result-bytes` 限制跨文件累计的匹配行 JSON 大小，默认 16 MiB，计入路径、转义和 UTF-8 替换字节。完整匹配行放不下时会省略该行，并设置 `matches_truncated: true`；设为 0 则不保留匹配。如需更多输出，可以显式提高此上限。
 
+## Shell 补全
+
+运行 `arcthis completions zsh > _arcthis` 生成补全脚本。将它放入 `fpath` 中的目录，再加载 `compinit`。还支持 Bash、Fish、Elvish 和 PowerShell。
+
 ## `hash`：计算一个文件的校验值
 
 ```sh
 arcthis hash models.zip model.bin
-arcthis hash models.zip model.bin --algorithm sha512 --json
+arcthis hash models.zip model.bin --algorithm blake3 --json
 ```
 
-默认 SHA-256，也支持 SHA-512。文件字节直接参与校验值计算，不写入磁盘。
+默认 SHA-256，也支持 SHA-512 与 BLAKE3。文件字节直接参与校验值计算，不写入磁盘。
 
 ## 使用 `--password-file` 访问加密压缩包
 
@@ -362,14 +368,14 @@ arcthis extract archive.tar.zst --dry-run --delete-source --json
 ## `extract-all`：批量处理目录中的压缩包
 
 ```sh
-arcthis extract-all ./downloads --dry-run --json
+arcthis extract-all ./downloads --rename --continue-on-error --dry-run --json
 arcthis extract-all ./downloads --recursive --workers 4
 arcthis extract-all ./downloads --recursive --delete-source
 ```
 
 发现过程按内容而不是后缀识别支持的压缩包。默认只扫描指定目录；`--recursive` 递归文件系统目录，但不会进入压缩包内继续发现嵌套压缩包。`--workers` 将独立压缩包的并发数限制在 1 到 64。
 
-命令会先为全部压缩包生成计划，并在写入前拒绝批次内相同或嵌套的目标冲突，也拒绝目标覆盖另一个已发现压缩包源。每个压缩包使用与 `extract` 相同的资源限制和冲突处理方式。混合结果返回 `partial_failure`；JSON 按路径稳定排序并报告每个已发现压缩包的结果。
+所有目标先规划再执行。`--rename` 按发现顺序为同名根目录分配 `src`、`src.1`、`src.2`，跳过磁盘已有和批内已预留的路径。`--continue-on-error` 允许首个可用计划保留目标，之后的冲突与坏包逐包报告。目标不得覆盖任何已发现的源包。部分失败时退出 12，stdout 提供逐包结果，stderr 提供 `partial_failure`。
 
 ## `pack`：创建并验证压缩包
 
@@ -382,7 +388,7 @@ arcthis pack ./report.txt --output report.txt.xz
 
 输出后缀可选择 ZIP、7z、TAR、TAR.GZ/TGZ、TAR.BZ2/TBZ2、TAR.XZ/TXZ、TAR.ZST/TZST，或单个 Gzip/Bzip2/XZ/Zstandard 压缩文件。单个压缩文件的 source 必须是普通文件。目录打包会把源目录本身作为顶层文件条目，保留空目录和普通文件；ZIP 使用 Deflate。
 
-当前 `pack` 只创建未加密输出。传入 `--password-file`、`--volume` 或 `--within` 会返回 `unsupported_operation`，不会静默忽略。
+`pack` 的输入是磁盘上的普通文件或目录。管道内容请先保存为文件。当前只创建未加密输出。传入 `--password-file`、`--volume` 或 `--within` 会返回 `unsupported_operation`，不会静默忽略。
 
 符号链接/特殊文件会被拒绝。默认拒绝目标冲突；`--overwrite`、`--skip-existing`、`--rename` 与解压含义一致。`--dry-run` 返回解析后的计划。处理流程为：
 

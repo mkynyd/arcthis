@@ -56,7 +56,7 @@ This map lists important maintained files and their current responsibilities. Ge
 - `src/security.rs` — Extraction path safety check and default resource-limit policy.
 - `src/lifecycle.rs` — Shared path-overlap checks, collision resolution, temporary-then-save, rollback, and post-save source deletion.
 - `src/extract.rs` — Extraction planning, intelligent destinations, temporary-file writers, enforced limits, and save.
-- `src/batch.rs` — Content-based archive discovery, cross-plan path-conflict checks, and capped deterministic `extract-all` execution.
+- `src/batch.rs` — Content-based discovery, source protection, deterministic destination reservation, and capped `extract-all` execution.
 - `src/pack.rs` — Resource-bounded multi-format source scan, temporary-file creation, reopen verification, save, and lifecycle planning.
 
 ## Tests

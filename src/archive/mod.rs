@@ -95,14 +95,19 @@ impl std::fmt::Debug for ArchiveOpenOptions {
     }
 }
 
+#[derive(Default)]
+struct EntryIndex {
+    entries: Option<Vec<ArchiveEntry>>,
+    status: crate::index::IndexStatus,
+}
+
 /// Format-independent access to one archive source.
 pub struct Archive {
     locator: ArchiveLocator,
     source: ArchiveSource,
     backend: Box<dyn ArchiveBackend>,
-    entry_index: Mutex<Option<Vec<ArchiveEntry>>>,
+    entry_index: Mutex<EntryIndex>,
     index_directory: Option<PathBuf>,
-    cache_used: std::sync::atomic::AtomicBool,
     selected_index: Option<u64>,
     name_encoding: Option<String>,
 }
@@ -257,9 +262,8 @@ impl Archive {
             locator,
             source,
             backend,
-            entry_index: Mutex::new(None),
+            entry_index: Mutex::default(),
             index_directory: options.index_directory.clone(),
-            cache_used: std::sync::atomic::AtomicBool::new(false),
             selected_index: options.entry_index,
             name_encoding: options.name_encoding.clone(),
         })
@@ -289,44 +293,56 @@ impl Archive {
     }
 
     pub fn entries(&self) -> Result<Vec<ArchiveEntry>> {
-        if let Some(entries) = self
-            .entry_index
-            .lock()
-            .map_err(|_| ArcthisError::UnsupportedOperation {
-                message: "archive entry index lock was poisoned".to_owned(),
-            })?
-            .as_ref()
-        {
+        use crate::index::IndexStatus;
+
+        let mut index = self.lock_entry_index()?;
+        if let Some(entries) = &index.entries {
             return Ok(entries.clone());
         }
-        if self.name_encoding.is_none()
-            && let Some(path) = self.source.file_path()
-            && let Some(entries) = crate::index::load_cached_entries(
+        let (status, cached) = match self.source.file_path() {
+            Some(path) if self.name_encoding.is_none() => crate::index::load_cached_entries(
                 path,
                 self.format(),
                 self.index_directory.as_deref(),
-            )?
-        {
-            *self
-                .entry_index
-                .lock()
-                .map_err(|_| ArcthisError::UnsupportedOperation {
-                    message: "archive entry index lock was poisoned".to_owned(),
-                })? = Some(entries.clone());
-            self.cache_used
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-            return Ok(entries);
-        }
-        self.refresh_entries()
+            )?,
+            _ => (IndexStatus::Bypassed, None),
+        };
+        let entries = match cached {
+            Some(entries) => entries,
+            None => self.backend_entries()?,
+        };
+        index.status = status;
+        index.entries = Some(entries.clone());
+        Ok(entries)
     }
 
     pub fn index_used(&self) -> bool {
-        self.cache_used.load(std::sync::atomic::Ordering::Relaxed)
+        self.index_status() == crate::index::IndexStatus::Hit
+    }
+
+    pub fn index_status(&self) -> crate::index::IndexStatus {
+        self.entry_index
+            .lock()
+            .map_or(crate::index::IndexStatus::NotChecked, |index| index.status)
     }
 
     pub fn refresh_entries(&self) -> Result<Vec<ArchiveEntry>> {
-        self.cache_used
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+        let mut index = self.lock_entry_index()?;
+        let entries = self.backend_entries()?;
+        index.status = crate::index::IndexStatus::Bypassed;
+        index.entries = Some(entries.clone());
+        Ok(entries)
+    }
+
+    fn lock_entry_index(&self) -> Result<std::sync::MutexGuard<'_, EntryIndex>> {
+        self.entry_index
+            .lock()
+            .map_err(|_| ArcthisError::UnsupportedOperation {
+                message: "archive entry index lock was poisoned".to_owned(),
+            })
+    }
+
+    fn backend_entries(&self) -> Result<Vec<ArchiveEntry>> {
         let mut entries = self.backend.entries()?;
         for entry in &mut entries {
             let bytes = names::original_bytes(&entry.path, entry.path_encoding)?;
@@ -338,12 +354,6 @@ impl Archive {
                 .first_raw()
                 .map(str::to_owned);
         }
-        *self
-            .entry_index
-            .lock()
-            .map_err(|_| ArcthisError::UnsupportedOperation {
-                message: "archive entry index lock was poisoned".to_owned(),
-            })? = Some(entries.clone());
         Ok(entries)
     }
 
@@ -569,10 +579,7 @@ impl Archive {
         selected_entry: Option<&str>,
         options: &ExtractOptions,
     ) -> Result<ExtractResult> {
-        self.ensure_deletable_source(options)?;
-        if let Some(ratio) = options.limits.max_compression_ratio {
-            self.backend.enforce_compression_ratio(ratio)?;
-        }
+        self.check_extraction_options(options)?;
         crate::extract::extract_archive(self, selected_entry, options)
     }
 
@@ -581,18 +588,36 @@ impl Archive {
         selected_entry: Option<&str>,
         options: &ExtractOptions,
     ) -> Result<ExtractPlan> {
-        self.ensure_deletable_source(options)?;
-        if let Some(ratio) = options.limits.max_compression_ratio {
-            self.backend.enforce_compression_ratio(ratio)?;
-        }
-        crate::extract::plan_extract_archive(self, selected_entry, options)
+        self.plan_extract_reserved(selected_entry, options, &|_| false)
     }
 
-    fn ensure_deletable_source(&self, options: &ExtractOptions) -> Result<()> {
+    pub(crate) fn plan_extract_reserved(
+        &self,
+        selected_entry: Option<&str>,
+        options: &ExtractOptions,
+        reserved: &dyn Fn(&Path) -> bool,
+    ) -> Result<ExtractPlan> {
+        self.check_extraction_options(options)?;
+        crate::extract::plan_extract_archive(self, selected_entry, options, reserved)
+    }
+
+    pub(crate) fn extract_to_planned(
+        &self,
+        options: &ExtractOptions,
+        destination: &Path,
+    ) -> Result<ExtractResult> {
+        self.check_extraction_options(options)?;
+        crate::extract::extract_all(self, options, Some(destination))
+    }
+
+    fn check_extraction_options(&self, options: &ExtractOptions) -> Result<()> {
         if options.delete_source && self.source.file_path().is_none() {
             return Err(ArcthisError::UnsupportedOperation {
                 message: "source deletion requires one filesystem archive".to_owned(),
             });
+        }
+        if let Some(ratio) = options.limits.max_compression_ratio {
+            self.backend.enforce_compression_ratio(ratio)?;
         }
         Ok(())
     }

@@ -16,6 +16,8 @@ The pinned protocol revision is `2025-06-18`. A server may negotiate another rev
 
 Read-only tools use the `archive_` prefix: `archive_inspect`, `archive_list`, `archive_tree`, `archive_stat`, `archive_find`, `archive_grep`, `archive_hash`, and `archive_verify`. Entry content is read with `archive_read`, which always requires an explicit byte `offset` and bounded `length` and returns text or base64 data plus `eof` and the raw byte count.
 
+`archive_list` accepts an optional `exclude_appledouble` filter for regular file basenames beginning with `._`. `archive_grep` accepts optional `ignore_case` and `regex` booleans, both false by default. `archive_hash` accepts `sha256`, `sha512`, or `blake3`. Archive references report persistent index state through `index_status` and the existing `index_used` boolean. Create any directory passed to `--allow-output-root` before server startup.
+
 Mutation tools are `archive_extract_plan`, `archive_extract_execute`, `archive_pack_plan`, `archive_pack_execute`, `archive_convert_plan`, and `archive_convert_execute`. They are unavailable unless the server has an explicit output-root policy. Execution requires the exact digest returned by planning.
 
 Every tool declares JSON input and output schemas. Successful structured output is also mirrored as JSON text content for clients that do not consume `structuredContent`. Errors use the existing stable arcthis error codes and do not expose Rust backtraces.
