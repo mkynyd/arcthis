@@ -40,9 +40,9 @@ npm install -g arcthis
 pnpm add -g arcthis
 ```
 
-If pnpm 11 reports `ERR_PNPM_IGNORED_BUILDS`, approve the Arcthis installation script by appending `--allow-build=arcthis` to the install command.
+If pnpm reports `ERR_PNPM_IGNORED_BUILDS`, approve the Arcthis installation script by appending `--allow-build=arcthis` to the install command.
 
-pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
+pnpm may defer new packages under its minimum release age policy. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
 The npm/pnpm installer downloads the binary from GitHub. On networks requiring a proxy, pass the actual proxy address through `HTTPS_PROXY`/`HTTP_PROXY` for the installation command; Node does not automatically inherit macOS system proxy settings.
 

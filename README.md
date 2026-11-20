@@ -29,7 +29,7 @@ ZIP can usually read a selected file directly. TAR and TAR.GZ scan in order. `in
 
 ## Project status
 
-Arcthis includes the CLI and local MCP server. Every installation channel provides the same commands. See [0.6.0 release verification](./docs/RELEASE-0.6.0.md) for provenance, platforms and channel checks.
+Arcthis includes the CLI and local MCP server. Every installation channel provides the same commands. See [0.7.0 release verification](./docs/RELEASE-0.7.0.md) for provenance, platforms and channel checks.
 
 ### Changes in v0.7.0
 
@@ -93,9 +93,9 @@ npm install -g arcthis
 pnpm add -g arcthis
 ```
 
-If pnpm 11 reports `ERR_PNPM_IGNORED_BUILDS`, approve the Arcthis installation script by appending `--allow-build=arcthis` to the install command.
+If pnpm reports `ERR_PNPM_IGNORED_BUILDS`, approve the Arcthis installation script by appending `--allow-build=arcthis` to the install command.
 
-pnpm 11 may hold packages published less than 24 hours ago. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
+pnpm may defer new packages under its minimum release age policy. On release day, append `--config.minimumReleaseAge=0` if it reports `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 
 Prebuilt archives and SHA-256 checksums for Apple Silicon macOS, Intel macOS, and x86_64 Linux are available from the [latest GitHub Release](https://github.com/mkynyd/arcthis/releases/latest).
 

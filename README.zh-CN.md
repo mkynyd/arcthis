@@ -29,7 +29,7 @@ ZIP 通常可以直接读取目标文件；TAR 和 TAR.GZ 按顺序扫描。`ins
 
 ## 当前状态
 
-Arcthis 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。发布来源、平台和安装验收见 [0.6.0 发布记录](./docs/RELEASE-0.6.0.md)。
+Arcthis 包含命令行工具和本地 MCP 服务。所有安装渠道提供相同命令。发布来源、平台和安装验收见 [0.7.0 发布记录](./docs/RELEASE-0.7.0.md)。
 
 ### v0.7.0 更新
 
@@ -93,9 +93,9 @@ npm install -g arcthis
 pnpm add -g arcthis
 ```
 
-pnpm 11 如果报告 `ERR_PNPM_IGNORED_BUILDS`，在安装命令末尾加 `--allow-build=arcthis`，只批准 Arcthis 的安装脚本。
+pnpm 如果报告 `ERR_PNPM_IGNORED_BUILDS`，在安装命令末尾加 `--allow-build=arcthis`，只批准 Arcthis 的安装脚本。
 
-pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
+pnpm 的最低发布时长设置可能暂缓安装刚发布的包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
 Apple Silicon macOS、Intel macOS 与 Linux x86_64 的编译成品和 SHA-256 校验值可从 [GitHub 最新正式版](https://github.com/mkynyd/arcthis/releases/latest) 下载。
 

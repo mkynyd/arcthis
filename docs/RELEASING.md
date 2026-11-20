@@ -1,6 +1,6 @@
 # Arcthis 发布流程
 
-当前发布目标为 `v0.7.0` / JSON schema 2，候选版为 `v0.7.0-rc.1`。每次发布均需完成候选、三平台、CI、Secret 与渠道验收。每个 Tag 只用于一次发布。
+当前正式版为 `v0.7.0` / JSON schema 2，候选版为 `v0.7.0-rc.1`。每次发布均需完成候选、三平台、CI、Secret 与渠道验收。每个 Tag 只用于一次发布。
 
 本文记录公开版本的固定发布步骤。正式发布不可覆盖；任何一项未满足都应停止，不应通过 `--allow-dirty`、跳过验证或手工修改生成产物绕过。
 
@@ -12,7 +12,7 @@
 - npm：`npm install -g arcthis`
 - pnpm：`pnpm add -g arcthis`
 
-pnpm 11 的干净安装验证如遇 `ERR_PNPM_IGNORED_BUILDS`，只批准 `arcthis`（`--allow-build=arcthis`）；首日最低发布年龄策略可显式用 `--config.minimumReleaseAge=0`。代理依赖网络应将实际代理传给安装进程的 `HTTPS_PROXY`/`HTTP_PROXY`。发布 Job 成功后还须核对 registry；npm 可能先返回 accepted/processing，再开放下载，期间不要重复发布同版本。
+pnpm 的干净安装验证如遇 `ERR_PNPM_IGNORED_BUILDS`，只批准 `arcthis`（`--allow-build=arcthis`）；首日最低发布年龄策略可显式用 `--config.minimumReleaseAge=0`。代理依赖网络应将实际代理传给安装进程的 `HTTPS_PROXY`/`HTTP_PROXY`。发布 Job 成功后还须核对 registry；npm 可能先返回 accepted/processing，再开放下载，期间不要重复发布同版本。
 
 所有公开二进制都必须包含默认启用的 MCP 命令。Windows 与 Linux arm64 在有独立测试前不进入发布列表。
 

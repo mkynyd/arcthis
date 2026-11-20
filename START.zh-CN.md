@@ -40,9 +40,9 @@ npm install -g arcthis
 pnpm add -g arcthis
 ```
 
-pnpm 11 如果报告 `ERR_PNPM_IGNORED_BUILDS`，在安装命令末尾加 `--allow-build=arcthis`，只批准 Arcthis 的安装脚本。
+pnpm 如果报告 `ERR_PNPM_IGNORED_BUILDS`，在安装命令末尾加 `--allow-build=arcthis`，只批准 Arcthis 的安装脚本。
 
-pnpm 11 可能暂缓安装发布不足 24 小时的新包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
+pnpm 的最低发布时长设置可能暂缓安装刚发布的包。首发当天如果出现 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，可在命令末尾临时加 `--config.minimumReleaseAge=0`。
 
 npm/pnpm 安装器从 GitHub 下载二进制。在依赖代理的网络中，需要为安装命令显式设置实际的 `HTTPS_PROXY`/`HTTP_PROXY`；Node 不会自动读取 macOS 系统代理设置。
 
@@ -464,7 +464,7 @@ ZIP、7z 与 RAR 会通过底层完整性检查逐个读取每个可读文件。
 | 退出码 | 分类 |
 | ---: | --- |
 | 0 | 成功，包括 BrokenPipe consumer stop |
-| 1 | 通用 I/O error |
+| 1 | 一般 I/O 错误，或 `grep --exit-code` 无匹配且 stderr 为空 |
 | 2 | clap 命令语法/用法错误 |
 | 3 | `unsupported_format`, `not_an_archive` |
 | 4 | `invalid_archive` / `corrupted_archive` |

@@ -81,6 +81,7 @@ This map lists important maintained files and their current responsibilities. Ge
 - `docs/CLI.md` — Public command, JSON format, stdout/stderr, and machine error rules.
 - `docs/SECURITY.md` — Trust model, path rules, resource limits, temporary files, verification, and known limits.
 - `docs/RELEASING.md` — Release channels, credentials, quality gates, candidate validation, and publication steps.
+- `docs/RELEASE-0.7.0.md` — 0.7.0 provenance, native downloads, channel installs and website verification.
 - `docs/RELEASE-0.6.0.md` — Published 0.6.0 provenance, native platforms, installation channels, checksums, core regression and production website QA evidence.
 - `docs/EXPLORATION-ITERATION-PLAN.md` — Completed black-box report findings, acceptance criteria, regression and release performance measurements.
 - `docs/ADR-0002-EXPLORATION-CONTRACT.md` — Released 0.6/schema 2 migration, entry identity, metadata and shared envelopes.

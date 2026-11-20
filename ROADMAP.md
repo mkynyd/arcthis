@@ -63,11 +63,13 @@ The rules and verification evidence are described in [RFC 0003](./docs/RFC-0003-
 
 Further performance work remains planned: wide-directory tree lookup, metadata reuse, and fewer sequential scans. Remote sources remain part of v0.6+.
 
-## v0.7.0 — Batch extraction and CLI discoverability
+## v0.7.0 — Batch extraction and CLI discoverability (released)
 
 - [x] Reserve same-name batch destinations with `--rename` and use the chosen paths during extraction.
 - [x] Keep the first eligible plan with `--continue-on-error` and report later collisions per archive.
 - [x] Scope command help. Add search modes, completion scripts, BLAKE3, and cache diagnostics.
+
+See [0.7.0 release verification](./docs/RELEASE-0.7.0.md) for platform, installer and website checks.
 
 ## v0.6.0 — Exploration follow-up (released)
 
