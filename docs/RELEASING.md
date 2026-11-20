@@ -46,7 +46,7 @@ dist plan
 
 - `Cargo.toml`、`Cargo.lock`、`CHANGELOG.md`、网站与文档版本一致；
 - GitHub 的 `CI` 和 `Release` pull request 检查全部通过；
-- 发布计划只包含已支持的三个 target；
+- 发布计划只包含已支持的三个 target。Apple Silicon 发布和下载包验证使用 `macos-15`，Intel 使用 `macos-15-intel`；
 - macOS release 二进制的 `otool -L` 只列出系统库；Linux x86_64 用 `readelf -d` 限制直接依赖为 glibc 基础库及 `libnettle.so.8`、`liblzma.so.5`、`liblz4.so.1`、`libz.so.1`、`libxml2.so.2`。`ldd` 必须全部解析为系统库；系统 libxml2 带来的 ICU 与 C++ 运行库须能通过实际 ELF 依赖链追溯，不得误认为是二进制新增的直接依赖。同一下载包在 Ubuntu 22.04 与 24.04 上实际运行；
 - crates.io 与 npm 上的目标版本尚不存在；
 - GitHub Release、Tag 和 Homebrew Formula 中不存在同版本产物。
